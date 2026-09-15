@@ -26,7 +26,16 @@ export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }
 
-export const dynamicParams = false;
+/**
+ * 允许按需生成未知语言段。
+ *
+ * 这里刻意 **不** 设置 `dynamicParams = false`：
+ * 与 ISR（下面的 revalidate）同时使用时，一次增量重新生成会覆盖构建期的预渲染产物并丢失
+ * `x-nextjs-prerender` 标记，Next 随后判定该路径「未预渲染」，在 dynamicParams=false 下直接
+ * 抛出 NoFallbackError 并返回 404——整站会因此长时间不可用。
+ * 非法语言由布局里的 isLocale() 判断后走 notFound()，不需要依赖路由层的这道限制。
+ */
+export const dynamicParams = true;
 
 /** ISR：后台保存后会通过 revalidatePath 立即刷新，此处作为兜底 */
 export const revalidate = 60;
