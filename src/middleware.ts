@@ -6,11 +6,38 @@ import { locales, defaultLocale } from '@/lib/i18n/config';
 const BYPASS_PREFIXES = ['admin', 'api'];
 
 /**
+ * 解析对外可访问的站点 origin。
+ *
+ * 应用运行在 Nginx 反向代理之后，中间件里 `request.nextUrl` 使用的是应用自身的
+ * 监听地址（如 http://localhost:3000），直接用它会生成浏览器无法访问的跳转地址。
+ * 因此优先使用配置的站点地址；未配置时回落到已校验的转发头。
+ */
+function resolveOrigin(request: NextRequest): string {
+  const configured = process.env.NEXT_PUBLIC_SITE_URL;
+  if (configured) {
+    try {
+      const url = new URL(configured);
+      if (url.protocol === 'http:' || url.protocol === 'https:') return url.origin;
+    } catch {
+      // 配置非法则回落到请求头
+    }
+  }
+
+  const forwardedHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+  if (forwardedHost && /^[a-z0-9.-]+(:\d{1,5})?$/i.test(forwardedHost)) {
+    const proto = request.headers.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+    return `${proto}://${forwardedHost}`;
+  }
+
+  return request.nextUrl.origin;
+}
+
+/**
  * 将无语言前缀的公开路径重定向到默认语言，例如 `/` → `/zh`、`/products` → `/zh/products`。
  * 带合法语言前缀的请求、以及后台/接口路径直接放行。
  */
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
   const first = pathname.split('/').filter(Boolean)[0] ?? '';
 
   if ((locales as readonly string[]).includes(first)) {
@@ -21,9 +48,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const url = request.nextUrl.clone();
-  url.pathname = `/${defaultLocale}${pathname === '/' ? '' : pathname}`;
-  return NextResponse.redirect(url, 308);
+  const suffix = pathname === '/' ? '' : pathname;
+  return NextResponse.redirect(`${resolveOrigin(request)}/${defaultLocale}${suffix}${search}`, 308);
 }
 
 export const config = {
