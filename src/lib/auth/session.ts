@@ -23,17 +23,34 @@ function generateToken(): string {
   return randomBytes(32).toString('base64url');
 }
 
-async function requestMeta(): Promise<{ ip?: string; userAgent?: string }> {
+async function requestMeta(): Promise<{ ip?: string; userAgent?: string; secure: boolean }> {
   try {
     const h = await headers();
     const forwarded = h.get('x-forwarded-for');
     return {
       ip: forwarded ? forwarded.split(',')[0]?.trim() : undefined,
       userAgent: h.get('user-agent') ?? undefined,
+      secure: resolveSecureFlag(h.get('x-forwarded-proto')),
     };
   } catch {
-    return {};
+    return { secure: false };
   }
+}
+
+/**
+ * 是否给会话 Cookie 加 Secure 标记。
+ *
+ * 必须跟随**实际协议**而不是 NODE_ENV：站点在配置 HTTPS 之前是纯 HTTP，
+ * 若此时带上 Secure，浏览器会拒绝保存/发送该 Cookie，导致登录后一切操作都被判定为未登录。
+ * 反向代理（Nginx）会把 X-Forwarded-Proto 设为真实协议，客户端伪造的值会被覆盖。
+ *
+ * 如需强制，可用 SESSION_COOKIE_SECURE=true|false 覆盖。
+ */
+function resolveSecureFlag(forwardedProto: string | null): boolean {
+  const override = process.env.SESSION_COOKIE_SECURE;
+  if (override === 'true') return true;
+  if (override === 'false') return false;
+  return forwardedProto?.split(',')[0]?.trim() === 'https';
 }
 
 /** 创建登录会话：数据库存令牌哈希，浏览器只保存 HttpOnly Cookie 中的原始令牌 */
@@ -59,7 +76,7 @@ export async function createSession(userId: string): Promise<void> {
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: meta.secure,
     path: '/',
     expires: expiresAt,
   });
