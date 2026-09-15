@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  /* 深海军蓝 —— 主色 */
+  --color-navy-50: #f3f6f9;
+  --color-navy-100: #e5ebf1;
+  --color-navy-200: #c6d3e0;
+  --color-navy-300: #9db3c9;
+  --color-navy-400: #6e8ca9;
+  --color-navy-500: #4d6c8b;
+  --color-navy-600: #395372;
+  --color-navy-700: #2c4059;
+  --color-navy-800: #1d2f43;
+  --color-navy-900: #12223a;
+  --color-navy-950: #0b1626;
+
+  /* 象牙白 —— 背景 */
+  --color-ivory-50: #fbf9f4;
+  --color-ivory-100: #f5f1e7;
+  --color-ivory-200: #ece5d4;
+  --color-ivory-300: #dfd3b8;
+
+  /* 铜金 —— 强调 */
+  --color-copper-50: #faf5ec;
+  --color-copper-100: #f2e7d1;
+  --color-copper-200: #e5cfa4;
+  --color-copper-300: #d5b273;
+  --color-copper-400: #c79b52;
+  --color-copper-500: #b5833e;
+  --color-copper-600: #9a6d34;
+  --color-copper-700: #7c5629;
+  --color-copper-800: #634422;
+
+  /* 语义色 */
+  --color-background: var(--color-ivory-50);
+  --color-foreground: var(--color-navy-900);
+  --color-muted: #5b6673;
+  --color-muted-foreground: #6b7684;
+
+  /* 字体 */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans",
+    sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background-color: var(--color-copper-200);
+    color: var(--color-navy-900);
+  }
+}
+
+/* 纺织纹理（媒体占位与暗色区块使用） */
+@utility texture-weave {
+  background-image:
+    repeating-linear-gradient(45deg, rgb(18 34 58 / 0.05) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(-45deg, rgb(18 34 58 / 0.04) 0 1px, transparent 1px 9px);
+}
+
+@utility texture-weave-dark {
+  background-image:
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 0.045) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.03) 0 1px, transparent 1px 9px);
+}

@@ -1,0 +1,142 @@
+// 米众贸易有限公司 — 数据模型
+// 本阶段仅作设计与目录边界，后台/数据库/媒体管理在下一阶段接入。
+//
+// 下一阶段接入步骤：
+//   1. npm i -D prisma && npm i @prisma/client
+//   2. 配置 DATABASE_URL（.env.local）
+//   3. npx prisma generate && npx prisma migrate dev
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 管理员用户
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         Role     @default(EDITOR)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  EDITOR
+}
+
+// 素材库资源（图片/视频）
+model Asset {
+  id           String             @id @default(cuid())
+  type         AssetType
+  key          String             @unique // OSS object key
+  url          String
+  posterUrl    String? // 视频封面（type = VIDEO 时）
+  mimeType     String
+  width        Int?
+  height       Int?
+  size         Int?
+  sortOrder    Int                @default(0)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  translations AssetTranslation[]
+  slots        SlotBinding[]
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+}
+
+// 素材多语言元数据（zh/en/vi 标题、说明、alt）
+model AssetTranslation {
+  id        String  @id @default(cuid())
+  assetId   String
+  asset     Asset   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  locale    String // zh | en | vi
+  title     String?
+  caption   String?
+  alt       String?
+
+  @@unique([assetId, locale])
+}
+
+// 语义化槽位：把素材绑定到固定页面位置（如 hero.image、product.webbing）
+model SlotBinding {
+  id       String @id @default(cuid())
+  slot     String // 与 src/lib/media.ts 中 MEDIA_SLOTS 对应
+  assetId  String
+  asset    Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  position Int    @default(0)
+
+  @@unique([slot, position])
+}
+
+// 产品分类
+model ProductCategory {
+  id           String                @id @default(cuid())
+  slug         String                @unique
+  sortOrder    Int                   @default(0)
+  products     Product[]
+  translations CategoryTranslation[]
+}
+
+model CategoryTranslation {
+  id          String          @id @default(cuid())
+  categoryId  String
+  category    ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  locale      String
+  name        String
+  description String?
+
+  @@unique([categoryId, locale])
+}
+
+// 产品
+model Product {
+  id           String               @id @default(cuid())
+  categoryId   String?
+  category     ProductCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sku          String?
+  sortOrder    Int                  @default(0)
+  published    Boolean              @default(false)
+  translations ProductTranslation[]
+}
+
+model ProductTranslation {
+  id          String  @id @default(cuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  locale      String
+  name        String
+  description String?
+  spec        String?
+
+  @@unique([productId, locale])
+}
+
+// 询盘
+model Inquiry {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  company   String?
+  phone     String?
+  message   String
+  locale    String
+  status    InquiryStatus @default(NEW)
+  createdAt DateTime      @default(now())
+}
+
+enum InquiryStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
+}
