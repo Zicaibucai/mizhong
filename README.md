@@ -85,6 +85,18 @@ ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD_FILE=/path/to/pwfile npm run admin:
 | 页面与区块 | `/admin/pages` | 页面标题 / slug / SEO、草稿与发布、首页区块标题 / 正文 / 按钮文字 / 显示状态 |
 | 审计记录 | `/admin/audit` | 登录、退出、创建、修改、发布、删除操作留痕 |
 
+## 联系方式
+
+公开联系方式的**唯一来源**是 `src/lib/contact-config.ts`（Phone / WhatsApp / Email，含展示文字与 `tel:` / `wa.me` / `mailto:` 链接）。它同时被两处使用：
+
+1. **`npm run db:seed`** —— 以稳定 `key` **幂等**写入数据库；已存在的记录**完全不会被修改**，因此管理员在后台的启用/停用、排序与文案调整都会被保留。
+2. **前台回退** —— 数据库不可用时，前台仍展示这些真实联系方式，而不是留空或使用占位假数据。
+
+前台展示位置：页脚、询盘区、桌面端右侧固定悬浮按钮（WhatsApp / Email）、移动端底部联系栏（WhatsApp / Email / 电话）。
+
+- 只有**已启用且填写了值**的联系方式才会出现在前台；在后台停用任意一项，对应入口（含悬浮按钮与底部栏）会立即消失。
+- 数据库可连接但联系方式为空时，前台**不显示**任何联系方式（此时不会回退，以保证后台的停用操作立即生效）。
+
 ## 前台由后台控制的内容
 
 - **公司资料**：页脚公司名、标语、地址、营业时间；页面默认 SEO 标题与描述（`generateMetadata`）。
@@ -122,6 +134,7 @@ src/
     content.ts              # 内容读取层：数据库优先 + 字典回退
     media.ts                # 语义化媒体位接口
     site-config.ts          # 公司信息统一配置（★ 英文名集中于此）
+    contact-config.ts       # 公开联系方式唯一来源（seed 与前台回退共用）
     audit.ts / href.ts / cn.ts
 prisma/
   schema.prisma             # 数据模型

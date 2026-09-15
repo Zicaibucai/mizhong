@@ -5,15 +5,18 @@ import { useFormStatus } from 'react-dom';
 import { setPageStatusAction } from '@/lib/admin/actions/pages';
 import { initialFormState } from '@/lib/admin/action-state';
 import { Alert } from '@/components/admin/form';
+import { useAdminT } from '@/components/admin/i18n-provider';
 
 function StatusButton({
   value,
   children,
   tone,
+  pendingText,
 }: {
   value: 'PUBLISHED' | 'DRAFT';
   children: React.ReactNode;
   tone: 'primary' | 'secondary';
+  pendingText: string;
 }) {
   const { pending } = useFormStatus();
   return (
@@ -28,7 +31,7 @@ function StatusButton({
           : 'inline-flex h-10 items-center rounded-full border border-navy-300 px-5 text-sm font-medium text-navy-800 transition-colors hover:bg-navy-50 disabled:opacity-60'
       }
     >
-      {pending ? '处理中…' : children}
+      {pending ? pendingText : children}
     </button>
   );
 }
@@ -40,6 +43,7 @@ export function PageStatusForm({
   id: string;
   status: 'DRAFT' | 'PUBLISHED';
 }) {
+  const t = useAdminT();
   const [state, formAction] = useActionState(setPageStatusAction, initialFormState);
 
   return (
@@ -47,18 +51,18 @@ export function PageStatusForm({
       <input type="hidden" name="id" value={id} />
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-navy-700">
-          当前状态：
+          {t.pageStatus.currentStatus}{' '}
           <span className={status === 'PUBLISHED' ? 'text-emerald-700' : 'text-amber-700'}>
-            {status === 'PUBLISHED' ? '已发布' : '草稿'}
+            {status === 'PUBLISHED' ? t.pageStatus.published : t.pageStatus.draft}
           </span>
         </span>
         {status === 'PUBLISHED' ? (
-          <StatusButton value="DRAFT" tone="secondary">
-            转为草稿
+          <StatusButton value="DRAFT" tone="secondary" pendingText={t.common.processing}>
+            {t.pageStatus.moveToDraft}
           </StatusButton>
         ) : (
-          <StatusButton value="PUBLISHED" tone="primary">
-            发布
+          <StatusButton value="PUBLISHED" tone="primary" pendingText={t.common.processing}>
+            {t.pageStatus.publish}
           </StatusButton>
         )}
       </div>

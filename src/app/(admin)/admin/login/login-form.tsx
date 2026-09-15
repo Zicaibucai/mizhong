@@ -4,15 +4,19 @@ import { useActionState } from 'react';
 import { loginAction } from '@/lib/admin/actions/auth';
 import { initialFormState } from '@/lib/admin/action-state';
 import { Alert, Field, SubmitButton, TextInput } from '@/components/admin/form';
+import { useAdminT } from '@/components/admin/i18n-provider';
 
 export function LoginForm({ dbReady }: { dbReady: boolean }) {
+  const t = useAdminT();
   const [state, formAction] = useActionState(loginAction, initialFormState);
 
   return (
     <form action={formAction} className="space-y-5">
       {!dbReady ? (
         <Alert kind="error">
-          数据库尚未配置（缺少 <code>DATABASE_URL</code>），登录暂不可用。请参考 README 完成数据库初始化。
+          {t.loginForm.dbMissingBefore}
+          <code>DATABASE_URL</code>
+          {t.loginForm.dbMissingAfter}
         </Alert>
       ) : null}
 
@@ -20,7 +24,7 @@ export function LoginForm({ dbReady }: { dbReady: boolean }) {
         <Alert kind="error">{state.message}</Alert>
       ) : null}
 
-      <Field label="邮箱" htmlFor="email">
+      <Field label={t.loginForm.email} htmlFor="email">
         <TextInput
           id="email"
           name="email"
@@ -31,7 +35,7 @@ export function LoginForm({ dbReady }: { dbReady: boolean }) {
         />
       </Field>
 
-      <Field label="密码" htmlFor="password">
+      <Field label={t.loginForm.password} htmlFor="password">
         <TextInput
           id="password"
           name="password"
@@ -42,8 +46,8 @@ export function LoginForm({ dbReady }: { dbReady: boolean }) {
         />
       </Field>
 
-      <SubmitButton pendingText="登录中…" className="w-full">
-        登录
+      <SubmitButton pendingText={t.loginForm.signingIn} className="w-full">
+        {t.loginForm.signIn}
       </SubmitButton>
     </form>
   );

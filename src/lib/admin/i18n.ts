@@ -1,0 +1,648 @@
+/**
+ * Admin UI i18n layer.
+ *
+ * A deliberately tiny, dependency-free typed message dictionary: the English object is the
+ * source of truth and `AdminMessages` is derived from it, so the Chinese object is checked
+ * against it at compile time (missing or extra keys fail the build).
+ *
+ * Server-safe on purpose: this module must stay free of client-only imports, and it must NOT
+ * carry a `'use client'` directive so server components and server actions can import it.
+ *
+ * Client components (the locale switcher) import the locale constants from here too, so
+ * `next/headers` is pulled in lazily inside `getAdminLocale()` — a static import would drag the
+ * server-only module into the client bundle and break the build.
+ */
+export const ADMIN_UI_LOCALES = ['en', 'zh'] as const;
+export type AdminUiLocale = (typeof ADMIN_UI_LOCALES)[number];
+
+export const ADMIN_LOCALE_COOKIE = 'mz_admin_locale';
+export const DEFAULT_ADMIN_UI_LOCALE: AdminUiLocale = 'en';
+
+/** `<html lang>` value to use for each admin UI locale */
+export const ADMIN_HTML_LANG: Record<AdminUiLocale, string> = {
+  en: 'en',
+  zh: 'zh-CN',
+};
+
+/** Locale used when formatting dates/times in the admin UI */
+export function adminDateLocale(locale: AdminUiLocale): string {
+  return locale === 'zh' ? 'zh-CN' : 'en-US';
+}
+
+/**
+ * English messages — the source of truth.
+ *
+ * NOTE: intentionally NOT `as const`. `as const` would narrow every leaf to a string literal
+ * type ("Dashboard"), which would then make the Chinese object unassignable. Plain inference
+ * keeps the leaf type `string` while still preserving the exact key structure, which is what
+ * gives us compile-time key parity.
+ */
+const en = {
+  common: {
+    save: 'Save',
+    saving: 'Saving…',
+    saveChanges: 'Save changes',
+    add: 'Add',
+    cancel: 'Cancel',
+    delete: 'Delete',
+    deleting: 'Deleting…',
+    confirmDelete: 'Confirm delete',
+    deleteConfirmDefault: 'Delete this item? This action cannot be undone.',
+    edit: 'Edit',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+    visible: 'Visible',
+    hidden: 'Hidden',
+    orderValue: 'Order {order}',
+    untitled: '(Untitled)',
+    processing: 'Processing…',
+  },
+  localeSwitcher: {
+    label: 'Admin language',
+  },
+  nav: {
+    ariaLabel: 'Admin navigation',
+    dashboard: 'Dashboard',
+    company: 'Company profile',
+    contacts: 'Contacts',
+    navigation: 'Navigation',
+    pages: 'Pages & blocks',
+    audit: 'Audit log',
+  },
+  shell: {
+    subtitle: 'Content Admin',
+    headerTitle: 'Dashboard',
+    viewPublicSite: 'View public site ↗',
+    signOut: 'Sign out',
+  },
+  loginPage: {
+    subtitle: 'Content Admin sign in',
+    restrictedBefore: 'Authorized administrators only. Self-signup is disabled; accounts are created with',
+    restrictedAfter: '.',
+  },
+  loginForm: {
+    dbMissingBefore: 'The database is not configured (',
+    dbMissingAfter: ' is missing), so sign in is unavailable. See the README to initialize the database.',
+    email: 'Email',
+    password: 'Password',
+    signIn: 'Sign in',
+    signingIn: 'Signing in…',
+  },
+  dashboard: {
+    title: 'Dashboard',
+    subtitle: 'An overview of site content and recent activity.',
+    dbMissingBefore: 'The database is not configured (',
+    dbMissingAfter:
+      ' is missing). Stats and content management are unavailable; the public site falls back to its built-in copy and stays accessible. See the README to initialize the database.',
+    dbUnavailable:
+      'Could not connect to the database, so stats are unavailable. Please check the database service and connection string.',
+    statistics: 'Statistics',
+    totalPages: 'Total pages',
+    publishedPages: 'Published pages',
+    draftPages: 'Draft pages',
+    products: 'Products',
+    assets: 'Assets',
+    inquiries: 'Inquiries',
+    recentActivity: 'Recent activity',
+    viewAll: 'View all',
+    noActivity: 'No activity yet.',
+  },
+  company: {
+    title: 'Company profile',
+    subtitle:
+      'Company name, description, positioning, address, business hours and default SEO in all three languages. Changes take effect on the public site as soon as you save.',
+  },
+  companyForm: {
+    companyName: 'Company name',
+    tagline: 'Tagline',
+    about: 'About the company',
+    positioning: 'Positioning',
+    address: 'Address',
+    businessHours: 'Business hours',
+    seoTitle: 'Default SEO title',
+    seoTitleHint: 'Leave blank to use "Company name — default title" automatically',
+    seoDescription: 'Default SEO description',
+    save: 'Save company profile',
+  },
+  contacts: {
+    title: 'Contacts',
+    subtitle:
+      'Only contact methods that are enabled and have a value are shown on the public site. When none are filled in, no placeholder contact details are displayed.',
+    dbUnavailable:
+      'The database is unavailable, so contact methods could not be loaded. Please check DATABASE_URL and the database service.',
+    existing: 'Existing contact methods ({count})',
+    empty: 'No contact methods yet. They appear on the public site once added.',
+    noSharedValue: '(no shared value)',
+    addTitle: 'Add contact method',
+    deleteConfirm: 'Delete this contact method? It will immediately stop showing on the public site.',
+  },
+  contactForm: {
+    type: 'Type',
+    displayOrder: 'Display order',
+    displayOrderHint: 'Lower numbers come first',
+    sharedValue: 'Shared value',
+    sharedValueHint: 'Email address / phone number / WhatsApp number, etc. (shared across all languages)',
+    customLink: 'Custom link (optional)',
+    customLinkHint: 'Leave blank to auto-generate a mailto: / tel: / wa.me link based on the type',
+    enabled: 'Enabled (shown on the public site only when enabled)',
+    displayTextSection: ' · Display text',
+    displayLabel: 'Display label (leave blank to use the type default)',
+    valueForLocale: 'Value for this language (e.g. address text)',
+    valueForLocaleHint: 'Leave blank to use the shared value above',
+  },
+  navigation: {
+    title: 'Navigation',
+    subtitle:
+      "Manage the site's top navigation. When nothing is configured, the public site uses its built-in navigation (anchors to the home page sections).",
+    dbUnavailable: 'The database is unavailable, so the navigation configuration could not be loaded.',
+    existing: 'Existing nav items ({count})',
+    empty: 'No custom navigation yet; the public site is using its built-in navigation. Add items below.',
+    addTitle: 'Add nav item',
+    deleteConfirm: 'Delete this nav item?',
+  },
+  navForm: {
+    linkUrl: 'Link URL',
+    linkUrlHint: 'A site path (starting with / or #) or a full http(s) URL',
+    displayOrder: 'Display order',
+    displayOrderHint: 'Lower numbers come first',
+    enabled: 'Enabled (shown on the public site only when enabled)',
+    external: 'External link (opens in a new window)',
+    labelSection: ' · Nav label',
+    label: 'Label',
+  },
+  pages: {
+    title: 'Pages & blocks',
+    subtitle:
+      'Manage page information (title, slug, SEO) and the content of each home page block. While a page is a draft, the public site uses its built-in copy.',
+    dbUnavailable: 'The database is unavailable, so pages could not be loaded.',
+    noDataBefore: 'No page data yet. Run ',
+    noDataAfter: ' to import the initial home page content.',
+    colPage: 'Page',
+    colSlug: 'slug',
+    colBlocks: 'Blocks',
+    colStatus: 'Status',
+    home: 'Home',
+  },
+  pageDetail: {
+    dbUnavailable: 'The database is unavailable, so this page could not be loaded.',
+    back: '← Back to pages',
+    publishStatus: 'Publish status',
+    pageInformation: 'Page information',
+    blocks: 'Page blocks ({count})',
+    noBlocksBefore: 'This page has no blocks yet. Run ',
+    noBlocksAfter: ' to import the default home page blocks.',
+  },
+  pageForm: {
+    slug: 'slug',
+    slugHint: 'Lowercase letters, digits and hyphens only',
+    pageTitle: 'Page title',
+    seoTitle: 'SEO title',
+    seoTitleHint: 'Leave blank to use the page title',
+    seoDescription: 'SEO description',
+    save: 'Save page information',
+  },
+  pageStatus: {
+    currentStatus: 'Current status:',
+    published: 'Published',
+    draft: 'Draft',
+    moveToDraft: 'Move to draft',
+    publish: 'Publish',
+  },
+  blockForm: {
+    enabled: 'Enable this block (hidden from the public site when off)',
+    title: 'Title',
+    subtitle: 'Subtitle / description',
+    body: 'Body (optional)',
+    buttonLabel: 'Button label',
+    buttonLink: 'Button link',
+    buttonLinkHint: 'e.g. #inquiry or /zh/products',
+    save: 'Save block',
+  },
+  audit: {
+    title: 'Audit log',
+    subtitle: 'Records sign-ins, sign-outs, creates, updates, publishes and deletes, most recent 200 entries.',
+    dbUnavailable: 'The database is unavailable, so the audit log could not be loaded.',
+    empty: 'No audit entries yet.',
+    colTime: 'Time',
+    colActor: 'Actor',
+    colAction: 'Action',
+    colTarget: 'Target',
+    colSummary: 'Summary',
+    colIp: 'IP',
+  },
+  labels: {
+    // Content locale codes (zh / en / vi) — the language being *edited*, not the admin UI language.
+    contentLocales: {
+      zh: 'Chinese (zh)',
+      en: 'English (en)',
+      vi: 'Vietnamese (vi)',
+    },
+    contactTypes: {
+      EMAIL: 'Email',
+      WHATSAPP: 'WhatsApp',
+      PHONE: 'Phone',
+      WECHAT: 'WeChat',
+      ADDRESS: 'Address',
+    },
+    auditActions: {
+      LOGIN: 'Sign in',
+      LOGIN_FAILED: 'Failed sign in',
+      LOGOUT: 'Sign out',
+      CREATE: 'Create',
+      UPDATE: 'Update',
+      DELETE: 'Delete',
+      PUBLISH: 'Publish',
+      UNPUBLISH: 'Unpublish',
+    },
+    pageStatuses: {
+      DRAFT: 'Draft',
+      PUBLISHED: 'Published',
+    },
+    blocks: {
+      hero: 'Hero',
+      capabilities: 'Capabilities',
+      products: 'Products',
+      supply: 'Supply chain',
+      quality: 'Quality & trust',
+      inquiry: 'Inquiry CTA',
+    },
+  },
+  validation: {
+    invalidInput: 'Invalid input',
+    emailInvalid: 'Please enter a valid email address',
+    passwordMin: 'Password must be at least 8 characters',
+    companyNameRequired: 'Please enter the company name',
+    linkRequired: 'Please enter the link URL',
+    linkFormat: 'The link must be a site path (starting with / or #) or an http(s) URL',
+    pageTitleRequired: 'Please enter the page title',
+    slugRequired: 'Please enter the slug',
+    slugFormat: 'The slug may only contain lowercase letters, digits and hyphens',
+  },
+  actions: {
+    sessionExpired: 'Your session has expired. Please sign in again and retry.',
+    dbUnavailable:
+      'The database is unavailable, so the change was not applied. Please check DATABASE_URL and the database service.',
+    saveFailed: 'Save failed. Please try again later.',
+    deleteFailed: 'Delete failed. The record may no longer exist.',
+    operationFailed: 'Operation failed. Please try again later.',
+    // Sign in
+    dbNotConfiguredLogin:
+      'The database is not configured yet, so sign in is unavailable. Please contact your system administrator.',
+    tooManyAttempts: 'Too many sign-in attempts. Please try again in about {minutes} minutes.',
+    signInUnavailable: 'The sign-in service is temporarily unavailable. Please try again later.',
+    incorrectCredentials: 'Incorrect email or password.',
+    // Company profile
+    companySaved: 'Company profile saved. The public site is now updated.',
+    // Contacts
+    contactNeedsValue: 'Please enter a value for at least one contact method (the shared value or any locale value).',
+    contactSaved: 'Contact method saved. The public site is now updated.',
+    contactDeleted: 'Contact method deleted.',
+    // Navigation
+    navNeedsLabel: 'Please enter a navigation label for at least one language.',
+    navSaved: 'Navigation saved. The public site is now updated.',
+    navDeleted: 'Nav item deleted.',
+    // Pages & blocks
+    pageMissing: 'The page does not exist.',
+    slugTaken: 'That slug is already used by another page.',
+    pageSaved: 'Page saved.',
+    blockMissing: 'The block does not exist.',
+    blockSaved: 'Block saved.',
+    pagePublished: 'Page published. The public site is now updated.',
+    pageDrafted: 'Page moved to draft. The public site has reverted.',
+  },
+  auditSummaries: {
+    signedIn: 'Admin signed in',
+    signedOut: 'Admin signed out',
+    loginFailed: 'Failed sign in',
+    companyProfileUpdated: 'Updated company profile',
+    contactCreated: 'Created contact method',
+    contactUpdated: 'Updated contact method',
+    contactDeleted: 'Deleted contact method',
+    navCreated: 'Created nav item',
+    navUpdated: 'Updated nav item',
+    navDeleted: 'Deleted nav item',
+    pageUpdated: 'Updated page "{slug}"',
+    blockUpdated: 'Updated block "{key}"',
+    pagePublished: 'Published page "{slug}"',
+    pageDrafted: 'Moved page "{slug}" to draft',
+  },
+};
+
+export type AdminMessages = typeof en;
+
+const zh: AdminMessages = {
+  common: {
+    save: '保存',
+    saving: '保存中…',
+    saveChanges: '保存修改',
+    add: '添加',
+    cancel: '取消',
+    delete: '删除',
+    deleting: '删除中…',
+    confirmDelete: '确认删除',
+    deleteConfirmDefault: '确定删除此项？该操作无法撤销。',
+    edit: '编辑',
+    enabled: '已启用',
+    disabled: '已停用',
+    visible: '显示中',
+    hidden: '已隐藏',
+    orderValue: '排序 {order}',
+    untitled: '（未命名）',
+    processing: '处理中…',
+  },
+  localeSwitcher: {
+    label: '后台语言',
+  },
+  nav: {
+    ariaLabel: '后台导航',
+    dashboard: '仪表盘',
+    company: '公司资料',
+    contacts: '联系方式',
+    navigation: '导航菜单',
+    pages: '页面与区块',
+    audit: '操作日志',
+  },
+  shell: {
+    subtitle: '内容管理后台',
+    headerTitle: '仪表盘',
+    viewPublicSite: '查看官网 ↗',
+    signOut: '退出登录',
+  },
+  loginPage: {
+    subtitle: '内容管理后台登录',
+    restrictedBefore: '仅限授权管理员访问。系统不开放自助注册，账号通过命令',
+    restrictedAfter: '创建。',
+  },
+  loginForm: {
+    dbMissingBefore: '数据库尚未配置（缺少 ',
+    dbMissingAfter: '），暂时无法登录。请参阅 README 完成数据库初始化。',
+    email: '邮箱',
+    password: '密码',
+    signIn: '登录',
+    signingIn: '登录中…',
+  },
+  dashboard: {
+    title: '仪表盘',
+    subtitle: '站点内容与近期操作概览。',
+    dbMissingBefore: '数据库尚未配置（缺少 ',
+    dbMissingAfter:
+      '）。统计与内容管理暂不可用；官网将回退到内置文案并保持正常访问。请参阅 README 完成数据库初始化。',
+    dbUnavailable: '无法连接数据库，统计信息暂不可用。请检查数据库服务与连接字符串。',
+    statistics: '统计',
+    totalPages: '页面总数',
+    publishedPages: '已发布页面',
+    draftPages: '草稿页面',
+    products: '产品',
+    assets: '素材',
+    inquiries: '询盘',
+    recentActivity: '近期操作',
+    viewAll: '查看全部',
+    noActivity: '暂无操作记录。',
+  },
+  company: {
+    title: '公司资料',
+    subtitle: '三种语言下的公司名称、简介、定位、地址、营业时间与默认 SEO。保存后立即在官网生效。',
+  },
+  companyForm: {
+    companyName: '公司名称',
+    tagline: '一句话简介',
+    about: '公司简介',
+    positioning: '市场定位',
+    address: '地址',
+    businessHours: '营业时间',
+    seoTitle: '默认 SEO 标题',
+    seoTitleHint: '留空将自动使用「公司名称 — 默认标题」',
+    seoDescription: '默认 SEO 描述',
+    save: '保存公司资料',
+  },
+  contacts: {
+    title: '联系方式',
+    subtitle: '仅「已启用」且填写了值的联系方式会展示在官网。若均未填写，官网不会显示任何占位联系方式。',
+    dbUnavailable: '数据库不可用，无法加载联系方式。请检查 DATABASE_URL 与数据库服务。',
+    existing: '现有联系方式（{count}）',
+    empty: '暂无联系方式。添加后将展示在官网。',
+    noSharedValue: '（无共享值）',
+    addTitle: '添加联系方式',
+    deleteConfirm: '确定删除该联系方式？删除后将立即从官网移除。',
+  },
+  contactForm: {
+    type: '类型',
+    displayOrder: '展示顺序',
+    displayOrderHint: '数字越小越靠前',
+    sharedValue: '共享值',
+    sharedValueHint: '邮箱地址 / 电话 / WhatsApp 号码等（所有语言共用）',
+    customLink: '自定义链接（可选）',
+    customLinkHint: '留空将根据类型自动生成 mailto: / tel: / wa.me 链接',
+    enabled: '已启用（仅在启用时展示于官网）',
+    displayTextSection: ' · 展示文案',
+    displayLabel: '展示名称（留空则使用类型默认值）',
+    valueForLocale: '该语言的展示值（例如地址文本）',
+    valueForLocaleHint: '留空则使用上方的共享值',
+  },
+  navigation: {
+    title: '导航菜单',
+    subtitle: '管理官网顶部导航。若未配置，官网将使用内置导航（指向首页各板块的锚点）。',
+    dbUnavailable: '数据库不可用，无法加载导航配置。',
+    existing: '现有导航项（{count}）',
+    empty: '暂无自定义导航，官网正在使用内置导航。请在下方添加。',
+    addTitle: '添加导航项',
+    deleteConfirm: '确定删除该导航项？',
+  },
+  navForm: {
+    linkUrl: '链接地址',
+    linkUrlHint: '站内路径（以 / 或 # 开头）或完整的 http(s) 链接',
+    displayOrder: '展示顺序',
+    displayOrderHint: '数字越小越靠前',
+    enabled: '已启用（仅在启用时展示于官网）',
+    external: '外部链接（在新窗口打开）',
+    labelSection: ' · 导航名称',
+    label: '名称',
+  },
+  pages: {
+    title: '页面与区块',
+    subtitle: '管理页面信息（标题、slug、SEO）以及首页各区块的内容。页面处于草稿状态时，官网使用内置文案。',
+    dbUnavailable: '数据库不可用，无法加载页面。',
+    noDataBefore: '暂无页面数据。运行 ',
+    noDataAfter: ' 可导入首页初始内容。',
+    colPage: '页面',
+    colSlug: 'slug',
+    colBlocks: '区块数',
+    colStatus: '状态',
+    home: '首页',
+  },
+  pageDetail: {
+    dbUnavailable: '数据库不可用，无法加载该页面。',
+    back: '← 返回页面列表',
+    publishStatus: '发布状态',
+    pageInformation: '页面信息',
+    blocks: '页面区块（{count}）',
+    noBlocksBefore: '该页面暂无区块。运行 ',
+    noBlocksAfter: ' 可导入首页默认区块。',
+  },
+  pageForm: {
+    slug: 'slug',
+    slugHint: '仅可包含小写字母、数字与连字符',
+    pageTitle: '页面标题',
+    seoTitle: 'SEO 标题',
+    seoTitleHint: '留空则使用页面标题',
+    seoDescription: 'SEO 描述',
+    save: '保存页面信息',
+  },
+  pageStatus: {
+    currentStatus: '当前状态：',
+    published: '已发布',
+    draft: '草稿',
+    moveToDraft: '转为草稿',
+    publish: '发布',
+  },
+  blockForm: {
+    enabled: '启用该区块（关闭后不在官网显示）',
+    title: '标题',
+    subtitle: '副标题 / 描述',
+    body: '正文（可选）',
+    buttonLabel: '按钮文字',
+    buttonLink: '按钮链接',
+    buttonLinkHint: '例如 #inquiry 或 /zh/products',
+    save: '保存区块',
+  },
+  audit: {
+    title: '操作日志',
+    subtitle: '记录登录、退出、创建、更新、发布与删除操作，最多显示最近 200 条。',
+    dbUnavailable: '数据库不可用，无法加载操作日志。',
+    empty: '暂无操作记录。',
+    colTime: '时间',
+    colActor: '操作人',
+    colAction: '操作',
+    colTarget: '对象',
+    colSummary: '摘要',
+    colIp: 'IP',
+  },
+  labels: {
+    contentLocales: {
+      zh: '中文 (zh)',
+      en: '英语 (en)',
+      vi: '越南语 (vi)',
+    },
+    contactTypes: {
+      EMAIL: '邮箱',
+      WHATSAPP: 'WhatsApp',
+      PHONE: '电话',
+      WECHAT: '微信',
+      ADDRESS: '地址',
+    },
+    auditActions: {
+      LOGIN: '登录',
+      LOGIN_FAILED: '登录失败',
+      LOGOUT: '退出登录',
+      CREATE: '创建',
+      UPDATE: '更新',
+      DELETE: '删除',
+      PUBLISH: '发布',
+      UNPUBLISH: '取消发布',
+    },
+    pageStatuses: {
+      DRAFT: '草稿',
+      PUBLISHED: '已发布',
+    },
+    blocks: {
+      hero: '首屏',
+      capabilities: '能力介绍',
+      products: '产品',
+      supply: '供应链',
+      quality: '质量与信任',
+      inquiry: '询盘引导',
+    },
+  },
+  validation: {
+    invalidInput: '输入有误',
+    emailInvalid: '请输入有效的邮箱地址',
+    passwordMin: '密码至少需要 8 个字符',
+    companyNameRequired: '请输入公司名称',
+    linkRequired: '请输入链接地址',
+    linkFormat: '链接必须是以 / 或 # 开头的站内路径，或 http(s) 链接',
+    pageTitleRequired: '请输入页面标题',
+    slugRequired: '请输入 slug',
+    slugFormat: 'slug 只能包含小写字母、数字与连字符',
+  },
+  actions: {
+    sessionExpired: '登录状态已过期，请重新登录后再试。',
+    dbUnavailable: '数据库不可用，本次修改未生效。请检查 DATABASE_URL 与数据库服务。',
+    saveFailed: '保存失败，请稍后重试。',
+    deleteFailed: '删除失败，记录可能已不存在。',
+    operationFailed: '操作失败，请稍后重试。',
+    dbNotConfiguredLogin: '数据库尚未配置，暂时无法登录。请联系系统管理员。',
+    tooManyAttempts: '登录尝试过于频繁。请约 {minutes} 分钟后重试。',
+    signInUnavailable: '登录服务暂时不可用，请稍后重试。',
+    incorrectCredentials: '邮箱或密码不正确。',
+    companySaved: '公司资料已保存，官网已更新。',
+    contactNeedsValue: '请至少为一种联系方式填写值（共享值或任一语言的值）。',
+    contactSaved: '联系方式已保存，官网已更新。',
+    contactDeleted: '联系方式已删除。',
+    navNeedsLabel: '请至少为一种语言填写导航名称。',
+    navSaved: '导航已保存，官网已更新。',
+    navDeleted: '导航项已删除。',
+    pageMissing: '该页面不存在。',
+    slugTaken: '该 slug 已被其他页面占用。',
+    pageSaved: '页面已保存。',
+    blockMissing: '该区块不存在。',
+    blockSaved: '区块已保存。',
+    pagePublished: '页面已发布，官网已更新。',
+    pageDrafted: '页面已转为草稿，官网已还原。',
+  },
+  auditSummaries: {
+    signedIn: '管理员已登录',
+    signedOut: '管理员已退出登录',
+    loginFailed: '登录失败',
+    companyProfileUpdated: '更新了公司资料',
+    contactCreated: '创建了联系方式',
+    contactUpdated: '更新了联系方式',
+    contactDeleted: '删除了联系方式',
+    navCreated: '创建了导航项',
+    navUpdated: '更新了导航项',
+    navDeleted: '删除了导航项',
+    pageUpdated: '更新了页面「{slug}」',
+    blockUpdated: '更新了区块「{key}」',
+    pagePublished: '发布了页面「{slug}」',
+    pageDrafted: '将页面「{slug}」转为草稿',
+  },
+};
+
+const MESSAGES: Record<AdminUiLocale, AdminMessages> = { en, zh };
+
+export function getAdminMessages(locale: AdminUiLocale): AdminMessages {
+  return MESSAGES[locale] ?? en;
+}
+
+export function isAdminUiLocale(value: string): value is AdminUiLocale {
+  return (ADMIN_UI_LOCALES as readonly string[]).includes(value);
+}
+
+/** Fill `{token}` placeholders in a message, leaving unknown tokens untouched. */
+export function formatMessage(template: string, values: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) =>
+    Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match,
+  );
+}
+
+/** Read the admin UI locale from the cookie. Never throws. */
+export async function getAdminLocale(): Promise<AdminUiLocale> {
+  try {
+    // Lazy so this module stays importable from client components (see the note at the top).
+    const { cookies } = await import('next/headers');
+    const store = await cookies();
+    const value = store.get(ADMIN_LOCALE_COOKIE)?.value;
+    if (value && isAdminUiLocale(value)) return value;
+  } catch {
+    // `cookies()` is unavailable outside a request scope — fall back to the default.
+  }
+  return DEFAULT_ADMIN_UI_LOCALE;
+}
+
+/** Locale + messages for the current request (server components and server actions). */
+export async function getAdminMessagesForRequest(): Promise<{
+  locale: AdminUiLocale;
+  t: AdminMessages;
+}> {
+  const locale = await getAdminLocale();
+  return { locale, t: getAdminMessages(locale) };
+}

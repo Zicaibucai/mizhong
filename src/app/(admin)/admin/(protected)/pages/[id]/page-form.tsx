@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { savePageAction } from '@/lib/admin/actions/pages';
 import { initialFormState } from '@/lib/admin/action-state';
 import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
-import { LOCALE_LABELS } from '@/lib/admin/labels';
+import { getContentLocaleLabel } from '@/lib/admin/labels';
 import {
   Alert,
   Field,
@@ -13,6 +13,7 @@ import {
   TextArea,
   TextInput,
 } from '@/components/admin/form';
+import { useAdminT } from '@/components/admin/i18n-provider';
 
 export interface PageFormValues {
   id: string;
@@ -21,6 +22,7 @@ export interface PageFormValues {
 }
 
 export function PageForm({ values }: { values: PageFormValues }) {
+  const t = useAdminT();
   const [state, formAction] = useActionState(savePageAction, initialFormState);
 
   return (
@@ -34,13 +36,21 @@ export function PageForm({ values }: { values: PageFormValues }) {
         <Alert kind="success">{state.message}</Alert>
       ) : null}
 
-      <Field label="slug" htmlFor="slug" hint="仅小写字母、数字与连字符">
+      <Field
+        label={t.pageForm.slug}
+        htmlFor="slug"
+        hint={t.pageForm.slugHint}
+      >
         <TextInput id="slug" name="slug" defaultValue={values.slug} required />
       </Field>
 
       {ADMIN_LOCALES.map((locale) => (
-        <LocaleSection key={locale} title={LOCALE_LABELS[locale]} open={locale === 'zh'}>
-          <Field label="页面标题" htmlFor={`${locale}_title`}>
+        <LocaleSection
+          key={locale}
+          title={getContentLocaleLabel(t, locale)}
+          open={locale === 'zh'}
+        >
+          <Field label={t.pageForm.pageTitle} htmlFor={`${locale}_title`}>
             <TextInput
               id={`${locale}_title`}
               name={`${locale}_title`}
@@ -48,14 +58,18 @@ export function PageForm({ values }: { values: PageFormValues }) {
               required
             />
           </Field>
-          <Field label="SEO 标题" htmlFor={`${locale}_seoTitle`} hint="留空则使用页面标题">
+          <Field
+            label={t.pageForm.seoTitle}
+            htmlFor={`${locale}_seoTitle`}
+            hint={t.pageForm.seoTitleHint}
+          >
             <TextInput
               id={`${locale}_seoTitle`}
               name={`${locale}_seoTitle`}
               defaultValue={values.translations[locale].seoTitle}
             />
           </Field>
-          <Field label="SEO 描述" htmlFor={`${locale}_seoDescription`}>
+          <Field label={t.pageForm.seoDescription} htmlFor={`${locale}_seoDescription`}>
             <TextArea
               id={`${locale}_seoDescription`}
               name={`${locale}_seoDescription`}
@@ -67,7 +81,7 @@ export function PageForm({ values }: { values: PageFormValues }) {
       ))}
 
       <div className="flex justify-end">
-        <SubmitButton pendingText="保存中…">保存页面信息</SubmitButton>
+        <SubmitButton pendingText={t.common.saving}>{t.pageForm.save}</SubmitButton>
       </div>
     </form>
   );

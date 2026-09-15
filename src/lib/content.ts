@@ -2,6 +2,7 @@ import { cache } from 'react';
 import type { Locale } from '@/lib/i18n/config';
 import { getDictionary, type Dict } from '@/lib/i18n';
 import { companyName } from '@/lib/site-config';
+import { PUBLIC_CONTACTS } from '@/lib/contact-config';
 import { tryDb } from '@/lib/db';
 import { deriveContactHref, sanitizeHref, type ContactTypeName } from './href';
 
@@ -91,6 +92,25 @@ function defaultNav(t: Dict): NavView[] {
   ];
 }
 
+/** 数据库不可用时的联系方式回退：使用已确认的公开真实联系方式（非占位假数据） */
+function fallbackContacts(t: Dict): ContactView[] {
+  const labels: Partial<Record<ContactTypeName, string>> = {
+    EMAIL: t.contact.email,
+    WHATSAPP: t.contact.whatsapp,
+    PHONE: t.contact.phone,
+    WECHAT: t.contact.wechat,
+    ADDRESS: t.contact.address,
+  };
+
+  return PUBLIC_CONTACTS.filter((contact) => contact.enabled).map((contact) => ({
+    id: `fallback-${contact.key}`,
+    type: contact.type,
+    label: labels[contact.type] ?? contact.type,
+    value: contact.value,
+    href: sanitizeHref(contact.href) ?? deriveContactHref(contact.type, contact.value),
+  }));
+}
+
 function buildFallback(locale: Locale, t: Dict): SiteContent {
   return {
     source: 'fallback',
@@ -104,7 +124,7 @@ function buildFallback(locale: Locale, t: Dict): SiteContent {
       seoTitle: '',
       seoDescription: t.meta.description,
     },
-    contacts: [],
+    contacts: fallbackContacts(t),
     nav: defaultNav(t),
     blocks: defaultBlocks(t),
   };

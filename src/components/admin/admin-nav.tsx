@@ -3,21 +3,23 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
+import { useAdminT } from './i18n-provider';
 
 const ITEMS = [
-  { href: '/admin', label: '控制台' },
-  { href: '/admin/company', label: '公司资料' },
-  { href: '/admin/contacts', label: '联系方式' },
-  { href: '/admin/navigation', label: '导航' },
-  { href: '/admin/pages', label: '页面与区块' },
-  { href: '/admin/audit', label: '审计记录' },
+  { href: '/admin', key: 'dashboard' },
+  { href: '/admin/company', key: 'company' },
+  { href: '/admin/contacts', key: 'contacts' },
+  { href: '/admin/navigation', key: 'navigation' },
+  { href: '/admin/pages', key: 'pages' },
+  { href: '/admin/audit', key: 'audit' },
 ] as const;
 
 export function AdminNav() {
+  const t = useAdminT();
   const pathname = usePathname();
 
   return (
-    <nav aria-label="后台导航">
+    <nav aria-label={t.nav.ariaLabel}>
       <ul className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
         {ITEMS.map((item) => {
           const active =
@@ -34,7 +36,7 @@ export function AdminNav() {
                     : 'text-navy-700 hover:bg-navy-100',
                 )}
               >
-                {item.label}
+                {t.nav[item.key]}
               </Link>
             </li>
           );

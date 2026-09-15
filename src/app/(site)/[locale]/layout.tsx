@@ -13,6 +13,7 @@ import { site } from '@/lib/site-config';
 import { getSiteContent } from '@/lib/content';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SiteFooter } from '@/components/layout/site-footer';
+import { ContactActions } from '@/components/layout/contact-actions';
 import '../../globals.css';
 
 const inter = Inter({
@@ -100,6 +101,7 @@ export default async function LocaleLayout({
           contacts={content.contacts}
           nav={content.nav}
         />
+        <ContactActions locale={locale} contacts={content.contacts} />
       </body>
     </html>
   );

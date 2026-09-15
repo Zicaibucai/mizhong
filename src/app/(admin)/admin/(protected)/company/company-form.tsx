@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { saveCompanyAction } from '@/lib/admin/actions/company';
 import { initialFormState } from '@/lib/admin/action-state';
 import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
-import { LOCALE_LABELS } from '@/lib/admin/labels';
+import { getContentLocaleLabel } from '@/lib/admin/labels';
 import {
   Alert,
   Field,
@@ -13,6 +13,7 @@ import {
   TextArea,
   TextInput,
 } from '@/components/admin/form';
+import { useAdminT } from '@/components/admin/i18n-provider';
 
 export interface CompanyValues {
   name: string;
@@ -26,6 +27,7 @@ export interface CompanyValues {
 }
 
 export function CompanyForm({ values }: { values: Record<AdminLocale, CompanyValues> }) {
+  const t = useAdminT();
   const [state, formAction] = useActionState(saveCompanyAction, initialFormState);
 
   return (
@@ -40,8 +42,12 @@ export function CompanyForm({ values }: { values: Record<AdminLocale, CompanyVal
       {ADMIN_LOCALES.map((locale) => {
         const value = values[locale];
         return (
-          <LocaleSection key={locale} title={LOCALE_LABELS[locale]} open={locale === 'zh'}>
-            <Field label="公司名称" htmlFor={`${locale}_name`}>
+          <LocaleSection
+            key={locale}
+            title={getContentLocaleLabel(t, locale)}
+            open={locale === 'zh'}
+          >
+            <Field label={t.companyForm.companyName} htmlFor={`${locale}_name`}>
               <TextInput
                 id={`${locale}_name`}
                 name={`${locale}_name`}
@@ -49,14 +55,14 @@ export function CompanyForm({ values }: { values: Record<AdminLocale, CompanyVal
                 required
               />
             </Field>
-            <Field label="品牌标语 Tagline" htmlFor={`${locale}_tagline`}>
+            <Field label={t.companyForm.tagline} htmlFor={`${locale}_tagline`}>
               <TextInput
                 id={`${locale}_tagline`}
                 name={`${locale}_tagline`}
                 defaultValue={value.tagline}
               />
             </Field>
-            <Field label="公司简介" htmlFor={`${locale}_about`}>
+            <Field label={t.companyForm.about} htmlFor={`${locale}_about`}>
               <TextArea
                 id={`${locale}_about`}
                 name={`${locale}_about`}
@@ -64,7 +70,7 @@ export function CompanyForm({ values }: { values: Record<AdminLocale, CompanyVal
                 rows={5}
               />
             </Field>
-            <Field label="业务定位" htmlFor={`${locale}_positioning`}>
+            <Field label={t.companyForm.positioning} htmlFor={`${locale}_positioning`}>
               <TextArea
                 id={`${locale}_positioning`}
                 name={`${locale}_positioning`}
@@ -73,14 +79,14 @@ export function CompanyForm({ values }: { values: Record<AdminLocale, CompanyVal
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="地址" htmlFor={`${locale}_address`}>
+              <Field label={t.companyForm.address} htmlFor={`${locale}_address`}>
                 <TextInput
                   id={`${locale}_address`}
                   name={`${locale}_address`}
                   defaultValue={value.address}
                 />
               </Field>
-              <Field label="营业时间" htmlFor={`${locale}_businessHours`}>
+              <Field label={t.companyForm.businessHours} htmlFor={`${locale}_businessHours`}>
                 <TextInput
                   id={`${locale}_businessHours`}
                   name={`${locale}_businessHours`}
@@ -89,9 +95,9 @@ export function CompanyForm({ values }: { values: Record<AdminLocale, CompanyVal
               </Field>
             </div>
             <Field
-              label="默认 SEO 标题"
+              label={t.companyForm.seoTitle}
               htmlFor={`${locale}_seoTitle`}
-              hint="留空则自动使用「公司名 — 默认标题」"
+              hint={t.companyForm.seoTitleHint}
             >
               <TextInput
                 id={`${locale}_seoTitle`}
@@ -99,7 +105,7 @@ export function CompanyForm({ values }: { values: Record<AdminLocale, CompanyVal
                 defaultValue={value.seoTitle}
               />
             </Field>
-            <Field label="默认 SEO 描述" htmlFor={`${locale}_seoDescription`}>
+            <Field label={t.companyForm.seoDescription} htmlFor={`${locale}_seoDescription`}>
               <TextArea
                 id={`${locale}_seoDescription`}
                 name={`${locale}_seoDescription`}
@@ -112,7 +118,7 @@ export function CompanyForm({ values }: { values: Record<AdminLocale, CompanyVal
       })}
 
       <div className="flex justify-end">
-        <SubmitButton pendingText="保存中…">保存公司资料</SubmitButton>
+        <SubmitButton pendingText={t.common.saving}>{t.companyForm.save}</SubmitButton>
       </div>
     </form>
   );

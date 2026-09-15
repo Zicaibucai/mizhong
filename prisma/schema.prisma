@@ -156,6 +156,8 @@ enum ContactType {
 /// 联系方式（未启用或未填写时，前台不展示）
 model ContactMethod {
   id        String      @id @default(cuid())
+  /// 稳定标识：由 seed 写入，用于幂等创建；后台手动新增的记录为 null
+  key       String?     @unique
   type      ContactType
   value     String?
   href      String?

@@ -1,22 +1,25 @@
 import { requireAdminAction, type AdminUser } from '@/lib/auth/session';
+import type { AdminMessages } from './i18n';
 import type { FormState } from './action-state';
 
-export const UNAUTHORIZED_STATE: FormState = {
-  status: 'error',
-  message: '登录状态已失效，请重新登录后再试。',
-};
+/** Signed out / expired session error, in the admin's current language */
+export function getUnauthorizedState(t: AdminMessages): FormState {
+  return { status: 'error', message: t.actions.sessionExpired };
+}
 
-export const DB_UNAVAILABLE_STATE: FormState = {
-  status: 'error',
-  message: '数据库不可用，操作未生效。请检查 DATABASE_URL 与数据库服务。',
-};
+/** Database unavailable error, in the admin's current language */
+export function getDbUnavailableState(t: AdminMessages): FormState {
+  return { status: 'error', message: t.actions.dbUnavailable };
+}
 
-/** Server Action 权限守卫：未登录或会话失效时返回错误状态，不抛异常给用户 */
-export async function requireAdminOrError(): Promise<{ user: AdminUser } | { error: FormState }> {
+/** Server Action permission guard: returns an error state when signed out or the session expired, instead of throwing at the user */
+export async function requireAdminOrError(
+  t: AdminMessages,
+): Promise<{ user: AdminUser } | { error: FormState }> {
   try {
     const user = await requireAdminAction();
     return { user };
   } catch {
-    return { error: UNAUTHORIZED_STATE };
+    return { error: getUnauthorizedState(t) };
   }
 }

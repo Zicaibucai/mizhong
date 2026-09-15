@@ -1,12 +1,14 @@
 import { requireAdminPage } from '@/lib/auth/session';
 import { getSiteContent } from '@/lib/content';
 import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
+import { getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import { CompanyForm, type CompanyValues } from './company-form';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminCompanyPage() {
   await requireAdminPage();
+  const { t } = await getAdminMessagesForRequest();
 
   const values = {} as Record<AdminLocale, CompanyValues>;
   for (const locale of ADMIN_LOCALES) {
@@ -26,10 +28,8 @@ export default async function AdminCompanyPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-xl font-semibold tracking-tight text-navy-900">公司资料</h1>
-        <p className="mt-1 text-sm text-muted">
-          三种语言的公司名称、简介、业务定位、地址、营业时间与默认 SEO。保存后前台立即生效。
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight text-navy-900">{t.company.title}</h1>
+        <p className="mt-1 text-sm text-muted">{t.company.subtitle}</p>
       </header>
       <CompanyForm values={values} />
     </div>

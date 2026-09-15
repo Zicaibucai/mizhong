@@ -3,29 +3,33 @@
 import { revalidatePath } from 'next/cache';
 import { getPrisma } from '@/lib/db';
 import { writeAudit } from '@/lib/audit';
-import { requireAdminOrError, DB_UNAVAILABLE_STATE } from '@/lib/admin/guard';
+import { getDbUnavailableState, requireAdminOrError } from '@/lib/admin/guard';
 import {
   ADMIN_LOCALES,
-  contactBaseSchema,
-  contactTranslationSchema,
-  idSchema,
+  makeContactBaseSchema,
+  makeContactTranslationSchema,
+  makeIdSchema,
   parseForm,
   parseLocaleFields,
   type AdminLocale,
 } from '@/lib/admin/validation';
+import { getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import type { FormState } from '@/lib/admin/action-state';
 
 export async function saveContactAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const guard = await requireAdminOrError();
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
   if ('error' in guard) return guard.error;
   const { user } = guard;
 
-  const base = parseForm(contactBaseSchema, formData);
+  const base = parseForm(makeContactBaseSchema(t), formData, t);
   if (!base.ok) return { status: 'error', message: base.message };
 
+  const translationSchema = makeContactTranslationSchema();
   const translations: { locale: AdminLocale; label: string; value: string }[] = [];
   for (const locale of ADMIN_LOCALES) {
-    const parsed = parseLocaleFields(contactTranslationSchema, locale, formData);
+    const parsed = parseLocaleFields(translationSchema, locale, formData, t);
     if (!parsed.ok) return { status: 'error', message: parsed.message };
     translations.push({ locale, ...parsed.data });
   }
@@ -33,11 +37,11 @@ export async function saveContactAction(_prev: FormState, formData: FormData): P
   const hasAnyValue =
     base.data.value.trim().length > 0 || translations.some((item) => item.value.trim().length > 0);
   if (!hasAnyValue) {
-    return { status: 'error', message: '请至少填写一个联系方式的值（通用值或任一语言的值）。' };
+    return { status: 'error', message: t.actions.contactNeedsValue };
   }
 
   const db = getPrisma();
-  if (!db) return DB_UNAVAILABLE_STATE;
+  if (!db) return getDbUnavailableState(t);
 
   const shared = {
     type: base.data.type,
@@ -71,33 +75,37 @@ export async function saveContactAction(_prev: FormState, formData: FormData): P
       action: base.data.id ? 'UPDATE' : 'CREATE',
       targetType: 'ContactMethod',
       targetId: record.id,
-      summary: base.data.id ? '更新联系方式' : '新增联系方式',
+      summary: base.data.id
+        ? t.auditSummaries.contactUpdated
+        : t.auditSummaries.contactCreated,
     });
   } catch (error) {
     console.error('[admin] save contact method failed:', error);
-    return { status: 'error', message: '保存失败，请稍后重试。' };
+    return { status: 'error', message: t.actions.saveFailed };
   }
 
   revalidatePath('/', 'layout');
-  return { status: 'success', message: '联系方式已保存，前台已更新。' };
+  return { status: 'success', message: t.actions.contactSaved };
 }
 
 export async function deleteContactAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const guard = await requireAdminOrError();
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
   if ('error' in guard) return guard.error;
   const { user } = guard;
 
-  const parsed = parseForm(idSchema, formData);
+  const parsed = parseForm(makeIdSchema(t), formData, t);
   if (!parsed.ok) return { status: 'error', message: parsed.message };
 
   const db = getPrisma();
-  if (!db) return DB_UNAVAILABLE_STATE;
+  if (!db) return getDbUnavailableState(t);
 
   try {
     await db.contactMethod.delete({ where: { id: parsed.data.id } });
   } catch (error) {
     console.error('[admin] delete contact method failed:', error);
-    return { status: 'error', message: '删除失败，该记录可能已不存在。' };
+    return { status: 'error', message: t.actions.deleteFailed };
   }
 
   await writeAudit({
@@ -106,9 +114,9 @@ export async function deleteContactAction(_prev: FormState, formData: FormData):
     action: 'DELETE',
     targetType: 'ContactMethod',
     targetId: parsed.data.id,
-    summary: '删除联系方式',
+    summary: t.auditSummaries.contactDeleted,
   });
 
   revalidatePath('/', 'layout');
-  return { status: 'success', message: '联系方式已删除。' };
+  return { status: 'success', message: t.actions.contactDeleted };
 }

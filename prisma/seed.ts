@@ -1,11 +1,11 @@
 /**
- * 数据库种子：把现有三语言首页文案导入数据库，避免初始化后站点变空。
+ * 数据库种子：把现有三语言首页文案与公开联系方式导入数据库，避免初始化后站点变空。
  *
  * 运行：npm run db:seed
  * 幂等：可重复执行，已存在的记录不会被覆盖（管理员在后台的修改不会被冲掉）。
  *
- * 说明：不种子任何联系方式——公司尚未提供真实邮箱 / 电话 / WhatsApp 等，
- * 未配置时前台不展示联系方式（而不是显示占位假数据）。
+ * 联系方式来自 src/lib/contact-config.ts（已确认的公开真实信息），
+ * 同一份数据也作为数据库不可用时前台的展示回退。
  */
 import { PrismaClient } from '@prisma/client';
 import { loadLocalEnv } from '../scripts/load-env';
@@ -13,6 +13,7 @@ import { zh } from '../src/lib/i18n/dictionaries/zh';
 import { en } from '../src/lib/i18n/dictionaries/en';
 import { vi } from '../src/lib/i18n/dictionaries/vi';
 import { companyName } from '../src/lib/site-config';
+import { PUBLIC_CONTACTS } from '../src/lib/contact-config';
 
 loadLocalEnv();
 
@@ -162,6 +163,40 @@ async function seedNavigation(): Promise<void> {
   console.log(`✓ 导航 ${NAV_SEED.length} 项（3 种语言）`);
 }
 
+/**
+ * 联系方式：按稳定 `key` 幂等创建。
+ * 已存在的记录一律不修改（管理员在后台的启用/停用、排序、文案调整都会被保留）。
+ */
+async function seedContacts(): Promise<void> {
+  let created = 0;
+  let skipped = 0;
+
+  for (const contact of PUBLIC_CONTACTS) {
+    const existing = await prisma.contactMethod.findUnique({ where: { key: contact.key } });
+    if (existing) {
+      skipped += 1;
+      continue;
+    }
+
+    await prisma.contactMethod.create({
+      data: {
+        key: contact.key,
+        type: contact.type,
+        value: contact.value,
+        href: contact.href,
+        sortOrder: contact.sortOrder,
+        enabled: contact.enabled,
+      },
+    });
+    created += 1;
+  }
+
+  const enabled = await prisma.contactMethod.count({ where: { enabled: true } });
+  console.log(
+    `✓ 联系方式：新建 ${created} 条，已存在跳过 ${skipped} 条（当前启用 ${enabled} 条）`,
+  );
+}
+
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     console.error('✗ 未配置 DATABASE_URL。请复制 .env.example 为 .env.local 并填写连接串。');
@@ -171,8 +206,9 @@ async function main(): Promise<void> {
   await seedCompanyProfile();
   await seedHomePage();
   await seedNavigation();
+  await seedContacts();
 
-  console.log('\n种子完成。联系方式未种子（公司尚未提供真实信息，前台不会显示占位数据）。');
+  console.log('\n种子完成。');
 }
 
 main()

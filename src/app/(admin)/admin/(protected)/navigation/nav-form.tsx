@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { saveNavAction } from '@/lib/admin/actions/navigation';
 import { initialFormState } from '@/lib/admin/action-state';
 import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
-import { LOCALE_LABELS } from '@/lib/admin/labels';
+import { getContentLocaleLabel } from '@/lib/admin/labels';
 import {
   Alert,
   Checkbox,
@@ -13,6 +13,7 @@ import {
   SubmitButton,
   TextInput,
 } from '@/components/admin/form';
+import { useAdminT } from '@/components/admin/i18n-provider';
 
 export interface NavValues {
   id?: string;
@@ -32,6 +33,7 @@ const EMPTY: NavValues = {
 };
 
 export function NavForm({ item, submitLabel }: { item?: NavValues; submitLabel: string }) {
+  const t = useAdminT();
   const initial = item ?? EMPTY;
   const [state, formAction] = useActionState(saveNavAction, initialFormState);
   const key = initial.id ?? 'new';
@@ -49,13 +51,17 @@ export function NavForm({ item, submitLabel }: { item?: NavValues; submitLabel: 
 
       <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
         <Field
-          label="链接地址"
+          label={t.navForm.linkUrl}
           htmlFor={`href-${key}`}
-          hint="站内路径（/ 或 # 开头）或完整 http(s) 地址"
+          hint={t.navForm.linkUrlHint}
         >
           <TextInput id={`href-${key}`} name="href" defaultValue={initial.href} required />
         </Field>
-        <Field label="显示顺序" htmlFor={`sortOrder-${key}`} hint="数字越小越靠前">
+        <Field
+          label={t.navForm.displayOrder}
+          htmlFor={`sortOrder-${key}`}
+          hint={t.navForm.displayOrderHint}
+        >
           <TextInput
             id={`sortOrder-${key}`}
             name="sortOrder"
@@ -66,13 +72,17 @@ export function NavForm({ item, submitLabel }: { item?: NavValues; submitLabel: 
       </div>
 
       <div className="flex flex-wrap gap-6">
-        <Checkbox name="enabled" label="启用（启用后前台才会展示）" defaultChecked={initial.enabled} />
-        <Checkbox name="external" label="外部链接（新窗口打开）" defaultChecked={initial.external} />
+        <Checkbox name="enabled" label={t.navForm.enabled} defaultChecked={initial.enabled} />
+        <Checkbox name="external" label={t.navForm.external} defaultChecked={initial.external} />
       </div>
 
       {ADMIN_LOCALES.map((locale) => (
-        <LocaleSection key={locale} title={`${LOCALE_LABELS[locale]} · 导航名称`} open={locale === 'zh'}>
-          <Field label="名称" htmlFor={`${locale}_label-${key}`}>
+        <LocaleSection
+          key={locale}
+          title={`${getContentLocaleLabel(t, locale)}${t.navForm.labelSection}`}
+          open={locale === 'zh'}
+        >
+          <Field label={t.navForm.label} htmlFor={`${locale}_label-${key}`}>
             <TextInput
               id={`${locale}_label-${key}`}
               name={`${locale}_label`}
@@ -82,7 +92,7 @@ export function NavForm({ item, submitLabel }: { item?: NavValues; submitLabel: 
         </LocaleSection>
       ))}
 
-      <SubmitButton pendingText="保存中…">{submitLabel}</SubmitButton>
+      <SubmitButton pendingText={t.common.saving}>{submitLabel}</SubmitButton>
     </form>
   );
 }

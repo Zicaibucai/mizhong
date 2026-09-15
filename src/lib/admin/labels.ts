@@ -1,44 +1,36 @@
+import type { AdminMessages } from './i18n';
 import type { AdminLocale } from './validation';
 
-export const LOCALE_LABELS: Record<AdminLocale, string> = {
-  zh: '中文',
-  en: 'English',
-  vi: 'Tiếng Việt',
-};
+/** String-indexed lookup into a message map, falling back to the raw key. */
+function pick(map: Record<string, string>, key: string): string {
+  return map[key] ?? key;
+}
 
-export const CONTACT_TYPE_LABELS: Record<string, string> = {
-  EMAIL: '邮箱 Email',
-  WHATSAPP: 'WhatsApp',
-  PHONE: '电话 Phone',
-  WECHAT: '微信 WeChat',
-  ADDRESS: '地址 Address',
-};
+/** Label for a *content* locale (zh / en / vi) — the language being edited, not the admin UI. */
+export function getContentLocaleLabel(t: AdminMessages, locale: AdminLocale): string {
+  return t.labels.contentLocales[locale];
+}
 
-export const AUDIT_ACTION_LABELS: Record<string, string> = {
-  LOGIN: '登录',
-  LOGIN_FAILED: '登录失败',
-  LOGOUT: '退出登录',
-  CREATE: '创建',
-  UPDATE: '修改',
-  DELETE: '删除',
-  PUBLISH: '发布',
-  UNPUBLISH: '取消发布',
-};
+export function getContactTypeLabel(t: AdminMessages, type: string): string {
+  return pick(t.labels.contactTypes, type);
+}
 
-export const PAGE_STATUS_LABELS: Record<string, string> = {
-  DRAFT: '草稿',
-  PUBLISHED: '已发布',
-};
+export function getAuditActionLabel(t: AdminMessages, action: string): string {
+  return pick(t.labels.auditActions, action);
+}
 
-export const BLOCK_LABELS: Record<string, string> = {
-  hero: '首屏 Hero',
-  capabilities: '企业能力',
-  products: '产品',
-  supply: '供应链',
-  quality: '质量与信任',
-  inquiry: '询盘 CTA',
-};
+export function getPageStatusLabel(t: AdminMessages, status: string): string {
+  return pick(t.labels.pageStatuses, status);
+}
 
-export function blockLabel(key: string): string {
-  return BLOCK_LABELS[key] ?? key;
+export function getBlockLabel(t: AdminMessages, key: string): string {
+  return pick(t.labels.blocks, key);
+}
+
+/** Options for the contact type `<select>`, in message order. */
+export function getContactTypeOptions(t: AdminMessages): { value: string; label: string }[] {
+  return Object.keys(t.labels.contactTypes).map((value) => ({
+    value,
+    label: pick(t.labels.contactTypes, value),
+  }));
 }

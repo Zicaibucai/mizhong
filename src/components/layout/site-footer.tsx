@@ -28,7 +28,8 @@ export function SiteFooter({
 
   return (
     <footer className="bg-navy-950 text-navy-100">
-      <Container className="py-16">
+      {/* 底部留白：为移动端联系栏与桌面端悬浮入口留出空间，避免遮挡页脚内容 */}
+      <Container className="pt-16 pb-28 lg:pb-24">
         <div className="grid gap-12 lg:grid-cols-[1.6fr_1fr_1.3fr]">
           <div>
             <div className="flex items-center gap-2.5">

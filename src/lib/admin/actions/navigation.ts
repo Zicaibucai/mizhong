@@ -3,39 +3,43 @@
 import { revalidatePath } from 'next/cache';
 import { getPrisma } from '@/lib/db';
 import { writeAudit } from '@/lib/audit';
-import { requireAdminOrError, DB_UNAVAILABLE_STATE } from '@/lib/admin/guard';
+import { getDbUnavailableState, requireAdminOrError } from '@/lib/admin/guard';
 import {
   ADMIN_LOCALES,
-  idSchema,
-  navBaseSchema,
-  navTranslationSchema,
+  makeIdSchema,
+  makeNavBaseSchema,
+  makeNavTranslationSchema,
   parseForm,
   parseLocaleFields,
   type AdminLocale,
 } from '@/lib/admin/validation';
+import { getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import type { FormState } from '@/lib/admin/action-state';
 
 export async function saveNavAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const guard = await requireAdminOrError();
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
   if ('error' in guard) return guard.error;
   const { user } = guard;
 
-  const base = parseForm(navBaseSchema, formData);
+  const base = parseForm(makeNavBaseSchema(t), formData, t);
   if (!base.ok) return { status: 'error', message: base.message };
 
+  const translationSchema = makeNavTranslationSchema();
   const translations: { locale: AdminLocale; label: string }[] = [];
   for (const locale of ADMIN_LOCALES) {
-    const parsed = parseLocaleFields(navTranslationSchema, locale, formData);
+    const parsed = parseLocaleFields(translationSchema, locale, formData, t);
     if (!parsed.ok) return { status: 'error', message: parsed.message };
     translations.push({ locale, label: parsed.data.label });
   }
 
   if (!translations.some((item) => item.label.trim().length > 0)) {
-    return { status: 'error', message: '请至少填写一种语言的导航名称。' };
+    return { status: 'error', message: t.actions.navNeedsLabel };
   }
 
   const db = getPrisma();
-  if (!db) return DB_UNAVAILABLE_STATE;
+  if (!db) return getDbUnavailableState(t);
 
   const shared = {
     href: base.data.href.trim(),
@@ -63,33 +67,35 @@ export async function saveNavAction(_prev: FormState, formData: FormData): Promi
       action: base.data.id ? 'UPDATE' : 'CREATE',
       targetType: 'NavItem',
       targetId: record.id,
-      summary: base.data.id ? '更新导航项' : '新增导航项',
+      summary: base.data.id ? t.auditSummaries.navUpdated : t.auditSummaries.navCreated,
     });
   } catch (error) {
     console.error('[admin] save nav item failed:', error);
-    return { status: 'error', message: '保存失败，请稍后重试。' };
+    return { status: 'error', message: t.actions.saveFailed };
   }
 
   revalidatePath('/', 'layout');
-  return { status: 'success', message: '导航已保存，前台已更新。' };
+  return { status: 'success', message: t.actions.navSaved };
 }
 
 export async function deleteNavAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const guard = await requireAdminOrError();
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
   if ('error' in guard) return guard.error;
   const { user } = guard;
 
-  const parsed = parseForm(idSchema, formData);
+  const parsed = parseForm(makeIdSchema(t), formData, t);
   if (!parsed.ok) return { status: 'error', message: parsed.message };
 
   const db = getPrisma();
-  if (!db) return DB_UNAVAILABLE_STATE;
+  if (!db) return getDbUnavailableState(t);
 
   try {
     await db.navItem.delete({ where: { id: parsed.data.id } });
   } catch (error) {
     console.error('[admin] delete nav item failed:', error);
-    return { status: 'error', message: '删除失败，该记录可能已不存在。' };
+    return { status: 'error', message: t.actions.deleteFailed };
   }
 
   await writeAudit({
@@ -98,9 +104,9 @@ export async function deleteNavAction(_prev: FormState, formData: FormData): Pro
     action: 'DELETE',
     targetType: 'NavItem',
     targetId: parsed.data.id,
-    summary: '删除导航项',
+    summary: t.auditSummaries.navDeleted,
   });
 
   revalidatePath('/', 'layout');
-  return { status: 'success', message: '导航项已删除。' };
+  return { status: 'success', message: t.actions.navDeleted };
 }

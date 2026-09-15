@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { saveBlockAction } from '@/lib/admin/actions/pages';
 import { initialFormState } from '@/lib/admin/action-state';
 import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
-import { LOCALE_LABELS } from '@/lib/admin/labels';
+import { getContentLocaleLabel } from '@/lib/admin/labels';
 import {
   Alert,
   Checkbox,
@@ -14,6 +14,7 @@ import {
   TextArea,
   TextInput,
 } from '@/components/admin/form';
+import { useAdminT } from '@/components/admin/i18n-provider';
 
 export interface BlockFormValues {
   id: string;
@@ -26,6 +27,7 @@ export interface BlockFormValues {
 }
 
 export function BlockForm({ values }: { values: BlockFormValues }) {
+  const t = useAdminT();
   const [state, formAction] = useActionState(saveBlockAction, initialFormState);
 
   return (
@@ -39,20 +41,28 @@ export function BlockForm({ values }: { values: BlockFormValues }) {
         <Alert kind="success">{state.message}</Alert>
       ) : null}
 
-      <Checkbox name="enabled" label="启用该区块（关闭后前台不显示）" defaultChecked={values.enabled} />
+      <Checkbox
+        name="enabled"
+        label={t.blockForm.enabled}
+        defaultChecked={values.enabled}
+      />
 
       {ADMIN_LOCALES.map((locale) => {
         const value = values.translations[locale];
         return (
-          <LocaleSection key={locale} title={LOCALE_LABELS[locale]} open={locale === 'zh'}>
-            <Field label="标题" htmlFor={`${values.id}-${locale}-title`}>
+          <LocaleSection
+            key={locale}
+            title={getContentLocaleLabel(t, locale)}
+            open={locale === 'zh'}
+          >
+            <Field label={t.blockForm.title} htmlFor={`${values.id}-${locale}-title`}>
               <TextInput
                 id={`${values.id}-${locale}-title`}
                 name={`${locale}_title`}
                 defaultValue={value.title}
               />
             </Field>
-            <Field label="副标题 / 描述" htmlFor={`${values.id}-${locale}-subtitle`}>
+            <Field label={t.blockForm.subtitle} htmlFor={`${values.id}-${locale}-subtitle`}>
               <TextArea
                 id={`${values.id}-${locale}-subtitle`}
                 name={`${locale}_subtitle`}
@@ -60,7 +70,7 @@ export function BlockForm({ values }: { values: BlockFormValues }) {
                 rows={3}
               />
             </Field>
-            <Field label="正文（可选）" htmlFor={`${values.id}-${locale}-body`}>
+            <Field label={t.blockForm.body} htmlFor={`${values.id}-${locale}-body`}>
               <TextArea
                 id={`${values.id}-${locale}-body`}
                 name={`${locale}_body`}
@@ -69,7 +79,7 @@ export function BlockForm({ values }: { values: BlockFormValues }) {
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="按钮文字" htmlFor={`${values.id}-${locale}-ctaLabel`}>
+              <Field label={t.blockForm.buttonLabel} htmlFor={`${values.id}-${locale}-ctaLabel`}>
                 <TextInput
                   id={`${values.id}-${locale}-ctaLabel`}
                   name={`${locale}_ctaLabel`}
@@ -77,9 +87,9 @@ export function BlockForm({ values }: { values: BlockFormValues }) {
                 />
               </Field>
               <Field
-                label="按钮链接"
+                label={t.blockForm.buttonLink}
                 htmlFor={`${values.id}-${locale}-ctaHref`}
-                hint="如 #inquiry 或 /zh/products"
+                hint={t.blockForm.buttonLinkHint}
               >
                 <TextInput
                   id={`${values.id}-${locale}-ctaHref`}
@@ -92,7 +102,7 @@ export function BlockForm({ values }: { values: BlockFormValues }) {
         );
       })}
 
-      <SubmitButton pendingText="保存中…">保存区块</SubmitButton>
+      <SubmitButton pendingText={t.common.saving}>{t.blockForm.save}</SubmitButton>
     </form>
   );
 }

@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import { requireAdminPage } from '@/lib/auth/session';
 import { tryDb } from '@/lib/db';
 import { ADMIN_LOCALES } from '@/lib/admin/validation';
-import { blockLabel } from '@/lib/admin/labels';
+import { getBlockLabel } from '@/lib/admin/labels';
+import { formatMessage, getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import { Alert } from '@/components/admin/form';
 import { PageForm, type PageFormValues } from './page-form';
 import { PageStatusForm } from './page-status-form';
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminPageDetail({ params }: { params: Promise<{ id: string }> }) {
   await requireAdminPage();
   const { id } = await params;
+  const { t } = await getAdminMessagesForRequest();
 
   const page = await tryDb((db) =>
     db.page.findUnique({
@@ -31,9 +33,9 @@ export default async function AdminPageDetail({ params }: { params: Promise<{ id
   if (page === null) {
     return (
       <div className="space-y-4">
-        <Alert kind="error">数据库不可用，无法读取该页面。</Alert>
+        <Alert kind="error">{t.pageDetail.dbUnavailable}</Alert>
         <Link href="/admin/pages" className="text-sm text-copper-700 hover:underline">
-          ← 返回页面列表
+          {t.pageDetail.back}
         </Link>
       </div>
     );
@@ -70,7 +72,7 @@ export default async function AdminPageDetail({ params }: { params: Promise<{ id
     <div className="space-y-8">
       <div>
         <Link href="/admin/pages" className="text-sm text-copper-700 hover:underline">
-          ← 返回页面列表
+          {t.pageDetail.back}
         </Link>
         <h1 className="mt-2 text-xl font-semibold tracking-tight text-navy-900">
           {pageTranslations.zh.title || page.slug}
@@ -79,26 +81,30 @@ export default async function AdminPageDetail({ params }: { params: Promise<{ id
       </div>
 
       <section className="rounded-xl border border-navy-200 bg-white p-5">
-        <h2 className="mb-4 text-sm font-semibold text-navy-900">发布状态</h2>
+        <h2 className="mb-4 text-sm font-semibold text-navy-900">{t.pageDetail.publishStatus}</h2>
         <PageStatusForm id={page.id} status={page.status} />
       </section>
 
       <section className="rounded-xl border border-navy-200 bg-white p-5">
-        <h2 className="mb-4 text-sm font-semibold text-navy-900">页面信息</h2>
+        <h2 className="mb-4 text-sm font-semibold text-navy-900">{t.pageDetail.pageInformation}</h2>
         <PageForm values={{ id: page.id, slug: page.slug, translations: pageTranslations }} />
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold text-navy-900">页面区块（{blocks.length}）</h2>
+        <h2 className="text-sm font-semibold text-navy-900">
+          {formatMessage(t.pageDetail.blocks, { count: blocks.length })}
+        </h2>
         {blocks.length === 0 ? (
           <p className="rounded-xl border border-dashed border-navy-200 bg-white px-5 py-6 text-sm text-muted">
-            该页面暂无区块。执行 <code>npm run db:seed</code> 可导入首页默认区块。
+            {t.pageDetail.noBlocksBefore}
+            <code>npm run db:seed</code>
+            {t.pageDetail.noBlocksAfter}
           </p>
         ) : (
           blocks.map((block) => (
             <details key={block.id} className="rounded-xl border border-navy-200 bg-white">
               <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3.5 text-sm">
-                <span className="font-medium text-navy-900">{blockLabel(block.key)}</span>
+                <span className="font-medium text-navy-900">{getBlockLabel(t, block.key)}</span>
                 <span className="font-mono text-xs text-navy-500">{block.key}</span>
                 <span
                   className={
@@ -107,7 +113,7 @@ export default async function AdminPageDetail({ params }: { params: Promise<{ id
                       : 'ml-auto rounded-full bg-navy-100 px-2.5 py-0.5 text-xs text-navy-600'
                   }
                 >
-                  {block.enabled ? '显示中' : '已隐藏'}
+                  {block.enabled ? t.common.visible : t.common.hidden}
                 </span>
               </summary>
               <div className="border-t border-navy-100 px-5 py-5">

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { AdminMessages } from './i18n';
+import { getContentLocaleLabel } from './labels';
 
 export const ADMIN_LOCALES = ['zh', 'en', 'vi'] as const;
 export type AdminLocale = (typeof ADMIN_LOCALES)[number];
@@ -6,122 +8,167 @@ export type AdminLocale = (typeof ADMIN_LOCALES)[number];
 export const localeSchema = z.enum(['zh', 'en', 'vi']);
 export const contactTypeSchema = z.enum(['EMAIL', 'WHATSAPP', 'PHONE', 'WECHAT', 'ADDRESS']);
 
-export const loginSchema = z.object({
-  email: z.string().trim().email('请输入有效的邮箱地址').max(200),
-  password: z.string().min(8, '密码至少 8 位').max(200),
-});
-
 const optionalText = (max: number) => z.string().trim().max(max).default('');
 
-// ---- 公司资料 ----
-export const companyTranslationSchema = z.object({
-  name: z.string().trim().min(1, '请填写公司名称').max(200),
-  tagline: optionalText(300),
-  about: optionalText(5000),
-  positioning: optionalText(500),
-  address: optionalText(500),
-  businessHours: optionalText(200),
-  seoTitle: optionalText(200),
-  seoDescription: optionalText(400),
-});
+// ---------------------------------------------------------------------------
+// Schemas
+//
+// Validation messages are user-visible, so every schema is built from the admin
+// messages of the current request. Build them with the factories below inside
+// the server action / page that has a message object at hand.
+// ---------------------------------------------------------------------------
 
-// ---- 联系方式 ----
-export const contactTranslationSchema = z.object({
-  label: optionalText(120),
-  value: optionalText(300),
-});
+export function makeLoginSchema(t: AdminMessages) {
+  return z.object({
+    email: z.string().trim().email(t.validation.emailInvalid).max(200),
+    password: z.string().min(8, t.validation.passwordMin).max(200),
+  });
+}
 
-export const contactBaseSchema = z.object({
-  id: z.string().trim().min(1).optional(),
-  type: contactTypeSchema,
-  value: optionalText(300),
-  href: optionalText(500),
-  sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
-  enabled: z.coerce.boolean().default(false),
-});
+// ---- Company profile ----
+export function makeCompanyTranslationSchema(t: AdminMessages) {
+  return z.object({
+    name: z.string().trim().min(1, t.validation.companyNameRequired).max(200),
+    tagline: optionalText(300),
+    about: optionalText(5000),
+    positioning: optionalText(500),
+    address: optionalText(500),
+    businessHours: optionalText(200),
+    seoTitle: optionalText(200),
+    seoDescription: optionalText(400),
+  });
+}
+export type CompanyTranslationInput = z.infer<ReturnType<typeof makeCompanyTranslationSchema>>;
 
-// ---- 导航 ----
-export const navTranslationSchema = z.object({
-  label: optionalText(120),
-});
+// ---- Contact methods ----
+export function makeContactTranslationSchema() {
+  return z.object({
+    label: optionalText(120),
+    value: optionalText(300),
+  });
+}
+export type ContactTranslationInput = z.infer<ReturnType<typeof makeContactTranslationSchema>>;
 
-export const navBaseSchema = z.object({
-  id: z.string().trim().min(1).optional(),
-  href: z
-    .string()
-    .trim()
-    .min(1, '请填写链接地址')
-    .max(500)
-    .refine(
-      (value) => value.startsWith('/') || value.startsWith('#') || /^https?:\/\/\S+$/.test(value),
-      { message: '链接需为站内路径（/ 或 # 开头）或 http(s) 地址' },
-    ),
-  external: z.coerce.boolean().default(false),
-  sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
-  enabled: z.coerce.boolean().default(false),
-});
+export function makeContactBaseSchema(t: AdminMessages) {
+  return z.object({
+    id: z.string().trim().min(1, t.validation.invalidInput).optional(),
+    type: contactTypeSchema,
+    value: optionalText(300),
+    href: optionalText(500),
+    sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+    enabled: z.coerce.boolean().default(false),
+  });
+}
+export type ContactBaseInput = z.infer<ReturnType<typeof makeContactBaseSchema>>;
 
-// ---- 页面 ----
-export const pageTranslationSchema = z.object({
-  title: z.string().trim().min(1, '请填写页面标题').max(200),
-  seoTitle: optionalText(200),
-  seoDescription: optionalText(400),
-});
+// ---- Navigation ----
+export function makeNavTranslationSchema() {
+  return z.object({
+    label: optionalText(120),
+  });
+}
+export type NavTranslationInput = z.infer<ReturnType<typeof makeNavTranslationSchema>>;
 
-export const pageBaseSchema = z.object({
-  id: z.string().trim().min(1),
-  slug: z
-    .string()
-    .trim()
-    .min(1, '请填写 slug')
-    .max(120)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug 只能包含小写字母、数字与连字符'),
-});
+export function makeNavBaseSchema(t: AdminMessages) {
+  return z.object({
+    id: z.string().trim().min(1, t.validation.invalidInput).optional(),
+    href: z
+      .string()
+      .trim()
+      .min(1, t.validation.linkRequired)
+      .max(500)
+      .refine(
+        (value) => value.startsWith('/') || value.startsWith('#') || /^https?:\/\/\S+$/.test(value),
+        { message: t.validation.linkFormat },
+      ),
+    external: z.coerce.boolean().default(false),
+    sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+    enabled: z.coerce.boolean().default(false),
+  });
+}
+export type NavBaseInput = z.infer<ReturnType<typeof makeNavBaseSchema>>;
 
-// ---- 页面区块 ----
-export const blockTranslationSchema = z.object({
-  title: optionalText(300),
-  subtitle: optionalText(1000),
-  body: optionalText(3000),
-  ctaLabel: optionalText(120),
-  ctaHref: optionalText(500),
-});
+// ---- Pages ----
+export function makePageTranslationSchema(t: AdminMessages) {
+  return z.object({
+    title: z.string().trim().min(1, t.validation.pageTitleRequired).max(200),
+    seoTitle: optionalText(200),
+    seoDescription: optionalText(400),
+  });
+}
+export type PageTranslationInput = z.infer<ReturnType<typeof makePageTranslationSchema>>;
 
-export const blockBaseSchema = z.object({
-  id: z.string().trim().min(1),
-  enabled: z.coerce.boolean().default(false),
-});
+export function makePageBaseSchema(t: AdminMessages) {
+  return z.object({
+    id: z.string().trim().min(1, t.validation.invalidInput),
+    slug: z
+      .string()
+      .trim()
+      .min(1, t.validation.slugRequired)
+      .max(120)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, t.validation.slugFormat),
+  });
+}
+export type PageBaseInput = z.infer<ReturnType<typeof makePageBaseSchema>>;
 
-export const idSchema = z.object({
-  id: z.string().trim().min(1),
-});
+// ---- Page blocks ----
+export function makeBlockTranslationSchema() {
+  return z.object({
+    title: optionalText(300),
+    subtitle: optionalText(1000),
+    body: optionalText(3000),
+    ctaLabel: optionalText(120),
+    ctaHref: optionalText(500),
+  });
+}
+export type BlockTranslationInput = z.infer<ReturnType<typeof makeBlockTranslationSchema>>;
+
+export function makeBlockBaseSchema(t: AdminMessages) {
+  return z.object({
+    id: z.string().trim().min(1, t.validation.invalidInput),
+    enabled: z.coerce.boolean().default(false),
+  });
+}
+export type BlockBaseInput = z.infer<ReturnType<typeof makeBlockBaseSchema>>;
+
+export function makeIdSchema(t: AdminMessages) {
+  return z.object({
+    id: z.string().trim().min(1, t.validation.invalidInput),
+  });
+}
+export type IdInput = z.infer<ReturnType<typeof makeIdSchema>>;
 
 // ---------------------------------------------------------------------------
-// 解析辅助（服务端使用）
+// Parsing helpers (server side)
 // ---------------------------------------------------------------------------
 
 type AnyZodObject = z.ZodObject<z.ZodRawShape>;
 
 export type ParseResult<T> = { ok: true; data: T } | { ok: false; message: string };
 
-/** 解析表单中的非多语言字段 */
-export function parseForm<S extends AnyZodObject>(schema: S, formData: FormData): ParseResult<z.infer<S>> {
+/** Parse the non-localized fields of a form */
+export function parseForm<S extends AnyZodObject>(
+  schema: S,
+  formData: FormData,
+  t: AdminMessages,
+): ParseResult<z.infer<S>> {
   const raw: Record<string, unknown> = {};
   for (const key of Object.keys(schema.shape)) {
     raw[key] = formData.get(key);
   }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
-    return { ok: false, message: parsed.error.issues[0]?.message ?? '内容不合法' };
+    return { ok: false, message: parsed.error.issues[0]?.message ?? t.validation.invalidInput };
   }
   return { ok: true, data: parsed.data };
 }
 
-/** 解析形如 `zh_name` / `en_name` 的多语言字段 */
+/** Parse localized fields shaped like `zh_name` / `en_name` */
 export function parseLocaleFields<S extends AnyZodObject>(
   schema: S,
   locale: AdminLocale,
   formData: FormData,
+  t: AdminMessages,
 ): ParseResult<z.infer<S>> {
   const raw: Record<string, unknown> = {};
   for (const key of Object.keys(schema.shape)) {
@@ -129,10 +176,10 @@ export function parseLocaleFields<S extends AnyZodObject>(
   }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
-    const localeLabel = { zh: '中文', en: 'English', vi: 'Tiếng Việt' }[locale];
+    const localeLabel = getContentLocaleLabel(t, locale);
     return {
       ok: false,
-      message: `${localeLabel}：${parsed.error.issues[0]?.message ?? '内容不合法'}`,
+      message: `${localeLabel}: ${parsed.error.issues[0]?.message ?? t.validation.invalidInput}`,
     };
   }
   return { ok: true, data: parsed.data };
