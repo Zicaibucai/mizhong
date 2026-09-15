@@ -1,14 +1,22 @@
 /**
- * 创建 / 更新管理员账号（交互式，密码不会写入源码、README、Git 或 .env.example）。
+ * 创建 / 更新管理员账号（密码不会写入源码、README、Git 或 .env.example）。
  *
- * 运行：npm run admin:create
- *       npm run admin:create -- admin@example.com
+ * 交互式运行：
+ *   npm run admin:create
+ *   npm run admin:create -- admin@example.com
  *
- * 密码在终端中输入时不回显。若邮箱已存在，则重置其密码并确保为 ADMIN 角色。
+ * 非交互运行（部署用，密码从文件读取，不出现在命令行参数或日志中）：
+ *   ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD_FILE=/path/to/pw npm run admin:create
+ *
+ * 交互模式下密码在终端输入时不回显。若邮箱已存在，则重置其密码并确保为 ADMIN 角色。
  */
+import { readFileSync } from 'node:fs';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import * as readline from 'node:readline';
+import { loadLocalEnv } from './load-env';
+
+loadLocalEnv();
 
 const prisma = new PrismaClient();
 
@@ -81,22 +89,46 @@ async function main(): Promise<void> {
 
   console.log('创建 / 更新管理员账号\n');
 
+  const passwordFile = process.env.ADMIN_PASSWORD_FILE;
+  const nonInteractive = Boolean(passwordFile);
+
   let email = (process.argv[2] ?? process.env.ADMIN_EMAIL ?? '').trim();
-  while (!EMAIL_PATTERN.test(email)) {
-    email = (await askText('管理员邮箱: ')).trim();
-    if (!EMAIL_PATTERN.test(email)) console.log('  邮箱格式不正确，请重试。');
+  if (!EMAIL_PATTERN.test(email)) {
+    if (nonInteractive) {
+      console.error('✗ 非交互模式需要提供合法的 ADMIN_EMAIL 或命令行邮箱参数。');
+      process.exit(1);
+    }
+    let attempts = 0;
+    while (!EMAIL_PATTERN.test(email) && attempts < 5) {
+      email = (await askText('管理员邮箱: ')).trim();
+      attempts += 1;
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+      console.error('✗ 邮箱格式不正确。');
+      process.exit(1);
+    }
   }
   email = email.toLowerCase();
 
-  const password = await askHidden(`密码（至少 ${MIN_PASSWORD_LENGTH} 位，输入时不显示）: `);
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    console.error(`\n✗ 密码至少需要 ${MIN_PASSWORD_LENGTH} 位。`);
-    process.exit(1);
+  let password: string;
+  if (passwordFile) {
+    try {
+      password = readFileSync(passwordFile, 'utf8').replace(/\r?\n$/, '');
+    } catch {
+      console.error('✗ 无法读取 ADMIN_PASSWORD_FILE 指定的文件。');
+      process.exit(1);
+    }
+  } else {
+    password = await askHidden(`密码（至少 ${MIN_PASSWORD_LENGTH} 位，输入时不显示）: `);
+    const confirm = await askHidden('再次输入密码确认: ');
+    if (password !== confirm) {
+      console.error('\n✗ 两次输入的密码不一致。');
+      process.exit(1);
+    }
   }
 
-  const confirm = await askHidden('再次输入密码确认: ');
-  if (password !== confirm) {
-    console.error('\n✗ 两次输入的密码不一致。');
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    console.error(`\n✗ 密码至少需要 ${MIN_PASSWORD_LENGTH} 位。`);
     process.exit(1);
   }
 

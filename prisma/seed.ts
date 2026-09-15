@@ -8,10 +8,13 @@
  * 未配置时前台不展示联系方式（而不是显示占位假数据）。
  */
 import { PrismaClient } from '@prisma/client';
+import { loadLocalEnv } from '../scripts/load-env';
 import { zh } from '../src/lib/i18n/dictionaries/zh';
 import { en } from '../src/lib/i18n/dictionaries/en';
 import { vi } from '../src/lib/i18n/dictionaries/vi';
 import { companyName } from '../src/lib/site-config';
+
+loadLocalEnv();
 
 const prisma = new PrismaClient();
 

@@ -64,6 +64,12 @@ npm run admin:create -- admin@example.com
 
   密码在终端输入时不回显，不少于 12 位，不会写入源码 / README / Git / `.env.example`。若邮箱已存在，则重置密码并确保为 `ADMIN` 角色。
 
+  服务器部署时可用非交互方式（密码从文件读取，不出现在命令行参数或日志中）：
+
+```bash
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD_FILE=/path/to/pwfile npm run admin:create
+```
+
 - 会话采用「数据库存储会话记录 + 随机令牌」：Cookie 为 `HttpOnly` + `SameSite=Lax`，生产环境自动加 `Secure`，有效期 7 天；退出登录会同时销毁服务端会话。
 - 登录失败有基础频率限制（同一 IP + 邮箱 10 分钟内 5 次失败后锁定 10 分钟），错误提示统一为「邮箱或密码不正确」，不暴露账号是否存在。
 - 后台全部页面、Server Action 均在服务端做权限校验（`requireAdminPage` / `requireAdminAction`），不依赖前端隐藏按钮。
