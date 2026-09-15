@@ -1,10 +1,14 @@
 // 米众贸易有限公司 — 数据模型
-// 本阶段仅作设计与目录边界，后台/数据库/媒体管理在下一阶段接入。
 //
-// 下一阶段接入步骤：
-//   1. npm i -D prisma && npm i @prisma/client
-//   2. 配置 DATABASE_URL（.env.local）
-//   3. npx prisma generate && npx prisma migrate dev
+// 本阶段（阶段 2）：数据库 + 管理员认证 + 基础内容管理后台。
+// 尚未接入：OSS 素材上传、DeepSeek 翻译、询盘邮件、图片 SEO、服务器部署。
+//
+// 接入步骤：
+//   1. 配置 DATABASE_URL（.env.local，参见 .env.example）
+//   2. npm run db:generate      # 生成 Prisma Client
+//   3. npm run db:migrate       # 应用迁移（需可用的 PostgreSQL）
+//   4. npm run db:seed          # 导入首页初始内容
+//   5. npm run admin:create     # 创建管理员账号（交互式，不写入源码）
 
 generator client {
   provider = "prisma-client-js"
@@ -15,23 +19,269 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 管理员用户
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  passwordHash String
-  role         Role     @default(EDITOR)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+// ---------------------------------------------------------------------------
+// 通用枚举
+// ---------------------------------------------------------------------------
+
+/// 内容语言（全站统一的翻译关联维度，禁止为每种语言硬编码字段）
+enum Locale {
+  zh
+  en
+  vi
 }
+
+/// 发布状态
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// ---------------------------------------------------------------------------
+// 管理员与登录会话
+// ---------------------------------------------------------------------------
 
 enum Role {
   ADMIN
   EDITOR
 }
 
-// 素材库资源（图片/视频）
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  role         Role      @default(EDITOR)
+  enabled      Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions  Session[]
+  auditLogs AuditLog[]
+}
+
+/// 登录会话（仅存储令牌哈希，原始令牌只存在于 HttpOnly Cookie 中）
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// 操作审计记录
+enum AuditAction {
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  CREATE
+  UPDATE
+  DELETE
+  PUBLISH
+  UNPUBLISH
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  actorEmail String?
+  action     AuditAction
+  targetType String
+  targetId   String?
+  summary    String?
+  detail     Json?
+  ip         String?
+  createdAt  DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// 站点设置 / 公司资料 / 联系方式
+// ---------------------------------------------------------------------------
+
+/// 键值形式的全局设置（站点 URL、默认语言、SEO 默认值等）
+model SiteSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+/// 公司资料（单例，slug 固定为 primary）
+model CompanyProfile {
+  id        String   @id @default(cuid())
+  slug      String   @unique @default("primary")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations CompanyProfileTranslation[]
+}
+
+model CompanyProfileTranslation {
+  id        String         @id @default(cuid())
+  profileId String
+  profile   CompanyProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  locale    Locale
+
+  name           String
+  tagline        String?
+  about          String?
+  positioning    String?
+  address        String?
+  businessHours  String?
+  seoTitle       String?
+  seoDescription String?
+
+  @@unique([profileId, locale])
+}
+
+/// 联系方式类型
+enum ContactType {
+  EMAIL
+  WHATSAPP
+  PHONE
+  WECHAT
+  ADDRESS
+}
+
+/// 联系方式（未启用或未填写时，前台不展示）
+model ContactMethod {
+  id        String      @id @default(cuid())
+  type      ContactType
+  value     String?
+  href      String?
+  enabled   Boolean     @default(true)
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  translations ContactMethodTranslation[]
+
+  @@index([sortOrder])
+}
+
+model ContactMethodTranslation {
+  id              String        @id @default(cuid())
+  contactMethodId String
+  contactMethod   ContactMethod @relation(fields: [contactMethodId], references: [id], onDelete: Cascade)
+  locale          Locale
+
+  label String?
+  value String?
+
+  @@unique([contactMethodId, locale])
+}
+
+// ---------------------------------------------------------------------------
+// 导航
+// ---------------------------------------------------------------------------
+
+model NavItem {
+  id        String   @id @default(cuid())
+  href      String
+  external  Boolean  @default(false)
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations NavItemTranslation[]
+
+  @@index([sortOrder])
+}
+
+model NavItemTranslation {
+  id        String  @id @default(cuid())
+  navItemId String
+  navItem   NavItem @relation(fields: [navItemId], references: [id], onDelete: Cascade)
+  locale    Locale
+  label     String
+
+  @@unique([navItemId, locale])
+}
+
+// ---------------------------------------------------------------------------
+// 页面与区块
+// ---------------------------------------------------------------------------
+
+model Page {
+  id        String        @id @default(cuid())
+  slug      String        @unique
+  status    PublishStatus @default(DRAFT)
+  isHome    Boolean       @default(false)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  translations PageTranslation[]
+  blocks       PageBlock[]
+
+  @@index([status])
+}
+
+model PageTranslation {
+  id             String  @id @default(cuid())
+  pageId         String
+  page           Page    @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  locale         Locale
+  title          String
+  seoTitle       String?
+  seoDescription String?
+
+  @@unique([pageId, locale])
+}
+
+/// 页面区块。key 为语义标识（hero / capabilities / products / supply / quality / inquiry …），
+/// 与前台组件一一对应，后台可编辑标题、正文、按钮文字与显示状态。
+model PageBlock {
+  id        String   @id @default(cuid())
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  key       String
+  type      String?
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations PageBlockTranslation[]
+
+  @@unique([pageId, key])
+  @@index([sortOrder])
+}
+
+model PageBlockTranslation {
+  id       String    @id @default(cuid())
+  blockId  String
+  block    PageBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  locale   Locale
+  title    String?
+  subtitle String?
+  body     String?
+  ctaLabel String?
+  ctaHref  String?
+
+  @@unique([blockId, locale])
+}
+
+// ---------------------------------------------------------------------------
+// 素材库（本阶段仅保留模型，OSS 上传在阶段 3）
+// ---------------------------------------------------------------------------
+
+enum AssetType {
+  IMAGE
+  VIDEO
+}
+
 model Asset {
   id           String             @id @default(cuid())
   type         AssetType
@@ -49,28 +299,22 @@ model Asset {
   slots        SlotBinding[]
 }
 
-enum AssetType {
-  IMAGE
-  VIDEO
-}
-
-// 素材多语言元数据（zh/en/vi 标题、说明、alt）
 model AssetTranslation {
-  id        String  @id @default(cuid())
-  assetId   String
-  asset     Asset   @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  locale    String // zh | en | vi
-  title     String?
-  caption   String?
-  alt       String?
+  id      String  @id @default(cuid())
+  assetId String
+  asset   Asset   @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  locale  Locale
+  title   String?
+  caption String?
+  alt     String?
 
   @@unique([assetId, locale])
 }
 
-// 语义化槽位：把素材绑定到固定页面位置（如 hero.image、product.webbing）
+/// 语义化槽位：把素材绑定到固定页面位置（如 brand.logo、hero.image）
 model SlotBinding {
   id       String @id @default(cuid())
-  slot     String // 与 src/lib/media.ts 中 MEDIA_SLOTS 对应
+  slot     String
   assetId  String
   asset    Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
   position Int    @default(0)
@@ -78,11 +322,16 @@ model SlotBinding {
   @@unique([slot, position])
 }
 
-// 产品分类
+// ---------------------------------------------------------------------------
+// 产品（本阶段仅保留模型，产品管理在阶段 4）
+// ---------------------------------------------------------------------------
+
 model ProductCategory {
   id           String                @id @default(cuid())
   slug         String                @unique
   sortOrder    Int                   @default(0)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
   products     Product[]
   translations CategoryTranslation[]
 }
@@ -91,14 +340,13 @@ model CategoryTranslation {
   id          String          @id @default(cuid())
   categoryId  String
   category    ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  locale      String
+  locale      Locale
   name        String
   description String?
 
   @@unique([categoryId, locale])
 }
 
-// 产品
 model Product {
   id           String               @id @default(cuid())
   categoryId   String?
@@ -106,6 +354,8 @@ model Product {
   sku          String?
   sortOrder    Int                  @default(0)
   published    Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
   translations ProductTranslation[]
 }
 
@@ -113,7 +363,7 @@ model ProductTranslation {
   id          String  @id @default(cuid())
   productId   String
   product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  locale      String
+  locale      Locale
   name        String
   description String?
   spec        String?
@@ -121,7 +371,17 @@ model ProductTranslation {
   @@unique([productId, locale])
 }
 
-// 询盘
+// ---------------------------------------------------------------------------
+// 询盘（本阶段仅保留模型，表单与邮件在阶段 5）
+// ---------------------------------------------------------------------------
+
+enum InquiryStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
+}
+
 model Inquiry {
   id        String        @id @default(cuid())
   name      String
@@ -132,11 +392,6 @@ model Inquiry {
   locale    String
   status    InquiryStatus @default(NEW)
   createdAt DateTime      @default(now())
-}
 
-enum InquiryStatus {
-  NEW
-  READ
-  REPLIED
-  ARCHIVED
+  @@index([createdAt])
 }

@@ -5,6 +5,8 @@ interface SectionHeadingProps {
   eyebrow?: string;
   title: string;
   description?: string;
+  /** 后台可编辑的正文（可选），显示在描述下方 */
+  body?: string;
   align?: 'center' | 'left';
   tone?: 'light' | 'dark';
   className?: string;
@@ -15,6 +17,7 @@ export function SectionHeading({
   eyebrow,
   title,
   description,
+  body,
   align = 'center',
   tone = 'light',
   className,
@@ -38,13 +41,13 @@ export function SectionHeading({
         {title}
       </h2>
       {description ? (
-        <p
-          className={cn(
-            'mt-4 text-base leading-relaxed',
-            dark ? 'text-navy-100' : 'text-muted',
-          )}
-        >
+        <p className={cn('mt-4 text-base leading-relaxed', dark ? 'text-navy-100' : 'text-muted')}>
           {description}
+        </p>
+      ) : null}
+      {body ? (
+        <p className={cn('mt-3 text-base leading-relaxed', dark ? 'text-navy-200' : 'text-muted')}>
+          {body}
         </p>
       ) : null}
     </div>

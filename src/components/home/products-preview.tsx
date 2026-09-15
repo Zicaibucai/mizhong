@@ -1,11 +1,12 @@
 import { getDictionary, type Locale } from '@/lib/i18n';
+import type { BlockView } from '@/lib/content';
 import { MEDIA_SLOTS, PRODUCT_MEDIA_SLOTS } from '@/lib/media';
 import { Container } from '@/components/ui/container';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { Button } from '@/components/ui/button';
 import { Media } from '@/components/ui/media';
 
-export function ProductsPreview({ locale }: { locale: Locale }) {
+export function ProductsPreview({ locale, block }: { locale: Locale; block: BlockView }) {
   const t = getDictionary(locale);
 
   return (
@@ -13,8 +14,9 @@ export function ProductsPreview({ locale }: { locale: Locale }) {
       <Container>
         <SectionHeading
           eyebrow={t.products.eyebrow}
-          title={t.products.title}
-          description={t.products.subtitle}
+          title={block.title}
+          description={block.subtitle}
+          body={block.body}
         />
         <div className="mt-14 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {t.products.categories.map((cat, i) => (
@@ -31,11 +33,13 @@ export function ProductsPreview({ locale }: { locale: Locale }) {
             </a>
           ))}
         </div>
-        <div className="mt-14 text-center">
-          <Button href="#inquiry" variant="outline">
-            {t.products.cta}
-          </Button>
-        </div>
+        {block.ctaLabel ? (
+          <div className="mt-14 text-center">
+            <Button href={block.ctaHref || '#inquiry'} variant="outline">
+              {block.ctaLabel}
+            </Button>
+          </div>
+        ) : null}
       </Container>
     </section>
   );

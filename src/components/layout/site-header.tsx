@@ -1,22 +1,24 @@
 import Link from 'next/link';
 import { getDictionary, type Locale } from '@/lib/i18n';
-import { companyName } from '@/lib/site-config';
+import type { NavView } from '@/lib/content';
 import { Container } from '@/components/ui/container';
 import { Button } from '@/components/ui/button';
 import { BrandLogo } from './brand-logo';
 import { LanguageSwitcher } from './language-switcher';
 import { MobileMenu } from './mobile-menu';
 
-export function SiteHeader({ locale }: { locale: Locale }) {
+export function SiteHeader({
+  locale,
+  name,
+  nav,
+}: {
+  locale: Locale;
+  name: string;
+  nav: NavView[];
+}) {
   const t = getDictionary(locale);
-  const name = companyName(locale);
 
-  const navItems = [
-    { label: t.nav.products, href: '#products' },
-    { label: t.nav.manufacturing, href: '#manufacturing' },
-    { label: t.nav.quality, href: '#quality' },
-    { label: t.nav.contact, href: '#inquiry' },
-  ];
+  const navItems = nav.map((item) => ({ label: item.label, href: item.href, external: item.external }));
 
   return (
     <header className="sticky top-0 z-40 border-b border-navy-100 bg-ivory-50/90 backdrop-blur">
@@ -31,8 +33,9 @@ export function SiteHeader({ locale }: { locale: Locale }) {
         <nav aria-label={t.nav.primary} className="hidden items-center gap-8 lg:flex">
           {navItems.map((item) => (
             <a
-              key={item.href}
+              key={`${item.href}-${item.label}`}
               href={item.href}
+              {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               className="text-sm font-medium text-navy-700 transition-colors hover:text-navy-900"
             >
               {item.label}

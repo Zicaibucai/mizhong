@@ -2,14 +2,14 @@ import type { Dict } from './en';
 
 export const vi: Dict = {
   meta: {
-    title: 'Phụ kiện dệt may chuẩn xác',
+    title: 'Nhà cung cấp & đối tác thu mua phụ kiện dệt may',
     description:
-      'Nhà sản xuất phụ kiện dệt may cung cấp cho nhà máy may mặc, thương hiệu và đối tác thu mua những phụ kiện đáng tin cậy — từ dây dệt, nhãn mác đến phụ kiện trang trí.',
+      'Nhà cung cấp phụ kiện dệt may cho nhà máy may mặc, thương hiệu và đối tác thu mua — dây dệt, nhãn mác và phụ kiện tùy chỉnh, chất lượng đồng đều và đúng hạn.',
   },
   nav: {
     home: 'Trang chủ',
     products: 'Sản phẩm',
-    manufacturing: 'Năng lực sản xuất',
+    supply: 'Chuỗi cung ứng',
     quality: 'Chất lượng',
     contact: 'Liên hệ',
     cta: 'Gửi yêu cầu',
@@ -22,11 +22,11 @@ export const vi: Dict = {
     label: 'Ngôn ngữ',
   },
   hero: {
-    eyebrow: 'Nhà sản xuất phụ kiện dệt may',
-    titleLine1: 'Phụ kiện dệt may chuẩn xác,',
-    titleLine2: 'theo đúng yêu cầu của bạn.',
+    eyebrow: 'Nhà cung cấp & đối tác thu mua phụ kiện dệt may',
+    titleLine1: 'Đối tác thu mua',
+    titleLine2: 'phụ kiện dệt may của bạn.',
     subtitle:
-      'Chúng tôi cung cấp phụ kiện đáng tin cậy cho nhà máy may mặc, thương hiệu và đối tác — từ dây dệt, nhãn mác đến phụ kiện trang trí — với chất lượng đồng đều và đúng hạn.',
+      'Chúng tôi cung cấp phụ kiện dệt may đáng tin cậy cho nhà máy may mặc, thương hiệu và đối tác thu mua — từ dây dệt, nhãn mác đến phụ kiện tùy chỉnh — chất lượng đồng đều và đúng hạn.',
     ctaPrimary: 'Xem sản phẩm',
     ctaSecondary: 'Gửi yêu cầu báo giá',
     mediaLabel: 'Ảnh nổi bật',
@@ -35,30 +35,30 @@ export const vi: Dict = {
     eyebrow: 'Chúng tôi làm gì',
     title: 'Đối tác đáng tin cậy trong toàn chuỗi cung ứng',
     subtitle:
-      'Từ nguồn nguyên liệu đến sản phẩm hoàn thiện, chúng tôi tập trung vào từng chi tiết để sản xuất luôn thông suốt.',
+      'Từ thu mua và xác nhận thông số đến kiểm tra và xuất hàng, chúng tôi quản lý từng khâu để đơn hàng luôn thông suốt.',
     items: [
       {
-        title: 'Tùy biến theo yêu cầu',
-        desc: 'Thông số kỹ thuật theo đúng thiết kế, chất liệu và màu sắc của bạn.',
+        title: 'Thu mua & tùy chỉnh',
+        desc: 'Thông số theo đúng thiết kế, chất liệu và màu sắc của bạn.',
       },
       {
         title: 'Nguồn cung ổn định',
-        desc: 'Quy trình lặp lại để mỗi lô hàng đều đồng nhất.',
+        desc: 'Mạng lưới nhà cung cấp ổn định, đảm bảo đồng nhất giữa các lô.',
       },
       {
-        title: 'Kiểm soát chất lượng',
-        desc: 'Kiểm tra ở mọi công đoạn, từ nguyên liệu đầu vào đến khi xuất hàng.',
+        title: 'Đảm bảo chất lượng',
+        desc: 'Kiểm tra và đối chiếu trước khi hàng rời đối tác.',
       },
       {
-        title: 'Dịch vụ toàn cầu',
-        desc: 'Giao tiếp rõ ràng và đóng gói xuất khẩu cho thị trường quốc tế.',
+        title: 'Dịch vụ xuất khẩu',
+        desc: 'Giao tiếp rõ ràng và đóng gói đạt chuẩn xuất khẩu.',
       },
     ],
   },
   products: {
     eyebrow: 'Sản phẩm',
     title: 'Danh mục sản phẩm',
-    subtitle: 'Danh mục đại diện. Danh mục đầy đủ và thông số kỹ thuật sẽ được cập nhật khi xác nhận.',
+    subtitle: 'Danh mục đại diện. Danh mục đầy đủ và thông số sẽ được cập nhật khi xác nhận.',
     categories: [
       { name: 'Dây dệt & băng viền', desc: 'Dây dệt, băng viền với nhiều khổ rộng và chất liệu.' },
       { name: 'Nhãn & thẻ treo', desc: 'Nhãn dệt, nhãn in, nhãn giặt và thẻ treo.' },
@@ -69,35 +69,35 @@ export const vi: Dict = {
     ],
     cta: 'Xem toàn bộ danh mục',
   },
-  manufacturing: {
-    eyebrow: 'Năng lực sản xuất',
-    title: 'Lấy sự chính xác và tính ổn định làm nền tảng',
+  supply: {
+    eyebrow: 'Chuỗi cung ứng',
+    title: 'Chuỗi cung ứng & thu mua',
     subtitle:
-      'Sản xuất được tổ chức để chất lượng được kiểm soát ở từng công đoạn, thay vì khắc phục ở cuối.',
+      'Chúng tôi hợp tác với các đối tác sản xuất đã được sàng lọc và quản lý từng khâu để đơn hàng đúng tiến độ và đúng thông số.',
     points: [
-      'Kiểm tra nguyên liệu đầu vào',
-      'Kiểm tra giữa các công đoạn',
-      'Kiểm tra cuối trước khi xuất',
-      'Hồ sơ lô hàng truy xuất được',
+      'Sàng lọc và đánh giá nhà cung cấp',
+      'Xác nhận thông số và mẫu',
+      'Kiểm tra trong quá trình và trước khi xuất',
+      'Điều phối xuất hàng và chứng từ',
     ],
-    mediaLabel: 'Ảnh nhà máy',
+    mediaLabel: 'Ảnh chuỗi cung ứng',
   },
   quality: {
     eyebrow: 'Chất lượng & tin cậy',
     title: 'Chất lượng bạn có thể tin tưởng',
-    subtitle: 'Chúng tôi duy trì tiêu chuẩn giúp khách hàng yên tâm với từng lô hàng.',
+    subtitle: 'Chúng tôi yêu cầu đối tác tuân thủ tiêu chuẩn để khách hàng yên tâm với từng lô hàng.',
     principles: [
       {
         title: 'Tiêu chuẩn nguyên liệu',
-        desc: 'Nguyên liệu đầu vào được kiểm tra theo thông số đã thống nhất.',
+        desc: 'Nguyên liệu được đối chiếu theo thông số đã thống nhất.',
       },
       {
-        title: 'Quy trình chặt chẽ',
-        desc: 'Quy trình được lập thành văn bản để sản lượng đồng nhất giữa các đơn hàng.',
+        title: 'Trách nhiệm nhà cung cấp',
+        desc: 'Yêu cầu bằng văn bản giúp đồng nhất giữa các đơn hàng.',
       },
       {
-        title: 'Độ tin cậy giao hàng',
-        desc: 'Thời gian và giao tiếp rõ ràng từ đặt hàng đến giao hàng.',
+        title: 'Giao hàng đáng tin cậy',
+        desc: 'Tiến độ và trao đổi rõ ràng từ đặt hàng đến xuất hàng.',
       },
     ],
     certificatesTitle: 'Chứng nhận',
@@ -115,13 +115,20 @@ export const vi: Dict = {
     addressLabel: 'Địa chỉ',
     note: 'Biểu mẫu yêu cầu sẽ sớm được cập nhật.',
   },
+  contact: {
+    email: 'Email',
+    whatsapp: 'WhatsApp',
+    phone: 'Điện thoại',
+    wechat: 'WeChat',
+    address: 'Địa chỉ',
+  },
   footer: {
-    tagline: 'Phụ kiện dệt may chuẩn xác cho nhà máy may mặc, thương hiệu và đối tác thu mua.',
+    tagline: 'Phụ kiện dệt may cho nhà máy may mặc, thương hiệu và đối tác thu mua.',
     productsTitle: 'Sản phẩm',
     companyTitle: 'Công ty',
     contactTitle: 'Liên hệ',
     copyright: 'Bảo lưu mọi quyền.',
-    language: 'Ngôn ngữ',
+    noContacts: 'Thông tin liên hệ sẽ sớm được công bố.',
   },
   notFound: {
     title: 'Không tìm thấy trang',

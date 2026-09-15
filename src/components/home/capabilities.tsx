@@ -1,8 +1,9 @@
 import { getDictionary, type Locale } from '@/lib/i18n';
+import type { BlockView } from '@/lib/content';
 import { Container } from '@/components/ui/container';
 import { SectionHeading } from '@/components/ui/section-heading';
 
-export function Capabilities({ locale }: { locale: Locale }) {
+export function Capabilities({ locale, block }: { locale: Locale; block: BlockView }) {
   const t = getDictionary(locale);
 
   return (
@@ -10,8 +11,9 @@ export function Capabilities({ locale }: { locale: Locale }) {
       <Container>
         <SectionHeading
           eyebrow={t.capabilities.eyebrow}
-          title={t.capabilities.title}
-          description={t.capabilities.subtitle}
+          title={block.title}
+          description={block.subtitle}
+          body={block.body}
         />
         <div className="mt-14 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
           {t.capabilities.items.map((item, i) => (

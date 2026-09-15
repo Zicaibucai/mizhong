@@ -1,8 +1,13 @@
 import type { Locale } from '@/lib/i18n/config';
 
 /**
- * 公司信息统一配置。
- * 所有需要后续修改的商务信息集中于此，禁止散落硬编码到组件中。
+ * 公司信息统一配置（前台回退值）。
+ * 运行时优先读取数据库中的公司资料（见 src/lib/content.ts）；
+ * 数据库不可用时回退到此处，保证前台不崩溃。
+ *
+ * 注意：这里只保留「已知且真实」的信息——公司名称。
+ * 地址、电话、邮箱、WhatsApp 等尚未提供，一律不在此处填写占位值，
+ * 由后台「联系方式」配置，未配置时前台不展示。
  */
 export const company = {
   /** 中文全称（已确认） */
@@ -11,24 +16,6 @@ export const company = {
   nameEn: 'Mizhong Trading Co., Ltd.',
   /** 越南语全称（公司未提供，暂以英文名占位 —— TODO：待公司确认） */
   nameVi: 'Mizhong Trading Co., Ltd.',
-
-  /** 联系方式占位 —— TODO：待公司提供真实信息后统一替换 */
-  contact: {
-    email: 'sales@mizhong-trade.example',
-    phone: '+86 000 0000 0000',
-    address: {
-      zh: '中国 · 详细地址待补充',
-      en: 'China · Address to be confirmed',
-      vi: 'Trung Quốc · Địa chỉ chờ xác nhận',
-    },
-  },
-
-  /** ICP 备案号占位 —— TODO：部署前补充 */
-  icp: {
-    zh: 'ICP 备案号待补充',
-    en: 'ICP filing pending',
-    vi: 'Số đăng ký ICP đang chờ',
-  },
 } as const;
 
 export const site = {
@@ -42,12 +29,4 @@ export const site = {
 export function companyName(locale: Locale): string {
   const map: Record<Locale, string> = { zh: company.nameZh, en: company.nameEn, vi: company.nameVi };
   return map[locale];
-}
-
-export function contactAddress(locale: Locale): string {
-  return company.contact.address[locale];
-}
-
-export function icpText(locale: Locale): string {
-  return company.icp[locale];
 }

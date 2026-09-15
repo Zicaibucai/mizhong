@@ -6,6 +6,7 @@ import { CloseIcon, MenuIcon } from '@/components/ui/icons';
 interface NavItem {
   label: string;
   href: string;
+  external?: boolean;
 }
 
 interface MobileMenuProps {
@@ -86,9 +87,10 @@ export function MobileMenu({
           <nav aria-label={navLabel}>
             <ul className="space-y-1">
               {navItems.map((item) => (
-                <li key={item.href}>
+                <li key={`${item.href}-${item.label}`}>
                   <a
                     href={item.href}
+                    {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                     onClick={() => setOpen(false)}
                     className="block rounded-lg px-3 py-3 text-lg font-medium text-navy-900 transition-colors hover:bg-ivory-100"
                   >

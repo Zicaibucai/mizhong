@@ -1,4 +1,5 @@
 import { getDictionary, type Locale } from '@/lib/i18n';
+import type { BlockView } from '@/lib/content';
 import { MEDIA_SLOTS } from '@/lib/media';
 import { Container } from '@/components/ui/container';
 import { SectionHeading } from '@/components/ui/section-heading';
@@ -10,7 +11,7 @@ const CERTIFICATE_SLOTS = [
   MEDIA_SLOTS.certificate3,
 ];
 
-export function QualityTrust({ locale }: { locale: Locale }) {
+export function QualityTrust({ locale, block }: { locale: Locale; block: BlockView }) {
   const t = getDictionary(locale);
 
   return (
@@ -22,8 +23,9 @@ export function QualityTrust({ locale }: { locale: Locale }) {
         <SectionHeading
           tone="dark"
           eyebrow={t.quality.eyebrow}
-          title={t.quality.title}
-          description={t.quality.subtitle}
+          title={block.title}
+          description={block.subtitle}
+          body={block.body}
         />
 
         <div className="mt-14 grid gap-6 md:grid-cols-3">

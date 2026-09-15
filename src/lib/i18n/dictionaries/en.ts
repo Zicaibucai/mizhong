@@ -1,13 +1,13 @@
 export const en = {
   meta: {
-    title: 'Precision Textile Components & Supplies',
+    title: 'Textile Accessories Supplier & Sourcing Partner',
     description:
-      'Textile accessories manufacturer supplying garment factories, brands and sourcing partners with reliable, customisable components — from webbing and labels to custom trims.',
+      'Supplier of textile accessories for garment factories, brands and sourcing partners — webbing, labels and custom trims, delivered with consistent quality and on time.',
   },
   nav: {
     home: 'Home',
     products: 'Products',
-    manufacturing: 'Manufacturing',
+    supply: 'Supply Chain',
     quality: 'Quality',
     contact: 'Contact',
     cta: 'Send Inquiry',
@@ -20,11 +20,11 @@ export const en = {
     label: 'Language',
   },
   hero: {
-    eyebrow: 'Textile Accessories Manufacturer',
-    titleLine1: 'Precision textile components,',
-    titleLine2: 'made to your specification.',
+    eyebrow: 'Textile Accessories Supplier & Sourcing Partner',
+    titleLine1: 'Your sourcing partner',
+    titleLine2: 'for textile accessories.',
     subtitle:
-      'We supply garment factories, brands and sourcing partners with dependable accessories — from webbing and labels to custom trims — delivered with consistent quality, on time.',
+      'We supply garment factories, brands and sourcing partners with dependable textile accessories — from webbing and labels to custom trims — backed by consistent quality and on-time delivery.',
     ctaPrimary: 'Explore Products',
     ctaSecondary: 'Send an Inquiry',
     mediaLabel: 'Featured media',
@@ -33,23 +33,23 @@ export const en = {
     eyebrow: 'What we do',
     title: 'A dependable partner across the supply chain',
     subtitle:
-      'From material sourcing to finished components, we focus on the details that keep production running.',
+      'From sourcing and specification to inspection and shipment, we manage the details that keep orders moving.',
     items: [
       {
-        title: 'Customisation',
+        title: 'Sourcing & customisation',
         desc: 'Specifications tailored to your design, material and colour requirements.',
       },
       {
-        title: 'Consistent supply',
-        desc: 'Repeatable processes so every batch matches the last.',
+        title: 'Stable supply',
+        desc: 'An established supplier network that keeps every batch consistent.',
       },
       {
-        title: 'Quality control',
-        desc: 'Inspection at every stage, from incoming materials to final shipment.',
+        title: 'Quality assurance',
+        desc: 'Inspection and verification before goods leave our partners.',
       },
       {
-        title: 'Global service',
-        desc: 'Clear communication and export packaging for markets worldwide.',
+        title: 'Export service',
+        desc: 'Clear communication and export-ready packaging for markets worldwide.',
       },
     ],
   },
@@ -68,32 +68,32 @@ export const en = {
     ],
     cta: 'View full catalogue',
   },
-  manufacturing: {
-    eyebrow: 'Manufacturing',
-    title: 'Built around precision and repeatability',
+  supply: {
+    eyebrow: 'Supply chain',
+    title: 'Supply chain and procurement',
     subtitle:
-      'Production is organised so that quality is controlled at every stage rather than corrected at the end.',
+      'We work with vetted production partners and manage each step so orders arrive on schedule and to specification.',
     points: [
-      'Material inspection on intake',
-      'In-process checks at key stages',
-      'Final inspection before shipment',
-      'Traceable batch records',
+      'Supplier qualification and selection',
+      'Specification and sample confirmation',
+      'In-process and pre-shipment inspection',
+      'Shipment coordination and documentation',
     ],
-    mediaLabel: 'Facility media',
+    mediaLabel: 'Supply chain media',
   },
   quality: {
     eyebrow: 'Quality & trust',
     title: 'Quality you can build on',
     subtitle:
-      'We hold ourselves to standards that make it easy for our customers to trust every delivery.',
+      'We hold our partners to standards that make it easy for customers to trust every delivery.',
     principles: [
       {
         title: 'Material standards',
-        desc: 'Incoming materials are checked against agreed specifications.',
+        desc: 'Materials are checked against agreed specifications.',
       },
       {
-        title: 'Process discipline',
-        desc: 'Documented procedures keep output consistent across orders.',
+        title: 'Supplier accountability',
+        desc: 'Documented requirements keep output consistent across orders.',
       },
       {
         title: 'Delivery reliability',
@@ -115,13 +115,20 @@ export const en = {
     addressLabel: 'Address',
     note: 'The online inquiry form is coming soon.',
   },
+  contact: {
+    email: 'Email',
+    whatsapp: 'WhatsApp',
+    phone: 'Phone',
+    wechat: 'WeChat',
+    address: 'Address',
+  },
   footer: {
-    tagline: 'Precision textile accessories for garment factories, brands and sourcing partners.',
+    tagline: 'Textile accessories for garment factories, brands and sourcing partners.',
     productsTitle: 'Products',
     companyTitle: 'Company',
     contactTitle: 'Contact',
     copyright: 'All rights reserved.',
-    language: 'Language',
+    noContacts: 'Contact details will be published shortly.',
   },
   notFound: {
     title: 'Page not found',

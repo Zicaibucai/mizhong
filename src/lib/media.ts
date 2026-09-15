@@ -27,8 +27,8 @@ export const MEDIA_SLOTS = {
   logo: 'brand.logo',
   heroImage: 'hero.image',
   heroVideo: 'hero.video',
-  manufacturingImage: 'manufacturing.image',
-  manufacturingVideo: 'manufacturing.video',
+  supplyImage: 'supply.image',
+  supplyVideo: 'supply.video',
   qualityImage: 'quality.image',
   product: {
     webbing: 'product.webbing',

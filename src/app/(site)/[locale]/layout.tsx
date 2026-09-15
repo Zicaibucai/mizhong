@@ -9,10 +9,11 @@ import {
   getDictionary,
   type Locale,
 } from '@/lib/i18n';
-import { site, companyName } from '@/lib/site-config';
+import { site } from '@/lib/site-config';
+import { getSiteContent } from '@/lib/content';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SiteFooter } from '@/components/layout/site-footer';
-import '../globals.css';
+import '../../globals.css';
 
 const inter = Inter({
   subsets: ['latin', 'latin-ext', 'vietnamese'],
@@ -26,6 +27,9 @@ export function generateStaticParams() {
 
 export const dynamicParams = false;
 
+/** ISR：后台保存后会通过 revalidatePath 立即刷新，此处作为兜底 */
+export const revalidate = 60;
+
 export async function generateMetadata({
   params,
 }: {
@@ -35,16 +39,21 @@ export async function generateMetadata({
   const l: Locale = isLocale(locale) ? locale : defaultLocale;
   const code = localeCodes[l];
   const t = getDictionary(l);
+  const content = await getSiteContent(l);
   const base = site.url;
 
   const languages: Record<string, string> = {};
   for (const loc of locales) languages[localeCodes[loc]] = `${base}/${loc}`;
   languages['x-default'] = `${base}/${defaultLocale}`;
 
+  const title =
+    content.company.seoTitle || `${content.company.name} ${site.titleSeparator} ${t.meta.title}`;
+  const description = content.company.seoDescription || t.meta.description;
+
   return {
     metadataBase: new URL(base),
-    title: `${companyName(l)} ${site.titleSeparator} ${t.meta.title}`,
-    description: t.meta.description,
+    title,
+    description,
     alternates: {
       canonical: `${base}/${l}`,
       languages,
@@ -53,9 +62,9 @@ export async function generateMetadata({
       type: 'website',
       locale: code,
       url: `${base}/${l}`,
-      siteName: site.name,
-      title: `${companyName(l)} ${site.titleSeparator} ${t.meta.title}`,
-      description: t.meta.description,
+      siteName: content.company.name,
+      title,
+      description,
       alternateLocale: locales.map((loc) => localeCodes[loc]),
     },
   };
@@ -72,6 +81,7 @@ export default async function LocaleLayout({
   if (!isLocale(locale)) notFound();
   const code = localeCodes[locale];
   const t = getDictionary(locale);
+  const content = await getSiteContent(locale);
 
   return (
     <html lang={code} className={inter.variable}>
@@ -82,9 +92,14 @@ export default async function LocaleLayout({
         >
           {t.common.skipToContent}
         </a>
-        <SiteHeader locale={locale} />
+        <SiteHeader locale={locale} name={content.company.name} nav={content.nav} />
         <main id="main">{children}</main>
-        <SiteFooter locale={locale} />
+        <SiteFooter
+          locale={locale}
+          company={content.company}
+          contacts={content.contacts}
+          nav={content.nav}
+        />
       </body>
     </html>
   );

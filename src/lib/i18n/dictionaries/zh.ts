@@ -2,14 +2,14 @@ import type { Dict } from './en';
 
 export const zh: Dict = {
   meta: {
-    title: '专业纺织辅料制造',
+    title: '纺织辅料供应商与采购合作伙伴',
     description:
-      '为服装厂、品牌方与采购商提供可靠、可定制的纺织辅料——从织带、标签到各类辅料配件。',
+      '为服装厂、品牌方与采购商供应纺织辅料——织带、标签与定制辅料，稳定品质、按时交付。',
   },
   nav: {
     home: '首页',
     products: '产品',
-    manufacturing: '制造能力',
+    supply: '供应链',
     quality: '质量',
     contact: '联系我们',
     cta: '发起询盘',
@@ -22,11 +22,11 @@ export const zh: Dict = {
     label: '语言',
   },
   hero: {
-    eyebrow: '纺织辅料制造商',
-    titleLine1: '精准制造的纺织辅料，',
-    titleLine2: '按您的规格定制。',
+    eyebrow: '纺织辅料供应商与采购合作伙伴',
+    titleLine1: '纺织辅料采购与供应，',
+    titleLine2: '交给可靠的伙伴。',
     subtitle:
-      '我们为服装厂、品牌方与采购商提供可靠的纺织辅料——从织带、标签到各类辅料配件——以稳定品质按时交付。',
+      '我们为服装厂、品牌方与采购商供应可靠的纺织辅料——从织带、标签到定制辅料——以稳定品质按时交付。',
     ctaPrimary: '浏览产品',
     ctaSecondary: '发起询盘',
     mediaLabel: '首屏媒体',
@@ -34,23 +34,23 @@ export const zh: Dict = {
   capabilities: {
     eyebrow: '我们做什么',
     title: '贯穿供应链的可靠合作伙伴',
-    subtitle: '从原材料采购到成品交付，我们专注于保障生产顺畅运转的每一个细节。',
+    subtitle: '从采购与规格确认，到检验与出货，我们把握让订单顺畅推进的每一个环节。',
     items: [
       {
-        title: '定制化',
-        desc: '根据您的设计、材质与颜色要求定制规格。',
+        title: '采购与定制',
+        desc: '根据您的设计、材质与颜色要求确定规格。',
       },
       {
         title: '稳定供应',
-        desc: '可复制的工艺，让每一批产品都与上一批保持一致。',
+        desc: '依托稳定的供应商网络，保证批次一致。',
       },
       {
-        title: '品质管控',
-        desc: '从来料到出货，全流程质量检验。',
+        title: '品质把控',
+        desc: '出货前对产品进行检验与核对。',
       },
       {
-        title: '全球服务',
-        desc: '清晰的沟通与出口包装，服务全球市场。',
+        title: '出口服务',
+        desc: '清晰的沟通与符合出口要求的包装。',
       },
     ],
   },
@@ -68,25 +68,25 @@ export const zh: Dict = {
     ],
     cta: '查看完整目录',
   },
-  manufacturing: {
-    eyebrow: '制造能力',
-    title: '以精密与稳定为核心',
-    subtitle: '我们的生产组织确保质量在每个环节被管控，而非到最后才纠正。',
-    points: ['来料检验', '关键工序巡检', '出货前终检', '批次记录可追溯'],
-    mediaLabel: '工厂媒体',
+  supply: {
+    eyebrow: '供应链',
+    title: '供应链与采购',
+    subtitle: '我们与经过筛选的生产伙伴合作，把控每个环节，让订单按期、按规格交付。',
+    points: ['供应商筛选与评估', '规格与样品确认', '过程与出货前检验', '出货协调与单证'],
+    mediaLabel: '供应链媒体',
   },
   quality: {
     eyebrow: '质量与信任',
     title: '经得起检验的品质',
-    subtitle: '我们以高标准要求自己，让客户对每一次交付都放心。',
+    subtitle: '我们以高标准要求合作方，让客户对每一次交付都放心。',
     principles: [
       {
         title: '原料标准',
-        desc: '来料按约定规格逐批检验。',
+        desc: '按约定规格核对材料。',
       },
       {
-        title: '工艺纪律',
-        desc: '文件化的流程让不同订单保持一致的产出。',
+        title: '供应方责任',
+        desc: '文件化要求让不同订单保持一致。',
       },
       {
         title: '交付可靠',
@@ -107,13 +107,20 @@ export const zh: Dict = {
     addressLabel: '地址',
     note: '在线询盘表单即将上线。',
   },
+  contact: {
+    email: '邮箱',
+    whatsapp: 'WhatsApp',
+    phone: '电话',
+    wechat: '微信',
+    address: '地址',
+  },
   footer: {
-    tagline: '为服装厂、品牌方与采购商提供精准制造的纺织辅料。',
+    tagline: '为服装厂、品牌方与采购商供应纺织辅料。',
     productsTitle: '产品',
     companyTitle: '公司',
     contactTitle: '联系方式',
     copyright: '版权所有。',
-    language: '语言',
+    noContacts: '联系方式即将公布。',
   },
   notFound: {
     title: '页面不存在',
