@@ -20,6 +20,9 @@ const en = {
     featuredTitle: 'Featured products',
     empty: 'No products match your current filters.',
     emptyHint: 'Try another keyword, or clear the filters to see the whole catalogue.',
+    emptyCatalogue: 'No products are published yet.',
+    emptyCatalogueHint:
+      'The catalogue appears here as soon as products are published in the admin.',
     resultCount: '{count} products',
     resultCountOne: '1 product',
     prev: 'Previous',
@@ -121,6 +124,8 @@ const zh: CatalogDict = {
     featuredTitle: '精选产品',
     empty: '当前筛选条件下没有匹配的产品。',
     emptyHint: '换个关键词，或清除筛选查看完整目录。',
+    emptyCatalogue: '还没有已发布的产品。',
+    emptyCatalogueHint: '后台发布商品后，这里会自动展示完整目录。',
     resultCount: '共 {count} 件产品',
     resultCountOne: '共 1 件产品',
     prev: '上一页',
@@ -220,6 +225,9 @@ const vi: CatalogDict = {
     featuredTitle: 'Sản phẩm nổi bật',
     empty: 'Không có sản phẩm nào khớp với bộ lọc hiện tại.',
     emptyHint: 'Hãy thử từ khóa khác, hoặc xóa bộ lọc để xem toàn bộ danh mục.',
+    emptyCatalogue: 'Chưa có sản phẩm nào được đăng.',
+    emptyCatalogueHint:
+      'Danh mục sẽ xuất hiện ngay khi sản phẩm được đăng trong trang quản trị.',
     resultCount: '{count} sản phẩm',
     resultCountOne: '1 sản phẩm',
     prev: 'Trước',

@@ -150,12 +150,18 @@ export default async function ProductsPage({
               <div className="mt-8">
                 {result.items.length > 0 ? (
                   <ProductGrid locale={l} products={result.items} />
-                ) : (
+                ) : hasFilters ? (
                   <CatalogEmptyState
                     message={dict.list.empty}
                     hint={dict.list.emptyHint}
                     actionHref={basePath}
                     actionLabel={dict.list.clearFilters}
+                  />
+                ) : (
+                  /* 目录本身为空（不是筛选没命中）：不要提示「换个关键词」，那会误导访客 */
+                  <CatalogEmptyState
+                    message={dict.list.emptyCatalogue}
+                    hint={dict.list.emptyCatalogueHint}
                   />
                 )}
               </div>
