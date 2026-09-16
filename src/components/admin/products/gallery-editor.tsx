@@ -9,14 +9,18 @@ import {
   moveProductMediaAction,
   removeProductMediaAction,
   reorderProductMediaAction,
+  setProductAssetRoleAction,
 } from '@/lib/admin/actions/products';
 import { Alert, SubmitButton } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
-import type { PickerAsset } from './asset-picker';
+import { PlayIcon } from '@/components/ui/icons';
+import { AssetThumb, type PickerAsset } from './asset-picker';
 
 /** One row of `ProductMedia`, flattened for the client. */
 export interface GalleryItemData {
   id: string;
+  /** 素材主键：用于「设为封面 / 设为悬停视频」 */
+  assetId: string;
   role: 'GALLERY' | 'VIDEO';
   type: 'IMAGE' | 'VIDEO';
   url: string;
@@ -25,9 +29,40 @@ export interface GalleryItemData {
   name: string;
 }
 
-function thumbSrc(item: Pick<GalleryItemData, 'type' | 'url' | 'thumbnailUrl' | 'posterUrl'>): string {
-  if (item.type === 'VIDEO') return item.posterUrl ?? item.thumbnailUrl ?? item.url;
+/** 缩略图地址：视频没有封面时返回 null，由调用方渲染占位块而不是破图 */
+function thumbSrc(
+  item: Pick<GalleryItemData, 'type' | 'url' | 'thumbnailUrl' | 'posterUrl'>,
+): string | null {
+  if (item.type === 'VIDEO') return item.posterUrl ?? item.thumbnailUrl ?? null;
   return item.thumbnailUrl ?? item.url;
+}
+
+/** 图库缩略图：没有静态图时用深色块 + 播放图标占位 */
+function GalleryThumb({
+  item,
+  className,
+  imgClassName,
+}: {
+  item: Pick<GalleryItemData, 'type' | 'url' | 'thumbnailUrl' | 'posterUrl' | 'name'>;
+  className?: string;
+  imgClassName?: string;
+}) {
+  const src = thumbSrc(item);
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换
+      <img src={src} alt={item.name} loading="lazy" className={imgClassName} />
+    );
+  }
+  return (
+    <span
+      role="img"
+      aria-label={item.name}
+      className={cn('flex items-center justify-center bg-navy-900 text-ivory-50', className)}
+    >
+      <PlayIcon className="h-5 w-5" />
+    </span>
+  );
 }
 
 /**
@@ -109,13 +144,7 @@ export function AddMediaForm({ productId, assets }: { productId: string; assets:
                         : 'border-navy-200 hover:border-navy-300',
                     )}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换 */}
-                    <img
-                      src={thumbSrc(asset)}
-                      alt={asset.name}
-                      loading="lazy"
-                      className="aspect-square w-full object-cover"
-                    />
+                    <AssetThumb asset={asset} imgClassName="aspect-square w-full object-cover" />
                     {asset.type === 'VIDEO' ? (
                       <span className="absolute bottom-1 left-1 rounded bg-navy-900/80 px-1.5 py-0.5 text-[10px] text-ivory-50">
                         {t.products.asVideo}
@@ -144,18 +173,26 @@ export function AddMediaForm({ productId, assets }: { productId: string; assets:
  * Gallery list with working ordering: "Move up"/"Move down" persist `sortOrder` through the
  * server action, and HTML5 drag-and-drop reorders as a progressive enhancement (also persisted).
  * Both paths update the list optimistically, then refresh from the server.
+ *
+ * Each row can also be promoted to the product cover or the hover video without leaving the page.
  */
 export function GalleryEditor({
   productId,
   items,
+  coverAssetId,
+  hoverVideoAssetId,
 }: {
   productId: string;
   items: GalleryItemData[];
+  /** 当前封面 / 悬停视频的素材 id，用于在列表上标出「已用于…」 */
+  coverAssetId: string | null;
+  hoverVideoAssetId: string | null;
 }) {
   const t = useAdminT();
   const router = useRouter();
   const [order, setOrder] = useState(items);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
@@ -168,6 +205,7 @@ export function GalleryEditor({
 
   const run = (optimistic: GalleryItemData[], task: () => Promise<FormState>) => {
     setError(null);
+    setNotice(null);
     setOrder(optimistic);
     startTransition(async () => {
       const result = await task();
@@ -176,6 +214,7 @@ export function GalleryEditor({
         setOrder(items);
         return;
       }
+      if (result.message) setNotice(result.message);
       router.refresh();
     });
   };
@@ -211,6 +250,10 @@ export function GalleryEditor({
     );
   };
 
+  const assignRole = (item: GalleryItemData, role: 'cover' | 'hover') => {
+    run(order, () => setProductAssetRoleAction({ productId, assetId: item.assetId, role }));
+  };
+
   if (order.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-navy-200 bg-white px-5 py-6 text-sm text-muted">
@@ -222,100 +265,138 @@ export function GalleryEditor({
   return (
     <div className="space-y-3">
       {error ? <Alert kind="error">{error}</Alert> : null}
+      {notice && !error ? <Alert kind="success">{notice}</Alert> : null}
 
       <ul className="space-y-2">
-        {order.map((item, index) => (
-          <li
-            key={item.id}
-            draggable
-            onDragStart={() => setDragIndex(index)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              drop(index);
-            }}
-            onDragEnd={() => setDragIndex(null)}
-            className={cn(
-              'flex flex-wrap items-center gap-3 rounded-xl border border-navy-200 bg-white p-3',
-              dragIndex === index ? 'opacity-60' : null,
-            )}
-          >
-            <span aria-hidden className="cursor-grab select-none text-navy-300">
-              ⠿
-            </span>
+        {order.map((item, index) => {
+          const isCover = Boolean(coverAssetId) && item.assetId === coverAssetId;
+          const isHover = Boolean(hoverVideoAssetId) && item.assetId === hoverVideoAssetId;
 
-            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-navy-200 bg-navy-50">
-              {/* eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换 */}
-              <img
-                src={thumbSrc(item)}
-                alt={item.name}
-                loading="lazy"
-                className="h-full w-full object-cover"
-              />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-navy-900">{item.name || item.url}</p>
-              <span
-                className={cn(
-                  'mt-1 inline-block rounded-full px-2 py-0.5 text-xs',
-                  item.role === 'VIDEO'
-                    ? 'bg-navy-100 text-navy-700'
-                    : 'bg-copper-100 text-copper-700',
-                )}
-              >
-                {item.role === 'VIDEO' ? t.products.asVideo : t.products.asGallery}
+          return (
+            <li
+              key={item.id}
+              draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                drop(index);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+              className={cn(
+                'flex flex-wrap items-center gap-3 rounded-xl border border-navy-200 bg-white p-3',
+                dragIndex === index ? 'opacity-60' : null,
+              )}
+            >
+              <span aria-hidden className="cursor-grab select-none text-navy-300">
+                ⠿
               </span>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-1">
-              <button
-                type="button"
-                disabled={pending || index === 0}
-                onClick={() => move(index, -1)}
-                className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {t.products.moveUp}
-              </button>
-              <button
-                type="button"
-                disabled={pending || index === order.length - 1}
-                onClick={() => move(index, 1)}
-                className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {t.products.moveDown}
-              </button>
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-navy-200 bg-navy-50">
+                <GalleryThumb
+                  item={item}
+                  className="h-full w-full"
+                  imgClassName="h-full w-full object-cover"
+                />
+              </div>
 
-              {confirmingId === item.id ? (
-                <span className="flex items-center gap-1">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-navy-900">{item.name || item.url}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  <span
+                    className={cn(
+                      'inline-block rounded-full px-2 py-0.5 text-xs',
+                      item.role === 'VIDEO'
+                        ? 'bg-navy-100 text-navy-700'
+                        : 'bg-copper-100 text-copper-700',
+                    )}
+                  >
+                    {item.role === 'VIDEO' ? t.products.asVideo : t.products.asGallery}
+                  </span>
+                  {isCover ? (
+                    <span className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                      {t.products.currentCover}
+                    </span>
+                  ) : null}
+                  {isHover ? (
+                    <span className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                      {t.products.currentHoverVideo}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1">
+                {item.type === 'IMAGE' && !isCover ? (
                   <button
                     type="button"
                     disabled={pending}
-                    onClick={() => remove(item.id)}
-                    className="rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:opacity-60"
+                    onClick={() => assignRole(item, 'cover')}
+                    className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 disabled:opacity-40"
                   >
-                    {t.common.confirmDelete}
+                    {t.products.setAsCover}
                   </button>
+                ) : null}
+
+                {item.type === 'VIDEO' && !isHover ? (
                   <button
                     type="button"
-                    onClick={() => setConfirmingId(null)}
-                    className="rounded-full px-2 py-1.5 text-xs text-navy-600 hover:bg-navy-100"
+                    disabled={pending}
+                    onClick={() => assignRole(item, 'hover')}
+                    className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 disabled:opacity-40"
                   >
-                    {t.common.cancel}
+                    {t.products.setAsHoverVideo}
                   </button>
-                </span>
-              ) : (
+                ) : null}
+
                 <button
                   type="button"
-                  onClick={() => setConfirmingId(item.id)}
-                  className="rounded-full px-3 py-1.5 text-xs text-navy-600 transition-colors hover:bg-navy-100"
+                  disabled={pending || index === 0}
+                  onClick={() => move(index, -1)}
+                  className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {t.products.removeFromGallery}
+                  {t.products.moveUp}
                 </button>
-              )}
-            </div>
-          </li>
-        ))}
+                <button
+                  type="button"
+                  disabled={pending || index === order.length - 1}
+                  onClick={() => move(index, 1)}
+                  className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {t.products.moveDown}
+                </button>
+
+                {confirmingId === item.id ? (
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => remove(item.id)}
+                      className="rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:opacity-60"
+                    >
+                      {t.common.confirmDelete}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingId(null)}
+                      className="rounded-full px-2 py-1.5 text-xs text-navy-600 hover:bg-navy-100"
+                    >
+                      {t.common.cancel}
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingId(item.id)}
+                    className="rounded-full px-3 py-1.5 text-xs text-navy-600 transition-colors hover:bg-navy-100"
+                  >
+                    {t.products.removeFromGallery}
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       {pending ? <p className="text-xs text-muted">{t.common.processing}</p> : null}

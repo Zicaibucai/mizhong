@@ -26,6 +26,8 @@ export interface AssetReferenceSource {
   slots: { id: string; slot: string }[];
   productMedia: { product: { slug: string; translations: NamedTranslation[] } }[];
   productCovers: { slug: string; translations: NamedTranslation[] }[];
+  /** 把本素材用作「列表悬停视频」的商品 */
+  productHoverVideos: { slug: string; translations: NamedTranslation[] }[];
   categoryCovers: { slug: string; translations: NamedTranslation[] }[];
   /**
    * 把本素材用作封面的视频。
@@ -71,6 +73,14 @@ export function collectAssetReferences(
   for (const product of asset.productCovers) {
     references.push({
       group: t.products.coverLabel,
+      label: pickName(product.translations, locale, product.slug),
+    });
+  }
+
+  // 悬停视频是商品的独立字段，被删除时必须一并提示，否则前台卡片会静默失去视频
+  for (const product of asset.productHoverVideos) {
+    references.push({
+      group: t.products.hoverVideoLabel,
       label: pickName(product.translations, locale, product.slug),
     });
   }

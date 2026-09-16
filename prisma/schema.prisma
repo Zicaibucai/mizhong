@@ -311,11 +311,12 @@ model Asset {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  translations   AssetTranslation[]
-  slots          SlotBinding[]
-  productMedia   ProductMedia[]
-  productCovers  Product[]          @relation("ProductCover")
-  categoryCovers ProductCategory[]  @relation("CategoryCover")
+  translations       AssetTranslation[]
+  slots              SlotBinding[]
+  productMedia       ProductMedia[]
+  productCovers      Product[]          @relation("ProductCover")
+  productHoverVideos Product[]          @relation("ProductHoverVideo")
+  categoryCovers     ProductCategory[]  @relation("CategoryCover")
 
   @@index([type])
   @@index([enabled])
@@ -384,6 +385,16 @@ enum ProductMediaRole {
   VIDEO
 }
 
+/// 价格模式：决定前台展示方式与后台必填项
+enum PriceMode {
+  /// 面议 / Contact for price —— 不展示数字价格
+  NEGOTIABLE
+  /// 固定价格 —— 使用 priceMin
+  FIXED
+  /// 价格区间 —— 使用 priceMin 与 priceMax
+  RANGE
+}
+
 model Product {
   id           String           @id @default(cuid())
   slug         String           @unique
@@ -395,16 +406,38 @@ model Product {
   featured     Boolean          @default(false)
   published    Boolean          @default(false)
   sortOrder    Int              @default(0)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
 
-  translations ProductTranslation[]
-  media        ProductMedia[]
+  // ---- 价格与贸易信息（金额一律使用 Decimal，绝不使用 Float）----
+  priceMode PriceMode @default(NEGOTIABLE)
+  /// 计价货币：ISO 4217 代码（USD / CNY / VND / EUR）
+  currency  String    @default("USD")
+  /// 固定价格；区间价格的下限
+  priceMin  Decimal?  @db.Decimal(12, 2)
+  /// 区间价格的上限（仅 RANGE 使用）
+  priceMax  Decimal?  @db.Decimal(12, 2)
+  /// 计价单位：piece / meter / yard / roll / kg / set
+  priceUnit String?
+  /// 最小起订量
+  moq       Int?
+  /// 起订单位：与 priceUnit 取值一致
+  moqUnit   String?
+
+  /// 列表卡片鼠标悬停时播放的视频（必须引用 VIDEO 类型素材）
+  hoverVideoAssetId String?
+  hoverVideoAsset   Asset?  @relation("ProductHoverVideo", fields: [hoverVideoAssetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations   ProductTranslation[]
+  media          ProductMedia[]
+  specifications ProductSpecification[]
 
   @@index([published])
   @@index([featured])
   @@index([categoryId])
   @@index([sortOrder])
+  @@index([hoverVideoAssetId])
 }
 
 /// 商品图库：有序、带用途的素材关联
@@ -431,12 +464,47 @@ model ProductTranslation {
   name             String
   shortDescription String?
   description      String?
+  /// 尺寸摘要（如「宽 25mm × 厚 2mm」），独立于自由文本规格
+  sizeSummary      String?
   spec             String?
   application      String?
   seoTitle         String?
   seoDescription   String?
 
   @@unique([productId, locale])
+}
+
+// ---------------------------------------------------------------------------
+// 结构化商品参数
+// ---------------------------------------------------------------------------
+
+/// 一条可排序的商品参数（如材质、宽度、厚度、颜色、包装方式）。
+/// 结构为 1 个商品 : N 条参数，每条参数三语言各一行翻译 —— 管理员可自由增删改排序，
+/// 不允许把参数硬编码成固定数据库字段。
+model ProductSpecification {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations ProductSpecificationTranslation[]
+
+  @@index([productId, sortOrder])
+}
+
+model ProductSpecificationTranslation {
+  id              String               @id @default(cuid())
+  specificationId String
+  specification   ProductSpecification @relation(fields: [specificationId], references: [id], onDelete: Cascade)
+  locale          Locale
+  /// 参数名称（材质、宽度…）
+  name            String
+  /// 参数值
+  value           String?
+
+  @@unique([specificationId, locale])
 }
 
 // ---------------------------------------------------------------------------

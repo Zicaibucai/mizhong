@@ -10,7 +10,9 @@ import type { GalleryItemData } from '@/components/admin/products/gallery-editor
 import type {
   ProductEditorData,
   ProductTranslationValues,
+  SpecRowData,
 } from '@/components/admin/products/types';
+import { decimalToString, normalizeCurrency } from '@/lib/pricing';
 import { defaultLocale } from '@/lib/i18n/config';
 
 export const dynamic = 'force-dynamic';
@@ -24,7 +26,7 @@ export default async function AdminProductDetailPage({
   const { id } = await params;
   const { locale, t } = await getAdminMessagesForRequest();
 
-  const [product, categoryRows, coverAssets, galleryAssets] = await Promise.all([
+  const [product, categoryRows, coverAssets, videoAssets, galleryAssets] = await Promise.all([
     tryDb((db) =>
       db.product.findUnique({
         where: { id },
@@ -33,6 +35,10 @@ export default async function AdminProductDetailPage({
           media: {
             orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
             include: { asset: { include: { translations: true } } },
+          },
+          specifications: {
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+            include: { translations: true },
           },
         },
       }),
@@ -44,6 +50,7 @@ export default async function AdminProductDetailPage({
       }),
     ),
     loadLibraryAssets(['IMAGE'], locale),
+    loadLibraryAssets(['VIDEO'], locale),
     loadLibraryAssets(['IMAGE', 'VIDEO'], locale),
   ]);
 
@@ -76,6 +83,7 @@ export default async function AdminProductDetailPage({
       name: row?.name ?? '',
       shortDescription: row?.shortDescription ?? '',
       description: row?.description ?? '',
+      sizeSummary: row?.sizeSummary ?? '',
       spec: row?.spec ?? '',
       application: row?.application ?? '',
       seoTitle: row?.seoTitle ?? '',
@@ -83,8 +91,19 @@ export default async function AdminProductDetailPage({
     };
   }
 
+  // 结构化参数：每种语言的名称 / 值都摊平成字符串，缺语言的行留空由编辑器补
+  const specifications: SpecRowData[] = product.specifications.map((row) => {
+    const values = {} as SpecRowData['values'];
+    for (const target of ADMIN_LOCALES) {
+      const tr = row.translations.find((item) => item.locale === target);
+      values[target] = { name: tr?.name ?? '', value: tr?.value ?? '' };
+    }
+    return { key: row.id, id: row.id, values };
+  });
+
   const media: GalleryItemData[] = product.media.map((row) => ({
     id: row.id,
+    assetId: row.assetId,
     role: row.role,
     type: row.asset.type,
     url: row.asset.url,
@@ -103,8 +122,18 @@ export default async function AdminProductDetailPage({
       published: product.published,
       sortOrder: product.sortOrder,
       coverAssetId: product.coverAssetId,
+      hoverVideoAssetId: product.hoverVideoAssetId,
+      priceMode: product.priceMode,
+      currency: normalizeCurrency(product.currency),
+      // Decimal 一律转字符串：客户端不做金额运算，也不会遇到浮点精度问题
+      priceMin: decimalToString(product.priceMin) ?? '',
+      priceMax: decimalToString(product.priceMax) ?? '',
+      priceUnit: product.priceUnit ?? '',
+      moq: product.moq === null ? '' : String(product.moq),
+      moqUnit: product.moqUnit ?? '',
     },
     translations,
+    specifications,
     categories: (categoryRows ?? []).map((row) => ({
       id: row.id,
       name:
@@ -113,6 +142,7 @@ export default async function AdminProductDetailPage({
         row.slug,
     })),
     coverAssets,
+    videoAssets,
     galleryAssets,
     media,
     previewHref: `/${defaultLocale}/products/${encodeURIComponent(product.slug)}`,

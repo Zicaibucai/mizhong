@@ -1,8 +1,18 @@
 import { tryDb } from '@/lib/db';
 import type { Locale } from '@/lib/i18n/config';
+import { decimalToString, normalizeCurrency, type PriceMode } from '@/lib/pricing';
 
 export const PRODUCTS_PER_PAGE = 12;
 const MAX_QUERY_LENGTH = 80;
+
+/** 目录排序方式；非法值一律回退 `recommended` */
+export const PRODUCT_SORTS = ['recommended', 'newest', 'price-asc', 'price-desc'] as const;
+export type ProductSort = (typeof PRODUCT_SORTS)[number];
+
+export function parseProductSort(raw: string | null | undefined): ProductSort {
+  const value = (raw ?? '').trim();
+  return (PRODUCT_SORTS as readonly string[]).includes(value) ? (value as ProductSort) : 'recommended';
+}
 
 export interface CategoryView {
   id: string;
@@ -14,18 +24,33 @@ export interface CategoryView {
   coverAlt: string | null;
 }
 
-export interface ProductCardView {
+/** 价格与贸易信息：金额始终是字符串（Decimal 不跨越边界） */
+export interface ProductPriceView {
+  priceMode: PriceMode;
+  currency: string;
+  priceMin: string | null;
+  priceMax: string | null;
+  priceUnit: string | null;
+  moq: number | null;
+  moqUnit: string | null;
+}
+
+export interface ProductCardView extends ProductPriceView {
   id: string;
   slug: string;
   sku: string | null;
   name: string;
   shortDescription: string | null;
+  sizeSummary: string | null;
   featured: boolean;
   categoryName: string | null;
   categorySlug: string | null;
   coverUrl: string | null;
   coverThumbnailUrl: string | null;
   coverAlt: string | null;
+  /** 列表卡片悬停播放的视频（仅当产品配置了 VIDEO 素材时非空） */
+  hoverVideoUrl: string | null;
+  hoverVideoPosterUrl: string | null;
 }
 
 export interface ProductMediaView {
@@ -38,6 +63,13 @@ export interface ProductMediaView {
   caption: string | null;
 }
 
+/** 一条结构化参数（已按当前语言回退解析） */
+export interface ProductSpecView {
+  id: string;
+  name: string;
+  value: string;
+}
+
 export interface ProductDetailView extends ProductCardView {
   description: string | null;
   spec: string | null;
@@ -45,6 +77,7 @@ export interface ProductDetailView extends ProductCardView {
   seoTitle: string | null;
   seoDescription: string | null;
   gallery: ProductMediaView[];
+  specifications: ProductSpecView[];
   /** 当前语言缺失、已回退英文时为 true（页面据此提示，而不是显示字段名） */
   usingFallback: boolean;
 }
@@ -62,6 +95,7 @@ type TranslationRow = {
   name: string;
   shortDescription: string | null;
   description: string | null;
+  sizeSummary: string | null;
   spec: string | null;
   application: string | null;
   seoTitle: string | null;
@@ -90,6 +124,61 @@ function coverOf(
   return { url: cover.url, thumbnailUrl: cover.thumbnailUrl, alt };
 }
 
+/** Prisma 的 Product 行 → 价格视图（Decimal 一律转字符串） */
+function priceOf(row: {
+  priceMode: PriceMode;
+  currency: string;
+  priceMin: unknown;
+  priceMax: unknown;
+  priceUnit: string | null;
+  moq: number | null;
+  moqUnit: string | null;
+}): ProductPriceView {
+  return {
+    priceMode: row.priceMode,
+    currency: normalizeCurrency(row.currency),
+    priceMin: decimalToString(row.priceMin),
+    priceMax: decimalToString(row.priceMax),
+    priceUnit: row.priceUnit?.trim() || null,
+    moq: row.moq,
+    moqUnit: row.moqUnit?.trim() || null,
+  };
+}
+
+/** 悬停视频：只有 VIDEO 类型且已启用的素材才会输出 */
+function hoverVideoOf(
+  asset: { type: 'IMAGE' | 'VIDEO'; url: string; posterUrl: string | null; thumbnailUrl: string | null; enabled: boolean } | null,
+): { url: string | null; posterUrl: string | null } {
+  if (!asset || !asset.enabled || asset.type !== 'VIDEO' || !asset.url) {
+    return { url: null, posterUrl: null };
+  }
+  return { url: asset.url, posterUrl: asset.posterUrl ?? asset.thumbnailUrl ?? null };
+}
+
+/** 排序：无价格的商品（面议 / 未填价）在价格排序中一律排在最后 */
+function orderByFor(sort: ProductSort) {
+  switch (sort) {
+    case 'newest':
+      return [{ createdAt: 'desc' as const }];
+    case 'price-asc':
+      return [
+        { priceMin: { sort: 'asc' as const, nulls: 'last' as const } },
+        { sortOrder: 'asc' as const },
+      ];
+    case 'price-desc':
+      return [
+        { priceMin: { sort: 'desc' as const, nulls: 'last' as const } },
+        { sortOrder: 'asc' as const },
+      ];
+    default:
+      return [
+        { featured: 'desc' as const },
+        { sortOrder: 'asc' as const },
+        { createdAt: 'desc' as const },
+      ];
+  }
+}
+
 /**
  * 首页产品概览仍由字典提供文案；这里只提供「已发布商品」的真实数据。
  * 数据库不可用时返回空结果，页面展示空状态而非报错。
@@ -100,11 +189,13 @@ export async function listProducts(options: {
   categorySlug?: string;
   page?: number;
   featuredOnly?: boolean;
+  sort?: ProductSort;
 }): Promise<ProductListResult> {
   const { locale } = options;
   const query = normalizeQuery(options.query);
   const page = Math.max(1, Math.floor(options.page ?? 1));
   const categorySlug = options.categorySlug?.trim() || undefined;
+  const sort = options.sort ?? 'recommended';
 
   const empty: ProductListResult = { items: [], total: 0, page, pageSize: PRODUCTS_PER_PAGE, pageCount: 0 };
 
@@ -143,13 +234,14 @@ export async function listProducts(options: {
       db.product.count({ where }),
       db.product.findMany({
         where,
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+        orderBy: orderByFor(sort),
         skip: (page - 1) * PRODUCTS_PER_PAGE,
         take: PRODUCTS_PER_PAGE,
         include: {
           translations: true,
           category: { include: { translations: true } },
           coverAsset: { include: { translations: true } },
+          hoverVideoAsset: true,
         },
       }),
     ]);
@@ -165,6 +257,7 @@ export async function listProducts(options: {
       ? pickTranslation(row.category.translations, locale)
       : undefined;
     const cover = coverOf(row.coverAsset, locale);
+    const hover = hoverVideoOf(row.hoverVideoAsset);
 
     return {
       id: row.id,
@@ -172,12 +265,16 @@ export async function listProducts(options: {
       sku: row.sku,
       name: tr?.name ?? row.slug,
       shortDescription: tr?.shortDescription ?? null,
+      sizeSummary: tr?.sizeSummary ?? null,
       featured: row.featured,
       categoryName: categoryTr?.name ?? null,
       categorySlug: row.category?.slug ?? null,
       coverUrl: cover.url,
       coverThumbnailUrl: cover.thumbnailUrl,
       coverAlt: cover.alt,
+      hoverVideoUrl: hover.url,
+      hoverVideoPosterUrl: hover.posterUrl,
+      ...priceOf(row),
     };
   });
 
@@ -204,9 +301,14 @@ export async function getProductBySlug(
         translations: true,
         category: { include: { translations: true } },
         coverAsset: { include: { translations: true } },
+        hoverVideoAsset: true,
         media: {
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           include: { asset: { include: { translations: true } } },
+        },
+        specifications: {
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          include: { translations: true },
         },
       },
     }),
@@ -219,6 +321,7 @@ export async function getProductBySlug(
   const tr = (exact ?? fallback) as TranslationRow | undefined;
   const categoryTr = row.category ? pickTranslation(row.category.translations, locale) : undefined;
   const cover = coverOf(row.coverAsset, locale);
+  const hover = hoverVideoOf(row.hoverVideoAsset);
 
   const gallery: ProductMediaView[] = row.media
     .filter((item) => item.asset.enabled)
@@ -244,6 +347,17 @@ export async function getProductBySlug(
       };
     });
 
+  // 结构化参数：当前语言缺失时回退英文，两边都为空的行直接隐藏（不显示空行）
+  const specifications: ProductSpecView[] = row.specifications
+    .map((spec) => {
+      const specTr =
+        spec.translations.find((item) => item.locale === locale) ??
+        spec.translations.find((item) => item.locale === 'en');
+      if (!specTr || !specTr.name.trim()) return null;
+      return { id: spec.id, name: specTr.name.trim(), value: specTr.value?.trim() ?? '' };
+    })
+    .filter((spec): spec is ProductSpecView => spec !== null);
+
   return {
     id: row.id,
     slug: row.slug,
@@ -251,6 +365,7 @@ export async function getProductBySlug(
     name: tr?.name ?? row.slug,
     shortDescription: tr?.shortDescription ?? null,
     description: tr?.description ?? null,
+    sizeSummary: tr?.sizeSummary ?? null,
     spec: tr?.spec ?? null,
     application: tr?.application ?? null,
     seoTitle: tr?.seoTitle ?? null,
@@ -261,9 +376,94 @@ export async function getProductBySlug(
     coverUrl: cover.url,
     coverThumbnailUrl: cover.thumbnailUrl,
     coverAlt: cover.alt,
+    hoverVideoUrl: hover.url,
+    hoverVideoPosterUrl: hover.posterUrl,
     gallery,
+    specifications,
     usingFallback: Boolean(tr) && !exact,
+    ...priceOf(row),
   };
+}
+
+/**
+ * 相关产品：优先同分类，不足时用最新商品补齐；排除当前商品。
+ * 任何一步失败都返回空数组 —— 相关产品是增强内容，绝不能因此让详情页报错。
+ */
+export async function listRelatedProducts(
+  product: { id: string; categorySlug: string | null },
+  locale: Locale,
+  limit = 3,
+): Promise<ProductCardView[]> {
+  const rows = await tryDb((db) =>
+    db.product.findMany({
+      where: {
+        published: true,
+        id: { not: product.id },
+        ...(product.categorySlug ? { category: { slug: product.categorySlug, enabled: true } } : {}),
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      take: limit,
+      include: {
+        translations: true,
+        category: { include: { translations: true } },
+        coverAsset: { include: { translations: true } },
+        hoverVideoAsset: true,
+      },
+    }),
+  );
+
+  const map = (list: NonNullable<typeof rows>): ProductCardView[] =>
+    list.map((row) => {
+      const tr = pickTranslation<TranslationRow>(row.translations as TranslationRow[], locale);
+      const categoryTr = row.category ? pickTranslation(row.category.translations, locale) : undefined;
+      const cover = coverOf(row.coverAsset, locale);
+      const hover = hoverVideoOf(row.hoverVideoAsset);
+      return {
+        id: row.id,
+        slug: row.slug,
+        sku: row.sku,
+        name: tr?.name ?? row.slug,
+        shortDescription: tr?.shortDescription ?? null,
+        sizeSummary: tr?.sizeSummary ?? null,
+        featured: row.featured,
+        categoryName: categoryTr?.name ?? null,
+        categorySlug: row.category?.slug ?? null,
+        coverUrl: cover.url,
+        coverThumbnailUrl: cover.thumbnailUrl,
+        coverAlt: cover.alt,
+        hoverVideoUrl: hover.url,
+        hoverVideoPosterUrl: hover.posterUrl,
+        ...priceOf(row),
+      };
+    });
+
+  const primary = map(rows ?? []);
+  if (primary.length >= limit) return primary;
+
+  // 同分类商品不足时，补上其它分类的最新商品，保证区块不出现半空的状态
+  const filler = await tryDb((db) =>
+    db.product.findMany({
+      where: { published: true, id: { not: product.id } },
+      orderBy: [{ createdAt: 'desc' }],
+      take: limit * 2,
+      include: {
+        translations: true,
+        category: { include: { translations: true } },
+        coverAsset: { include: { translations: true } },
+        hoverVideoAsset: true,
+      },
+    }),
+  );
+
+  const seen = new Set(primary.map((item) => item.id));
+  for (const item of map(filler ?? [])) {
+    if (primary.length >= limit) break;
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    primary.push(item);
+  }
+
+  return primary;
 }
 
 export async function listCategories(locale: Locale): Promise<CategoryView[]> {

@@ -74,3 +74,33 @@
     repeating-linear-gradient(45deg, rgb(255 255 255 / 0.045) 0 1px, transparent 1px 9px),
     repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.03) 0 1px, transparent 1px 9px);
 }
+
+/* ---------------------------------------------------------------------------
+   产品详情页媒体切换（.media-stage / .media-slide）
+
+   纯 CSS 的 `:target` 方案：缩略图是真实锚点链接，没有 JavaScript 也能切换媒体，
+   键盘可以直接 Tab 到缩略图并回车。规则顺序即优先级，改动前请先读这四条：
+
+     1. 默认全部隐藏；
+     2. 第一张始终可见（无 hash 时的默认视图，也是 JS 关闭时的兜底）；
+     3. 页面里一旦出现 `:target`，且它不是第一张，就隐藏第一张；
+     4. 目标项显示（特异性与第 3 条互斥：第 3 条只作用于「不是 target 的第一张」）。
+
+   第 3 条的 `:not(:target)` 是必需的 —— 少了它，点到第一张缩略图时
+   会同时命中「隐藏第一张」和「显示第一张」，第一张反而看不见。
+   --------------------------------------------------------------------------- */
+.media-slide {
+  display: none;
+}
+
+.media-slide:first-child {
+  display: block;
+}
+
+.media-stage:has(.media-slide:target) .media-slide:first-child:not(:target) {
+  display: none;
+}
+
+.media-slide:target {
+  display: block;
+}

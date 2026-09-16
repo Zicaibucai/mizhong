@@ -53,6 +53,19 @@ export const en = {
       },
     ],
   },
+  /**
+   * 公司介绍区块。
+   *
+   * 标题与领域标签来自字典，**正文与辅助文字全部来自后台的公司资料**
+   * （CompanyProfile：about / positioning / tagline）。任一字段为空就不渲染对应内容，
+   * 整块内容都为空时整个区块不出现 —— 绝不用字典文案去冒充公司介绍。
+   */
+  about: {
+    eyebrow: 'About us',
+    title: 'About our company',
+    positioningLabel: 'Positioning',
+    detailsLabel: 'Company details',
+  },
   products: {
     eyebrow: 'Products',
     title: 'Product categories',

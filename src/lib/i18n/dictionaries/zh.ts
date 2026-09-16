@@ -54,6 +54,19 @@ export const zh: Dict = {
       },
     ],
   },
+  /**
+   * 公司介绍区块。
+   *
+   * 标题与领域标签来自字典，正文与辅助文字全部来自后台公司资料
+   * （CompanyProfile：about / positioning / tagline）；字段为空即不渲染，
+   * 不拿字典文案冒充公司介绍。
+   */
+  about: {
+    eyebrow: '关于我们',
+    title: '公司介绍',
+    positioningLabel: '公司定位',
+    detailsLabel: '公司信息',
+  },
   products: {
     eyebrow: '产品',
     title: '产品分类',

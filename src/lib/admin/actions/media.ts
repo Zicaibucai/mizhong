@@ -466,6 +466,7 @@ export async function deleteAssetAction(_prev: FormState, formData: FormData): P
         slots: true,
         productMedia: { include: { product: { include: { translations: true } } } },
         productCovers: { include: { translations: true } },
+        productHoverVideos: { include: { translations: true } },
         categoryCovers: { include: { translations: true } },
       },
     });
@@ -502,6 +503,10 @@ export async function deleteAssetAction(_prev: FormState, formData: FormData): P
       await tx.productCategory.updateMany({
         where: { coverAssetId: asset.id },
         data: { coverAssetId: null },
+      });
+      await tx.product.updateMany({
+        where: { hoverVideoAssetId: asset.id },
+        data: { hoverVideoAssetId: null },
       });
       await tx.slotBinding.deleteMany({ where: { assetId: asset.id } });
       if (posterUrls.length) {

@@ -55,6 +55,19 @@ export const vi: Dict = {
       },
     ],
   },
+  /**
+   * Khối giới thiệu công ty.
+   *
+   * Tiêu đề và nhãn đến từ từ điển; toàn bộ nội dung chính và phần bổ trợ
+   * lấy từ hồ sơ công ty trong trang quản trị (CompanyProfile: about / positioning /
+   * tagline). Trường nào trống thì không hiển thị trường đó.
+   */
+  about: {
+    eyebrow: 'Về chúng tôi',
+    title: 'Giới thiệu công ty',
+    positioningLabel: 'Định vị',
+    detailsLabel: 'Thông tin công ty',
+  },
   products: {
     eyebrow: 'Sản phẩm',
     title: 'Danh mục sản phẩm',

@@ -24,7 +24,12 @@ export function SeoTab({ data }: { data: ProductEditorData }) {
   const dirty = useDirtyForm('seo', state);
 
   return (
-    <form action={formAction} onChange={dirty.markDirty} className="space-y-5">
+    <form
+      id="product-form-seo"
+      action={formAction}
+      onChange={dirty.markDirty}
+      className="space-y-5"
+    >
       <input type="hidden" name="id" value={data.product.id} />
 
       {state.status === 'error' && state.message ? (

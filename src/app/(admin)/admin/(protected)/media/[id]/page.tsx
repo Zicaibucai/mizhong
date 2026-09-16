@@ -38,6 +38,7 @@ export default async function AdminMediaDetailPage({
         // 删除前需要展示的引用关系
         productMedia: { include: { product: { include: { translations: true } } } },
         productCovers: { include: { translations: true } },
+        productHoverVideos: { include: { translations: true } },
         categoryCovers: { include: { translations: true } },
       },
     });

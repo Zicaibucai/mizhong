@@ -11,7 +11,7 @@ const enabled = 'border-navy-300 text-navy-900 hover:border-navy-900 hover:bg-na
 const disabled = 'border-navy-200 text-navy-300';
 
 /**
- * 分页：上一页 / 下一页均为真实链接，保留 q 与 category。
+ * 分页：上一页 / 下一页均为真实链接，保留 q、category 与 sort。
  * 页码会被夹在 [1, pageCount] 内，因此永远不会渲染超出总页数的链接。
  */
 export function Pagination({
@@ -19,6 +19,7 @@ export function Pagination({
   basePath,
   query,
   category,
+  sort,
   page,
   pageCount,
   className,
@@ -27,6 +28,8 @@ export function Pagination({
   basePath: string;
   query?: string;
   category?: string;
+  /** 当前排序：翻页时保留，避免第二页排序被重置 */
+  sort?: string;
   page: number;
   pageCount: number;
   className?: string;
@@ -54,7 +57,7 @@ export function Pagination({
       <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
         {prevPage ? (
           <Link
-            href={withQuery(basePath, { q: query, category, page: prevPage })}
+            href={withQuery(basePath, { q: query, category, sort, page: prevPage })}
             className={cn(base, enabled)}
           >
             <ArrowRightIcon className="h-4 w-4 rotate-180" />
@@ -69,7 +72,7 @@ export function Pagination({
 
         {nextPage ? (
           <Link
-            href={withQuery(basePath, { q: query, category, page: nextPage })}
+            href={withQuery(basePath, { q: query, category, sort, page: nextPage })}
             className={cn(base, enabled)}
           >
             {dict.list.next}

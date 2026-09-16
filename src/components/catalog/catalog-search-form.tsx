@@ -7,6 +7,8 @@ interface CatalogSearchFormProps {
   defaultQuery?: string;
   /** 存在时作为隐藏字段随搜索一起提交，保证在分类内搜索不会丢失分类 */
   category?: string;
+  /** 存在时随搜索一起提交，保证搜索不会重置当前排序 */
+  sort?: string;
   placeholder: string;
   buttonLabel: string;
   className?: string;
@@ -19,6 +21,7 @@ export function CatalogSearchForm({
   action,
   defaultQuery,
   category,
+  sort,
   placeholder,
   buttonLabel,
   className,
@@ -28,6 +31,7 @@ export function CatalogSearchForm({
   return (
     <form action={action} method="get" role="search" className={cn('flex w-full gap-2', className)}>
       {category ? <input type="hidden" name="category" value={category} /> : null}
+      {sort ? <input type="hidden" name="sort" value={sort} /> : null}
       <label htmlFor={inputId} className="sr-only">
         {placeholder}
       </label>

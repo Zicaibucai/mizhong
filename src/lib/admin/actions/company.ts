@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePublicSite } from '@/lib/admin/revalidate';
 import { getPrisma } from '@/lib/db';
 import { writeAudit } from '@/lib/audit';
 import { getDbUnavailableState, requireAdminOrError } from '@/lib/admin/guard';
@@ -60,6 +60,7 @@ export async function saveCompanyAction(_prev: FormState, formData: FormData): P
     summary: t.auditSummaries.companyProfileUpdated,
   });
 
-  revalidatePath('/', 'layout');
+  // 三语正式首页、页头页脚、metadata 与设计预览立即刷新，不需要等 ISR 到期
+  revalidatePublicSite();
   return { status: 'success', message: t.actions.companySaved };
 }

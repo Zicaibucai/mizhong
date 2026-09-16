@@ -17,14 +17,19 @@ import { useAdminT } from '@/components/admin/i18n-provider';
 import { useDirtyForm } from './tabs';
 import type { ProductEditorData } from './types';
 
-/** Name, short introduction, full description, specifications and applications per language. */
+/** 名称、一句话介绍、尺寸摘要、完整介绍、规格说明、应用场景 —— 每种语言一组。 */
 export function TranslationsTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const [state, formAction] = useActionState(saveProductTranslationsAction, initialFormState);
   const dirty = useDirtyForm('translations', state);
 
   return (
-    <form action={formAction} onChange={dirty.markDirty} className="space-y-5">
+    <form
+      id="product-form-translations"
+      action={formAction}
+      onChange={dirty.markDirty}
+      className="space-y-5"
+    >
       <input type="hidden" name="id" value={data.product.id} />
 
       {state.status === 'error' && state.message ? (
@@ -49,6 +54,17 @@ export function TranslationsTab({ data }: { data: ProductEditorData }) {
               name={`${locale}_shortDescription`}
               defaultValue={data.translations[locale].shortDescription}
               rows={2}
+            />
+          </Field>
+          <Field
+            label={t.products.sizeSummaryLabel}
+            htmlFor={`${locale}_sizeSummary`}
+            hint={t.products.sizeSummaryHint}
+          >
+            <TextInput
+              id={`${locale}_sizeSummary`}
+              name={`${locale}_sizeSummary`}
+              defaultValue={data.translations[locale].sizeSummary}
             />
           </Field>
           <Field label={t.products.descriptionLabel} htmlFor={`${locale}_description`}>

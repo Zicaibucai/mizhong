@@ -65,6 +65,18 @@ export function useDirtyForm(tab: string, state: FormState): { markDirty: () => 
 }
 
 /**
+ * 当前激活的分页 id。
+ *
+ * 顶部操作栏的「保存草稿」用它拼出 `form="product-form-<tab>"`，
+ * 直接提交**当前正在看的那一个表单** —— 不需要把六个表单合并成一个大表单，
+ * 也不会误提交用户没在编辑的分区。
+ */
+export function useActiveTab(): string {
+  const context = useContext(TabsContext);
+  return context?.active ?? '';
+}
+
+/**
  * Tab shell for the product editor (the URL hash drives the active tab, e.g. `#media`).
  *
  * Every panel stays mounted and is merely hidden, so unsaved field values survive a tab switch

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
+import { PlayIcon } from '@/components/ui/icons';
 
 /** An asset from the media library, as passed down to the admin forms (plain JSON). */
 export interface PickerAsset {
@@ -25,9 +26,48 @@ export interface AssetPickerLabels {
   empty: string;
 }
 
-function previewUrl(asset: Pick<PickerAsset, 'url' | 'thumbnailUrl' | 'posterUrl' | 'type'>): string {
-  if (asset.type === 'VIDEO') return asset.posterUrl ?? asset.thumbnailUrl ?? asset.url;
+/**
+ * 缩略图地址。
+ *
+ * 视频**没有封面时返回 null**（而不是回退到 .mp4 地址）：把视频地址塞进 `<img>` 只会得到
+ * 一张破图。调用方在 null 时渲染带播放图标的占位块，比破图清楚得多。
+ */
+function previewUrl(
+  asset: Pick<PickerAsset, 'url' | 'thumbnailUrl' | 'posterUrl' | 'type'>,
+): string | null {
+  if (asset.type === 'VIDEO') return asset.posterUrl ?? asset.thumbnailUrl ?? null;
   return asset.thumbnailUrl ?? asset.url;
+}
+
+/** 素材缩略图：没有可用静态图时渲染占位块（视频为播放图标） */
+export function AssetThumb({
+  asset,
+  className,
+  imgClassName,
+}: {
+  asset: Pick<PickerAsset, 'url' | 'thumbnailUrl' | 'posterUrl' | 'type' | 'name'>;
+  className?: string;
+  imgClassName?: string;
+}) {
+  const src = previewUrl(asset);
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换
+      <img src={src} alt={asset.name} loading="lazy" className={imgClassName} />
+    );
+  }
+  return (
+    <span
+      role="img"
+      aria-label={asset.name}
+      className={cn(
+        'flex items-center justify-center bg-navy-900 text-ivory-50',
+        className ?? 'h-full w-full',
+      )}
+    >
+      <PlayIcon className="h-5 w-5" />
+    </span>
+  );
 }
 
 /**
@@ -72,12 +112,7 @@ export function AssetPicker({
       <div className="flex flex-wrap items-center gap-4">
         <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-navy-200 bg-navy-50">
           {selected ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换
-            <img
-              src={previewUrl(selected)}
-              alt={selected.name}
-              className="h-full w-full object-cover"
-            />
+            <AssetThumb asset={selected} imgClassName="h-full w-full object-cover" />
           ) : (
             <span className="flex h-full w-full items-center justify-center px-2 text-center text-xs text-muted">
               {labels.none}
@@ -131,13 +166,7 @@ export function AssetPicker({
                         : 'border-navy-200 hover:border-navy-300',
                     )}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换 */}
-                    <img
-                      src={previewUrl(asset)}
-                      alt={asset.name}
-                      loading="lazy"
-                      className="aspect-square w-full object-cover"
-                    />
+                    <AssetThumb asset={asset} imgClassName="aspect-square w-full object-cover" />
                   </button>
                 </li>
               ))}

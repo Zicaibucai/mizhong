@@ -1,9 +1,9 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePublicCatalogue } from '@/lib/admin/revalidate';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { getPrisma } from '@/lib/db';
 import { writeAudit } from '@/lib/audit';
 import { getDbUnavailableState, requireAdminOrError } from '@/lib/admin/guard';
@@ -15,6 +15,7 @@ import {
 } from '@/lib/admin/validation';
 import { getContentLocaleLabel } from '@/lib/admin/labels';
 import { getAdminMessagesForRequest, type AdminMessages } from '@/lib/admin/i18n';
+import { CURRENCY_CODES, PRICE_MODES, normalizeCurrency } from '@/lib/pricing';
 import type { FormState } from '@/lib/admin/action-state';
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -75,6 +76,43 @@ function makeProductCreateSchema(t: AdminMessages) {
   });
 }
 
+/**
+ * 金额字段：只接受 `1234.56` 这样的十进制字面量（最多两位小数），
+ * 转成 `Prisma.Decimal` 之后入库。
+ *
+ * 这里**绝不经过 `Number`**：`parseFloat` / `Number()` 会把金额变成 IEEE754 浮点数，
+ * 0.1 + 0.2 那类误差会直接进入报价。空串与 null 统一归为「未填写」。
+ */
+function amountField(t: AdminMessages) {
+  return z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return undefined;
+      const text = value.trim().replace(/,/g, '');
+      return text.length > 0 ? text : undefined;
+    },
+    z
+      .string()
+      .regex(/^\d{1,10}(\.\d{1,2})?$/, t.products.priceAmountInvalid)
+      .transform((text) => new Prisma.Decimal(text))
+      .optional(),
+  );
+}
+
+/** 计价单位 / 起订单位：自由文本，长度受限，允许留空 */
+function unitField(max = 40) {
+  return z.preprocess(
+    (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
+    z.string().max(max).optional(),
+  );
+}
+
+/**
+ * 基本信息表单的字段。
+ *
+ * **刻意不含价格字段**：商品编辑器由多个独立表单组成，每个表单只提交自己那一段。
+ * 如果基本信息表单也声明 priceMode，一次「保存基本信息」就会把价格模式重置为默认值 ——
+ * 那是最典型的静默数据丢失，所以价格走独立的 saveProductPricingAction。
+ */
 function makeProductBaseSchema(t: AdminMessages) {
   return z.object({
     id: requiredIdField(t),
@@ -84,7 +122,68 @@ function makeProductBaseSchema(t: AdminMessages) {
     sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
     featured: z.coerce.boolean().default(false),
     coverAssetId: textField(200),
+    hoverVideoAssetId: textField(200),
   });
+}
+
+/** 价格与贸易信息表单的字段（与基本信息表单完全分离） */
+function makeProductPricingSchema(t: AdminMessages) {
+  return z.object({
+    id: requiredIdField(t),
+    priceMode: z.preprocess(
+      (value) => (typeof value === 'string' && value.trim() ? value.trim() : 'NEGOTIABLE'),
+      z.enum(PRICE_MODES, { errorMap: () => ({ message: t.validation.invalidInput }) }),
+    ),
+    currency: z.preprocess(
+      (value) => normalizeCurrency(typeof value === 'string' ? value : null),
+      z.enum(CURRENCY_CODES, { errorMap: () => ({ message: t.validation.invalidInput }) }),
+    ),
+    priceMin: amountField(t),
+    priceMax: amountField(t),
+    priceUnit: unitField(),
+    moq: z.preprocess(
+      (value) => {
+        if (typeof value !== 'string' || value.trim().length === 0) return undefined;
+        const parsed = Number.parseInt(value.trim(), 10);
+        return Number.isFinite(parsed) ? parsed : value;
+      },
+      z.number().int().min(0).max(100_000_000).optional(),
+    ),
+    moqUnit: unitField(),
+  });
+}
+
+/**
+ * 价格模式的跨字段校验（Zod 的对象级 refine 在这里用显式函数表达，
+ * 便于把三种模式的差异写成一段可读的规则）。
+ *
+ * - NEGOTIABLE：不要求填写价格；已填的数字会被清空，避免前台展示与模式不一致
+ * - FIXED：必须有 priceMin，且 priceMax 清空（固定价没有上限）
+ * - RANGE：必须有 priceMin；填了 priceMax 时不得小于 priceMin
+ */
+function resolvePrice(
+  values: {
+    priceMode: 'NEGOTIABLE' | 'FIXED' | 'RANGE';
+    priceMin?: Prisma.Decimal;
+    priceMax?: Prisma.Decimal;
+  },
+  t: AdminMessages,
+): { ok: true; priceMin: Prisma.Decimal | null; priceMax: Prisma.Decimal | null } | { ok: false; message: string } {
+  if (values.priceMode === 'NEGOTIABLE') {
+    return { ok: true, priceMin: null, priceMax: null };
+  }
+
+  if (!values.priceMin) return { ok: false, message: t.products.priceMinRequired };
+
+  if (values.priceMode === 'FIXED') {
+    return { ok: true, priceMin: values.priceMin, priceMax: null };
+  }
+
+  if (values.priceMax && values.priceMax.lessThan(values.priceMin)) {
+    return { ok: false, message: t.products.priceRangeInvalid };
+  }
+
+  return { ok: true, priceMin: values.priceMin, priceMax: values.priceMax ?? null };
 }
 
 function makeNameSchema() {
@@ -96,6 +195,7 @@ function makeProductTranslationSchema() {
     name: textField(200),
     shortDescription: textField(500),
     description: textField(10000),
+    sizeSummary: textField(200),
     spec: textField(10000),
     application: textField(10000),
   });
@@ -108,11 +208,142 @@ function makeProductSeoSchema() {
   });
 }
 
-function makeCoverSchema(t: AdminMessages) {
+function makeMediaSettingsSchema(t: AdminMessages) {
   return z.object({
     id: requiredIdField(t),
     coverAssetId: textField(200),
+    hoverVideoAssetId: textField(200),
   });
+}
+
+/**
+ * 价格与贸易信息保存：只写价格相关列，不触碰 slug / 分类 / 媒体。
+ *
+ * 三种价格模式的差异全部在 resolvePrice 里判定（面议不要求填价、固定价清空上限、
+ * 区间校验 max >= min），金额在进入数据库前一直是 `Prisma.Decimal`，绝不经过 Number。
+ */
+export async function saveProductPricingAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const parsed = parseForm(makeProductPricingSchema(t), formData, t);
+  if (!parsed.ok) return { status: 'error', message: parsed.message };
+
+  const price = resolvePrice(parsed.data, t);
+  if (!price.ok) return { status: 'error', message: price.message };
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const product = await db.product.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, slug: true },
+    });
+    if (!product) return { status: 'error', message: t.products.notFound };
+
+    await db.product.update({
+      where: { id: product.id },
+      data: {
+        priceMode: parsed.data.priceMode,
+        currency: parsed.data.currency,
+        priceMin: price.priceMin,
+        priceMax: price.priceMax,
+        priceUnit: parsed.data.priceUnit ?? null,
+        moq: parsed.data.moq ?? null,
+        moqUnit: parsed.data.moqUnit ?? null,
+      },
+    });
+
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      action: 'UPDATE',
+      targetType: 'Product',
+      targetId: product.id,
+      summary: t.products.pricingSection,
+      detail: {
+        slug: product.slug,
+        priceMode: parsed.data.priceMode,
+        currency: parsed.data.currency,
+        priceMin: price.priceMin?.toString() ?? null,
+        priceMax: price.priceMax?.toString() ?? null,
+      },
+    });
+  } catch (error) {
+    console.error('[admin] save product pricing failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+
+  revalidatePublicCatalogue();
+  return { status: 'success', message: savedMessage(t) };
+}
+
+/**
+ * 媒体设置保存：只写封面与悬停视频两列，不触碰商品其它字段。
+ *
+ * 与「基本信息」表单共用同一套字段名，但语义独立 —— 在媒体页保存不会改动 slug / 价格。
+ * 封面必须是 IMAGE、悬停视频必须是启用的 VIDEO，两个检查都在服务端重做。
+ */
+export async function saveProductMediaSettingsAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const parsed = parseForm(makeMediaSettingsSchema(t), formData, t);
+  if (!parsed.ok) return { status: 'error', message: parsed.message };
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  const coverAssetId = parsed.data.coverAssetId || null;
+  const hoverVideoAssetId = parsed.data.hoverVideoAssetId || null;
+
+  try {
+    const product = await db.product.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, slug: true },
+    });
+    if (!product) return { status: 'error', message: t.products.notFound };
+
+    const coverError = await checkImageAsset(db, coverAssetId ?? '', t);
+    if (coverError) return coverError;
+
+    const hoverError = await checkVideoAsset(db, hoverVideoAssetId ?? '', t);
+    if (hoverError) return hoverError;
+
+    await db.product.update({
+      where: { id: parsed.data.id },
+      data: { coverAssetId, hoverVideoAssetId },
+    });
+
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      action: 'UPDATE',
+      targetType: 'Product',
+      targetId: parsed.data.id,
+      summary: t.products.mediaSection,
+      detail: { slug: product.slug, coverAssetId, hoverVideoAssetId },
+    });
+  } catch (error) {
+    console.error('[admin] save product media settings failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+
+  revalidatePublicCatalogue();
+  return { status: 'success', message: savedMessage(t) };
 }
 
 /** Ensures the given asset id exists and is an image; returns an error state when it is not. */
@@ -124,7 +355,29 @@ async function checkImageAsset(
   if (!assetId) return null;
   const asset = await db.asset.findUnique({ where: { id: assetId }, select: { type: true } });
   if (!asset || asset.type !== 'IMAGE') {
-    return { status: 'error', message: t.validation.invalidInput };
+    return { status: 'error', message: t.products.coverMustBeImage };
+  }
+  return null;
+}
+
+/**
+ * Ensures the given asset id exists, is enabled and really is a VIDEO.
+ *
+ * The type check is re-done on the server even though the picker only offers videos:
+ * an asset id is just a string in a form body, so it can be swapped for an image id.
+ */
+async function checkVideoAsset(
+  db: PrismaClient,
+  assetId: string,
+  t: AdminMessages,
+): Promise<FormState | null> {
+  if (!assetId) return null;
+  const asset = await db.asset.findUnique({
+    where: { id: assetId },
+    select: { type: true, enabled: true },
+  });
+  if (!asset || asset.type !== 'VIDEO' || !asset.enabled) {
+    return { status: 'error', message: t.products.hoverVideoMustBeVideo };
   }
   return null;
 }
@@ -201,7 +454,7 @@ export async function createProductAction(
     return { status: 'error', message: t.actions.saveFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   redirect(`/admin/products/${createdId}`);
 }
 
@@ -222,6 +475,13 @@ export async function saveProductBasicAction(
   if (!db) return getDbUnavailableState(t);
 
   const coverAssetId = base.data.coverAssetId || null;
+  const hoverVideoAssetId = base.data.hoverVideoAssetId || null;
+
+  // 商品编辑器由多个独立表单组成（基本信息 / 价格 / 多语言 / 参数 / 媒体），
+  // 每个表单只提交自己那一部分字段。因此封面与悬停视频**只有在该表单真的提交了
+  // 对应字段时才更新** —— 否则在「基本信息」里点保存会把媒体页设置好的封面清空。
+  const coverProvided = formData.has('coverAssetId');
+  const hoverProvided = formData.has('hoverVideoAssetId');
 
   try {
     const product = await db.product.findUnique({
@@ -246,20 +506,27 @@ export async function saveProductBasicAction(
       if (!category) return { status: 'error', message: t.validation.invalidInput };
     }
 
-    const coverError = await checkImageAsset(db, coverAssetId ?? '', t);
-    if (coverError) return coverError;
+    if (coverProvided) {
+      const coverError = await checkImageAsset(db, coverAssetId ?? '', t);
+      if (coverError) return coverError;
+    }
 
-    await db.product.update({
-      where: { id: base.data.id },
-      data: {
-        slug: base.data.slug,
-        sku: base.data.sku || null,
-        categoryId: base.data.categoryId ?? null,
-        sortOrder: base.data.sortOrder,
-        featured: base.data.featured,
-        coverAssetId,
-      },
-    });
+    if (hoverProvided) {
+      const hoverError = await checkVideoAsset(db, hoverVideoAssetId ?? '', t);
+      if (hoverError) return hoverError;
+    }
+
+    const patch: Prisma.ProductUncheckedUpdateInput = {
+      slug: base.data.slug,
+      sku: base.data.sku || null,
+      categoryId: base.data.categoryId ?? null,
+      sortOrder: base.data.sortOrder,
+      featured: base.data.featured,
+    };
+    if (coverProvided) patch.coverAssetId = coverAssetId;
+    if (hoverProvided) patch.hoverVideoAssetId = hoverVideoAssetId;
+
+    await db.product.update({ where: { id: base.data.id }, data: patch });
 
     await writeAudit({
       userId: user.id,
@@ -275,56 +542,7 @@ export async function saveProductBasicAction(
     return { status: 'error', message: t.actions.saveFailed };
   }
 
-  revalidatePath('/', 'layout');
-  return { status: 'success', message: savedMessage(t) };
-}
-
-/** Cover-only save, used by the media tab (keeps that tab independent from the basic form). */
-export async function saveProductCoverAction(
-  _prev: FormState,
-  formData: FormData,
-): Promise<FormState> {
-  const { t } = await getAdminMessagesForRequest();
-
-  const guard = await requireAdminOrError(t);
-  if ('error' in guard) return guard.error;
-  const { user } = guard;
-
-  const parsed = parseForm(makeCoverSchema(t), formData, t);
-  if (!parsed.ok) return { status: 'error', message: parsed.message };
-
-  const db = getPrisma();
-  if (!db) return getDbUnavailableState(t);
-
-  const coverAssetId = parsed.data.coverAssetId || null;
-
-  try {
-    const product = await db.product.findUnique({
-      where: { id: parsed.data.id },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
-
-    const coverError = await checkImageAsset(db, coverAssetId ?? '', t);
-    if (coverError) return coverError;
-
-    await db.product.update({ where: { id: parsed.data.id }, data: { coverAssetId } });
-
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: parsed.data.id,
-      summary: t.products.coverLabel,
-      detail: { slug: product.slug, coverAssetId },
-    });
-  } catch (error) {
-    console.error('[admin] save product cover failed:', error);
-    return { status: 'error', message: t.actions.saveFailed };
-  }
-
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   return { status: 'success', message: savedMessage(t) };
 }
 
@@ -363,7 +581,12 @@ export async function saveProductTranslationsAction(
     // Validate every locale before writing anything, so a rejected locale leaves no partial save.
     for (const { locale, data } of payloads) {
       const filled = Boolean(
-        data.name || data.shortDescription || data.description || data.spec || data.application,
+        data.name ||
+          data.shortDescription ||
+          data.description ||
+          data.sizeSummary ||
+          data.spec ||
+          data.application,
       );
       if (filled && !data.name) {
         // A name is what makes a locale usable; refuse to store a row without one.
@@ -380,7 +603,12 @@ export async function saveProductTranslationsAction(
       });
 
       const filled = Boolean(
-        data.name || data.shortDescription || data.description || data.spec || data.application,
+        data.name ||
+          data.shortDescription ||
+          data.description ||
+          data.sizeSummary ||
+          data.spec ||
+          data.application,
       );
 
       if (!filled) {
@@ -393,6 +621,7 @@ export async function saveProductTranslationsAction(
             data: {
               shortDescription: null,
               description: null,
+              sizeSummary: null,
               spec: null,
               application: null,
             },
@@ -405,6 +634,7 @@ export async function saveProductTranslationsAction(
         name: data.name,
         shortDescription: data.shortDescription || null,
         description: data.description || null,
+        sizeSummary: data.sizeSummary || null,
         spec: data.spec || null,
         application: data.application || null,
       };
@@ -430,7 +660,7 @@ export async function saveProductTranslationsAction(
     return { status: 'error', message: t.actions.saveFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   return { status: 'success', message: savedMessage(t) };
 }
 
@@ -516,7 +746,7 @@ export async function saveProductSeoAction(
     return { status: 'error', message: t.actions.saveFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   return { status: 'success', message: savedMessage(t) };
 }
 
@@ -603,7 +833,7 @@ export async function setProductPublishedAction(
     return { status: 'error', message: t.actions.operationFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   return {
     status: 'success',
     message: parsed.data.target === 'publish' ? t.products.statusPublished : t.products.statusDraft,
@@ -631,7 +861,11 @@ export async function duplicateProductAction(
   try {
     const source = await db.product.findUnique({
       where: { id: parsed.data.id },
-      include: { translations: true, media: true },
+      include: {
+        translations: true,
+        media: true,
+        specifications: { include: { translations: true } },
+      },
     });
     if (!source) return { status: 'error', message: t.products.notFound };
 
@@ -651,15 +885,24 @@ export async function duplicateProductAction(
         sku: source.sku,
         categoryId: source.categoryId,
         coverAssetId: source.coverAssetId,
+        hoverVideoAssetId: source.hoverVideoAssetId,
         featured: source.featured,
         published: false,
         sortOrder: source.sortOrder,
+        priceMode: source.priceMode,
+        currency: source.currency,
+        priceMin: source.priceMin,
+        priceMax: source.priceMax,
+        priceUnit: source.priceUnit,
+        moq: source.moq,
+        moqUnit: source.moqUnit,
         translations: {
           create: source.translations.map((item) => ({
             locale: item.locale,
             name: item.name,
             shortDescription: item.shortDescription,
             description: item.description,
+            sizeSummary: item.sizeSummary,
             spec: item.spec,
             application: item.application,
             seoTitle: item.seoTitle,
@@ -671,6 +914,19 @@ export async function duplicateProductAction(
             assetId: item.assetId,
             role: item.role,
             sortOrder: item.sortOrder,
+          })),
+        },
+        // 结构化参数按原顺序复制（含全部语言）
+        specifications: {
+          create: source.specifications.map((spec) => ({
+            sortOrder: spec.sortOrder,
+            translations: {
+              create: spec.translations.map((tr) => ({
+                locale: tr.locale,
+                name: tr.name,
+                value: tr.value,
+              })),
+            },
           })),
         },
       },
@@ -690,7 +946,7 @@ export async function duplicateProductAction(
     return { status: 'error', message: t.actions.saveFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   return { status: 'success', message: t.products.duplicated };
 }
 
@@ -735,13 +991,59 @@ export async function deleteProductAction(
     return { status: 'error', message: t.actions.deleteFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   redirect('/admin/products?deleted=1');
 }
 
 // ---------------------------------------------------------------------------
 // Gallery (ProductMedia rows)
 // ---------------------------------------------------------------------------
+
+/**
+ * 把素材挂到商品的图库上：图片 → GALLERY，视频 → VIDEO，接在现有顺序之后。
+ *
+ * 已被挂过的 (assetId, role) 组合会被跳过（数据库上是唯一约束），
+ * 因此「重复点添加」「上传后重试」都不会产生重复行。
+ * `found` 是确实存在且已启用的素材数量，供调用方区分「素材不存在」与「已经挂过」。
+ */
+async function attachAssets(
+  db: PrismaClient,
+  productId: string,
+  assetIds: string[],
+): Promise<{
+  found: number;
+  created: { assetId: string; role: 'GALLERY' | 'VIDEO'; sortOrder: number }[];
+}> {
+  const assets = await db.asset.findMany({
+    where: { id: { in: assetIds }, enabled: true },
+    select: { id: true, type: true },
+  });
+  if (assets.length === 0) return { found: 0, created: [] };
+
+  const existing = await db.productMedia.findMany({
+    where: { productId },
+    select: { assetId: true, role: true, sortOrder: true },
+  });
+  const seen = new Set(existing.map((row) => `${row.assetId}:${row.role}`));
+  let nextOrder = existing.reduce((max, row) => Math.max(max, row.sortOrder + 1), 0);
+
+  const creates: { productId: string; assetId: string; role: 'GALLERY' | 'VIDEO'; sortOrder: number }[] =
+    [];
+  for (const asset of assets) {
+    const role: 'GALLERY' | 'VIDEO' = asset.type === 'VIDEO' ? 'VIDEO' : 'GALLERY';
+    if (seen.has(`${asset.id}:${role}`)) continue;
+    seen.add(`${asset.id}:${role}`);
+    creates.push({ productId, assetId: asset.id, role, sortOrder: nextOrder });
+    nextOrder += 1;
+  }
+
+  if (creates.length > 0) await db.productMedia.createMany({ data: creates });
+
+  return {
+    found: assets.length,
+    created: creates.map((row) => ({ assetId: row.assetId, role: row.role, sortOrder: row.sortOrder })),
+  };
+}
 
 /** Adds the picked library assets to the gallery: images as GALLERY, videos as VIDEO. */
 export async function addProductMediaAction(
@@ -775,32 +1077,10 @@ export async function addProductMediaAction(
     });
     if (!product) return { status: 'error', message: t.products.notFound };
 
-    const assets = await db.asset.findMany({
-      where: { id: { in: assetIds }, enabled: true },
-      select: { id: true, type: true },
-    });
-    if (assets.length === 0) return { status: 'error', message: t.validation.invalidInput };
+    const { found, created } = await attachAssets(db, product.id, assetIds);
+    if (found === 0) return { status: 'error', message: t.validation.invalidInput };
 
-    const existing = await db.productMedia.findMany({
-      where: { productId: product.id },
-      select: { assetId: true, role: true, sortOrder: true },
-    });
-    const seen = new Set(existing.map((row) => `${row.assetId}:${row.role}`));
-    let nextOrder = existing.reduce((max, row) => Math.max(max, row.sortOrder + 1), 0);
-
-    const creates: { productId: string; assetId: string; role: 'GALLERY' | 'VIDEO'; sortOrder: number }[] =
-      [];
-    for (const asset of assets) {
-      const role: 'GALLERY' | 'VIDEO' = asset.type === 'VIDEO' ? 'VIDEO' : 'GALLERY';
-      if (seen.has(`${asset.id}:${role}`)) continue;
-      seen.add(`${asset.id}:${role}`);
-      creates.push({ productId: product.id, assetId: asset.id, role, sortOrder: nextOrder });
-      nextOrder += 1;
-    }
-
-    if (creates.length > 0) {
-      await db.productMedia.createMany({ data: creates });
-
+    if (created.length > 0) {
       await writeAudit({
         userId: user.id,
         actorEmail: user.email,
@@ -808,7 +1088,7 @@ export async function addProductMediaAction(
         targetType: 'Product',
         targetId: product.id,
         summary: t.products.galleryLabel,
-        detail: { slug: product.slug, assetIds: creates.map((row) => row.assetId) },
+        detail: { slug: product.slug, assetIds: created.map((row) => row.assetId) },
       });
     }
   } catch (error) {
@@ -816,7 +1096,7 @@ export async function addProductMediaAction(
     return { status: 'error', message: t.actions.saveFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   return { status: 'success', message: savedMessage(t) };
 }
 
@@ -884,7 +1164,7 @@ export async function moveProductMediaAction(
     return { status: 'error', message: t.actions.saveFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   return { status: 'success', message: savedMessage(t) };
 }
 
@@ -949,7 +1229,7 @@ export async function reorderProductMediaAction(
     return { status: 'error', message: t.actions.saveFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
   return { status: 'success', message: savedMessage(t) };
 }
 
@@ -997,6 +1277,345 @@ export async function removeProductMediaAction(
     return { status: 'error', message: t.actions.deleteFailed };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePublicCatalogue();
+  return { status: 'success', message: savedMessage(t) };
+}
+
+// ---------------------------------------------------------------------------
+// 结构化参数（ProductSpecification）
+// ---------------------------------------------------------------------------
+
+/** 一行参数：id 为空表示新增；三种语言各自可留空 */
+const specRowSchema = () =>
+  z.object({
+    id: z
+      .preprocess(
+        (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
+        z.string().max(200).optional(),
+      ),
+    name: z.object({
+      zh: textField(120),
+      en: textField(120),
+      vi: textField(120),
+    }),
+    value: z.object({
+      zh: textField(300),
+      en: textField(300),
+      vi: textField(300),
+    }),
+  });
+
+const specPayloadSchema = (t: AdminMessages) =>
+  z.object({
+    productId: requiredIdField(t),
+    rows: z.array(specRowSchema()).max(60, t.products.specTooMany),
+  });
+
+/**
+ * 表单版本：参数行是动态的，因此整表序列化成 JSON 放进一个隐藏字段。
+ *
+ * JSON 只是**传输方式**，不是信任边界 —— 解析后仍然走上面的 Zod 校验，
+ * 行数上限、字段长度、语言枚举都由服务端重新检查。
+ */
+const specFormSchema = (t: AdminMessages) =>
+  z.object({
+    productId: requiredIdField(t),
+    payload: z.string().max(200_000, t.products.specTooMany),
+  });
+
+type SpecTranslationDraft = { locale: AdminLocale; name: string; value: string | null };
+
+/**
+ * 保存整个参数表（顺序即 sortOrder）。
+ *
+ * 语义是「以提交内容为准」：新行创建、已有行更新、没提交的行删除。用 id 做差分而不是
+ * 全删重建，这样未改动的行在数据库里保持稳定（审计与后续引用都不会出现无意义的抖动）。
+ *
+ * 校验规则：
+ *   - 三种语言的名称与值都为空的行直接丢弃（用户点了「增加一条」却没填，不算错误）；
+ *   - 只要某一行填了值却没有任何语言的名称，就整体拒绝并提示 —— 静默丢弃用户输入才是真问题。
+ */
+export async function saveProductSpecificationsAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const form = parseForm(specFormSchema(t), formData, t);
+  if (!form.ok) return { status: 'error', message: form.message };
+
+  let rawRows: unknown[];
+  try {
+    const decoded: unknown = JSON.parse(form.data.payload);
+    if (!Array.isArray(decoded)) return { status: 'error', message: t.validation.invalidInput };
+    rawRows = decoded;
+  } catch {
+    return { status: 'error', message: t.validation.invalidInput };
+  }
+
+  // 形状体检：客户端与服务端的字段名一旦漂移，Zod 会把不认识的键安静地剥掉，
+  // 结果是「保存成功但一行都没写」。这里把这种情况变成显式错误。
+  if (
+    rawRows.length > 0 &&
+    !rawRows.some(
+      (row) => row !== null && typeof row === 'object' && 'name' in (row as Record<string, unknown>),
+    )
+  ) {
+    console.error('[admin] save product specifications: payload shape mismatch');
+    return { status: 'error', message: t.validation.invalidInput };
+  }
+
+  const parsed = specPayloadSchema(t).safeParse({
+    productId: form.data.productId,
+    rows: rawRows,
+  });
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { status: 'error', message: issue?.message ?? t.validation.invalidInput };
+  }
+
+  const normalized: { id?: string; translations: SpecTranslationDraft[] }[] = [];
+
+  for (const row of parsed.data.rows) {
+    const translations: SpecTranslationDraft[] = [];
+    let hasAnyValue = false;
+
+    for (const locale of ADMIN_LOCALES) {
+      const name = row.name[locale].trim();
+      const value = row.value[locale].trim();
+      if (value) hasAnyValue = true;
+      if (!name) continue;
+      translations.push({ locale, name, value: value || null });
+    }
+
+    if (translations.length === 0) {
+      // 整行空白：当作未填写，忽略；但填了值却没名称时明确报错，不静默丢数据
+      if (hasAnyValue) return { status: 'error', message: t.products.specNameRequired };
+      continue;
+    }
+
+    normalized.push({ id: row.id, translations });
+  }
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const product = await db.product.findUnique({
+      where: { id: parsed.data.productId },
+      select: { id: true, slug: true },
+    });
+    if (!product) return { status: 'error', message: t.products.notFound };
+
+    await db.$transaction(async (tx) => {
+      const existing = await tx.productSpecification.findMany({
+        where: { productId: product.id },
+        select: { id: true },
+      });
+      const existingIds = new Set(existing.map((row) => row.id));
+      const kept = new Set<string>();
+
+      for (let index = 0; index < normalized.length; index += 1) {
+        const row = normalized[index];
+
+        if (row.id && existingIds.has(row.id)) {
+          kept.add(row.id);
+          await tx.productSpecification.update({
+            where: { id: row.id },
+            data: { sortOrder: index },
+          });
+          // 语言行先清后建：这样删掉某种语言的名称后不会留下孤立的旧值
+          await tx.productSpecificationTranslation.deleteMany({
+            where: { specificationId: row.id },
+          });
+          await tx.productSpecificationTranslation.createMany({
+            data: row.translations.map((tr) => ({
+              specificationId: row.id as string,
+              locale: tr.locale,
+              name: tr.name,
+              value: tr.value,
+            })),
+          });
+          continue;
+        }
+
+        const created = await tx.productSpecification.create({
+          data: {
+            productId: product.id,
+            sortOrder: index,
+            translations: {
+              create: row.translations.map((tr) => ({
+                locale: tr.locale,
+                name: tr.name,
+                value: tr.value,
+              })),
+            },
+          },
+          select: { id: true },
+        });
+        kept.add(created.id);
+      }
+
+      const stale = existing.filter((row) => !kept.has(row.id)).map((row) => row.id);
+      if (stale.length > 0) {
+        await tx.productSpecification.deleteMany({ where: { id: { in: stale } } });
+      }
+    });
+
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      action: 'UPDATE',
+      targetType: 'Product',
+      targetId: product.id,
+      summary: t.products.specsSection,
+      detail: { slug: product.slug, count: normalized.length },
+    });
+  } catch (error) {
+    console.error('[admin] save product specifications failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+
+  revalidatePublicCatalogue();
+  return { status: 'success', message: savedMessage(t) };
+}
+
+// ---------------------------------------------------------------------------
+// 把图库里的素材指定为封面 / 悬停视频
+// ---------------------------------------------------------------------------
+
+const assetRoleSchema = z.object({
+  productId: z.string().trim().min(1),
+  assetId: z.string().trim().min(1).max(200),
+  role: z.enum(['cover', 'hover']),
+});
+
+/**
+ * 在图库里直接指定「产品封面」或「列表悬停视频」。
+ *
+ * 悬停视频必须引用 VIDEO 类型素材 —— 这条规则同时写在数据模型注释、服务端校验与
+ * 媒体库删除时的引用检查里，保证不会出现「图片当视频」或删除视频后卡片静默失效。
+ */
+export async function setProductAssetRoleAction(input: {
+  productId: string;
+  assetId: string;
+  role: 'cover' | 'hover';
+}): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const parsed = assetRoleSchema.safeParse(input);
+  if (!parsed.success) return { status: 'error', message: t.validation.invalidInput };
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const product = await db.product.findUnique({
+      where: { id: parsed.data.productId },
+      select: { id: true, slug: true },
+    });
+    if (!product) return { status: 'error', message: t.products.notFound };
+
+    if (parsed.data.role === 'cover') {
+      const error = await checkImageAsset(db, parsed.data.assetId, t);
+      if (error) return error;
+
+      await db.product.update({
+        where: { id: product.id },
+        data: { coverAssetId: parsed.data.assetId },
+      });
+    } else {
+      const error = await checkVideoAsset(db, parsed.data.assetId, t);
+      if (error) return error;
+
+      await db.product.update({
+        where: { id: product.id },
+        data: { hoverVideoAssetId: parsed.data.assetId },
+      });
+    }
+
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      action: 'UPDATE',
+      targetType: 'Product',
+      targetId: product.id,
+      summary: parsed.data.role === 'cover' ? t.products.coverLabel : t.products.hoverVideoLabel,
+      detail: { slug: product.slug, assetId: parsed.data.assetId },
+    });
+  } catch (error) {
+    console.error('[admin] set product asset role failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+
+  revalidatePublicCatalogue();
+  return { status: 'success', message: savedMessage(t) };
+}
+
+// ---------------------------------------------------------------------------
+// 直接上传后立即绑定
+// ---------------------------------------------------------------------------
+
+const attachSchema = z.object({
+  productId: z.string().trim().min(1),
+  assetIds: z.array(z.string().trim().min(1).max(200)).min(1).max(100),
+});
+
+/**
+ * 把刚上传完成的素材立即挂到当前商品。
+ *
+ * 上传走 `POST /api/admin/media/upload`（原始字节流 + magic bytes 校验 + 体积极限），
+ * 该接口只创建 Asset；「绑定到哪个商品」这一步由本 action 完成，两者都要求管理员会话，
+ * 并且这里会重新校验素材确实存在且已启用 —— 客户端传什么都不能越权。
+ */
+export async function attachUploadedAssetsAction(input: {
+  productId: string;
+  assetIds: string[];
+}): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const parsed = attachSchema.safeParse(input);
+  if (!parsed.success) return { status: 'error', message: t.validation.invalidInput };
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const product = await db.product.findUnique({
+      where: { id: parsed.data.productId },
+      select: { id: true, slug: true },
+    });
+    if (!product) return { status: 'error', message: t.products.notFound };
+
+    const { found, created } = await attachAssets(db, product.id, parsed.data.assetIds);
+    if (found === 0) return { status: 'error', message: t.products.uploadBindFailed };
+
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      action: 'CREATE',
+      targetType: 'Product',
+      targetId: product.id,
+      summary: t.products.galleryLabel,
+      detail: { slug: product.slug, assetIds: created.map((row) => row.assetId), source: 'upload' },
+    });
+  } catch (error) {
+    console.error('[admin] attach uploaded assets failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+
+  revalidatePublicCatalogue();
   return { status: 'success', message: savedMessage(t) };
 }
