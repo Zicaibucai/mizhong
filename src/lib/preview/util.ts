@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Locale } from '@/lib/i18n/config';
+import { locales } from '@/lib/i18n';
 import type { Dict } from '@/lib/i18n';
 import type { ContactView } from '@/lib/content';
 import { PUBLIC_CONTACTS } from '@/lib/contact-config';
@@ -88,4 +89,39 @@ export function splitLines(title: string): string[] {
 /** 两位序号：01 / 02 / … 用于编辑式编号 */
 export function ordinal(index: number): string {
   return String(index + 1).padStart(2, '0');
+}
+
+/**
+ * 给站内绝对路径补上语言前缀。
+ *
+ * 内容层里的导航地址是 `#anchor`、`/products` 这类与语言无关的写法
+ * （正式站依赖 middleware 做 308 重定向）。预览页直接生成带前缀的地址，
+ * 既少一跳重定向，也保证从商品页返回时仍停留在当前语言。
+ */
+export function withLocale(locale: Locale, href: string): string {
+  const value = (href ?? '').trim();
+  if (!value) return `/${locale}`;
+  if (value.startsWith('#') || value.startsWith('//')) return value;
+  if (!value.startsWith('/')) return value;
+
+  const segments = value.split('/').filter(Boolean);
+  if (locales.includes(segments[0] as Locale)) return value;
+  return `/${locale}${value}`;
+}
+
+/**
+ * 询盘入口：优先使用可预填主题的邮件地址，其次 WhatsApp，
+ * 最后回退到页内锚点（保证按钮永远有去处）。
+ */
+export function inquiryHref(channels: PreviewChannel[], subject: string, anchor = '#inquiry'): string {
+  const email = channels.find((channel) => channel.key === 'email');
+  if (email?.href.startsWith('mailto:')) {
+    const [address] = email.href.replace(/^mailto:/, '').split('?');
+    return `mailto:${address}?subject=${encodeURIComponent(subject)}`;
+  }
+
+  const whatsapp = channels.find((channel) => channel.key === 'whatsapp');
+  if (whatsapp?.href) return whatsapp.href;
+
+  return anchor;
 }

@@ -6,7 +6,7 @@ import { cssVars } from '@/lib/preview/util';
  * 预览页版式原子：编辑式栅格容器与区块标题。
  *
  * 正式站使用 max-w-7xl；预览页需要更大的画布与更宽的外边距，
- * 才能撑起「超大排版 + 大量留白」的编辑式版面，因此单独定义容器。
+ * 才能撑起「超大排版」的编辑式版面，因此单独定义容器。
  */
 
 export function PreviewContainer({
@@ -36,13 +36,17 @@ interface SectionHeadProps {
   subtitle?: string;
   /** 标题的分行控制：限制最大宽度，避免长句横贯整行 */
   titleClassName?: string;
+  /** 与领域标签同在一行的右侧信息（如数据来源、条目数） */
+  meta?: ReactNode;
   tone?: 'light' | 'dark';
   className?: string;
 }
 
 /**
  * 区块标题：序号 + 细线 + 领域标签，然后是超大标题与导语。
- * 标题逐行做遮罩上浮（滚动进入视口后播放一次）。
+ * 标题逐行做遮罩上浮（滚动进入视口后播放一次，首屏内元素加载即播放）。
+ *
+ * 间距刻意收得比正文紧：标题与内容属于同一个阅读单元，中间不该出现整屏空白。
  */
 export function SectionHead({
   index,
@@ -50,6 +54,7 @@ export function SectionHead({
   title,
   subtitle,
   titleClassName,
+  meta,
   tone = 'light',
   className,
 }: SectionHeadProps) {
@@ -62,12 +67,7 @@ export function SectionHead({
   return (
     <div className={className} data-reveal-lines>
       {/* 序号 · 细线 · 领域标签 */}
-      <div
-        className={cn(
-          'flex items-center gap-4',
-          dark ? 'text-copper-300' : 'text-copper-700',
-        )}
-      >
+      <div className={cn('flex items-center gap-4', dark ? 'text-copper-300' : 'text-copper-700')}>
         <span className="pv-num pv-mono" aria-hidden="true">
           {index}
         </span>
@@ -75,18 +75,19 @@ export function SectionHead({
           className="h-px flex-1"
           style={{ backgroundColor: dark ? 'var(--pv-rule-dark)' : 'var(--pv-rule)' }}
         />
+        {meta ? <span className={cn(dark ? 'text-navy-300' : 'text-muted')}>{meta}</span> : null}
         <span className="pv-mono">{eyebrow}</span>
       </div>
 
       <h2
         className={cn(
-          'pv-display mt-8 text-[clamp(1.9rem,4vw,3.4rem)]',
+          'pv-display mt-6 text-[clamp(1.75rem,3.6vw,3.1rem)]',
           dark ? 'text-ivory-50' : 'text-navy-950',
           titleClassName,
         )}
       >
         {lines.map((line, i) => (
-          <span key={line} className="pv-mask" style={cssVars({ '--pv-delay': `${i * 110}ms` })}>
+          <span key={line} className="pv-mask" style={cssVars({ '--pv-delay': `${i * 100}ms` })}>
             <span>{line}</span>
           </span>
         ))}
@@ -96,10 +97,10 @@ export function SectionHead({
         <p
           data-reveal
           className={cn(
-            'mt-6 max-w-2xl text-[0.95rem] leading-relaxed',
+            'mt-5 max-w-2xl text-[0.95rem] leading-relaxed',
             dark ? 'text-navy-200' : 'text-muted',
           )}
-          style={cssVars({ '--pv-delay': '160ms' })}
+          style={cssVars({ '--pv-delay': '120ms' })}
         >
           {subtitle}
         </p>

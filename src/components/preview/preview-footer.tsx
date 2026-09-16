@@ -49,17 +49,28 @@ export function PreviewFooter({
           <div className="col-span-6 lg:col-span-3">
             <h3 className="pv-mono text-[0.58rem] text-navy-400">{labels.company}</h3>
             <ul className="mt-5 space-y-2.5">
-              {nav.map((item) => (
-                <li key={`${item.href}-${item.label}`}>
-                  <a
-                    href={item.href}
-                    {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                    className="text-[0.85rem] text-navy-200 transition-colors hover:text-ivory-50"
-                  >
-                    {item.label}
-                  </a>
-                </li>
-              ))}
+              {nav.map((item) =>
+                !item.external && item.href.startsWith('/') ? (
+                  <li key={`${item.href}-${item.label}`}>
+                    <Link
+                      href={item.href}
+                      className="text-[0.85rem] text-navy-200 transition-colors hover:text-ivory-50"
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ) : (
+                  <li key={`${item.href}-${item.label}`}>
+                    <a
+                      href={item.href}
+                      {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                      className="text-[0.85rem] text-navy-200 transition-colors hover:text-ivory-50"
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                ),
+              )}
             </ul>
           </div>
 

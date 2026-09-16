@@ -6,14 +6,17 @@ import { FibreField } from '../fibre-field';
 import { PreviewContainer } from '../shell';
 
 /**
- * 首屏：接近全屏的编辑式开场。
+ * 首屏：接近满屏的编辑式开场。
  *
  * 无真实照片时的完整性由四层构成：
  *   1. 纤维场画布（随指针与滚动克制运动）
  *   2. 十二栏细线网格（极低对比的秩序感）
- *   3. 超大分行标题（逐行遮罩上浮）
+ *   3. 超大分行标题（逐行遮罩上浮，加载即播放）
  *   4. 右侧材料分类索引 + 底部滚动提示
  * 不出现任何「媒体占位 / 待上传」字样，也不使用任何伪造影像。
+ *
+ * 高度用 clamp(34rem, 86svh, 90svh)（见 preview.css 的 .pv-hero）：
+ * 手机上不至于顶掉下一屏，桌面上仍保留开场气势，同时不留整屏空档。
  */
 export function PreviewHero({
   locale,
@@ -25,6 +28,7 @@ export function PreviewHero({
   secondaryLabel,
   secondaryHref,
   categories,
+  categoryHref,
   indexLabel,
   scrollLabel,
 }: {
@@ -37,6 +41,8 @@ export function PreviewHero({
   secondaryLabel: string;
   secondaryHref: string;
   categories: ReadonlyArray<{ name: string; desc: string }>;
+  /** 分类索引的落点（产品目录） */
+  categoryHref: string;
   indexLabel: string;
   scrollLabel: string;
 }) {
@@ -45,13 +51,14 @@ export function PreviewHero({
   // 否则中文标题会在词组中间断行。
   const sizeClass =
     locale === 'zh'
-      ? 'text-[clamp(1.8rem,6.2vw,5.8rem)]'
-      : 'text-[clamp(1.7rem,5.2vw,4.8rem)]';
+      ? 'text-[clamp(1.75rem,5.6vw,5.2rem)]'
+      : 'text-[clamp(1.65rem,4.8vw,4.4rem)]';
 
   return (
     <section
+      id="hero"
       data-pv-hero
-      className="relative isolate flex min-h-[100svh] flex-col overflow-hidden bg-navy-950 text-ivory-50"
+      className="pv-hero relative isolate flex flex-col overflow-hidden bg-navy-950 text-ivory-50"
     >
       {/* 背景层：纤维场 + 暗角 */}
       <div className="absolute inset-0 -z-10">
@@ -63,7 +70,7 @@ export function PreviewHero({
         />
       </div>
 
-      <PreviewContainer className="relative flex flex-1 flex-col justify-between gap-10 pb-12 pt-32 sm:pt-36 lg:pb-14 lg:pt-40">
+      <PreviewContainer className="relative flex flex-1 flex-col justify-between gap-8 pb-10 pt-28 sm:pt-32 lg:pb-12 lg:pt-32">
         {/* 十二栏细线：与内容栅格严格对齐，作为版面的秩序基线 */}
         <div
           aria-hidden="true"
@@ -91,14 +98,14 @@ export function PreviewHero({
         </div>
 
         {/* 主体：超大分行标题 + 右侧材料索引（同一视觉带） */}
-        <div className="relative grid grid-cols-12 items-start gap-x-6 gap-y-12">
-          <div className="col-span-12 lg:col-span-9">
+        <div className="relative grid grid-cols-12 items-start gap-x-6 gap-y-10">
+          <div className="col-span-12 lg:col-span-8">
             <h1 className={cn('pv-display', sizeClass)}>
               {lines.map((line, i) => (
                 <span
                   key={line}
                   className="pv-mask"
-                  style={cssVars({ '--pv-delay': `${180 + i * 130}ms` })}
+                  style={cssVars({ '--pv-delay': `${150 + i * 110}ms` })}
                 >
                   <span>{line}</span>
                 </span>
@@ -106,15 +113,15 @@ export function PreviewHero({
             </h1>
 
             <p
-              className="pv-load mt-9 max-w-xl text-[0.95rem] leading-relaxed text-navy-200"
+              className="pv-load mt-7 max-w-xl text-[0.95rem] leading-relaxed text-navy-200"
               style={cssVars({ '--pv-delay': '120ms' })}
             >
               {subtitle}
             </p>
 
             <div
-              className="pv-load mt-9 flex flex-wrap gap-3"
-              style={cssVars({ '--pv-delay': '220ms' })}
+              className="pv-load mt-8 flex flex-wrap gap-3"
+              style={cssVars({ '--pv-delay': '200ms' })}
             >
               <a href={primaryHref} className="pv-btn pv-btn-solid">
                 <span>{primaryLabel}</span>
@@ -130,15 +137,15 @@ export function PreviewHero({
           {/* 索引：真实分类，编号编排 —— 既是内容也是版面秩序 */}
           <div
             className="pv-load col-span-12 lg:col-span-3 lg:col-start-10"
-            style={cssVars({ '--pv-delay': '300ms' })}
+            style={cssVars({ '--pv-delay': '260ms' })}
           >
-            <p className="pv-mono mb-3 text-[0.6rem] text-navy-300">{indexLabel}</p>
+            <p className="pv-mono mb-2.5 text-[0.6rem] text-navy-300">{indexLabel}</p>
             <ul>
               {categories.map((category, i) => (
                 <li key={category.name}>
                   <a
-                    href="#products"
-                    className="group flex items-baseline gap-4 border-t border-[var(--pv-rule-dark)] py-2"
+                    href={categoryHref}
+                    className="group flex items-baseline gap-4 border-t border-[var(--pv-rule-dark)] py-1.5"
                   >
                     <span className="pv-num pv-mono text-[0.6rem] text-copper-300/70">
                       {ordinal(i)}
@@ -154,13 +161,10 @@ export function PreviewHero({
         </div>
 
         {/* 底部基线：细线收口，再接滚动提示 */}
-        <div
-          className="pv-load relative"
-          style={cssVars({ '--pv-delay': '380ms' })}
-        >
+        <div className="pv-load relative" style={cssVars({ '--pv-delay': '320ms' })}>
           <div className="h-px w-full bg-[var(--pv-rule-dark)]" />
-          <div className="mt-5 flex items-center gap-4">
-            <span className="pv-scrollcue relative block h-7 w-px bg-ivory-50/15" />
+          <div className="mt-4 flex items-center gap-4">
+            <span className="pv-scrollcue relative block h-6 w-px bg-ivory-50/15" />
             <span className="pv-mono text-[0.58rem] text-navy-300">{scrollLabel}</span>
           </div>
         </div>

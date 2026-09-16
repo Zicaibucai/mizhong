@@ -1,5 +1,5 @@
 import type { Locale } from '@/lib/i18n/config';
-import { getMediaBySlot, type MediaSlot } from '@/lib/media';
+import { getMediaBySlot, altFor, type MediaSlot } from '@/lib/media';
 import { cn } from '@/lib/cn';
 import { TextileArtwork, type WeaveVariant } from './textile-artwork';
 
@@ -12,9 +12,21 @@ import { TextileArtwork, type WeaveVariant } from './textile-artwork';
  * 与正式站的区别在**未绑定素材时的回退**：
  *   正式站渲染带「媒体占位」字样的开发占位框；
  *   预览页渲染生成式织纹图形（TextileArtwork），前台不出现任何开发文案。
+ *
+ * 三种素材来源，优先级从高到低：
+ *   1. `asset` —— 调用方已拿到的真实素材（如商品主图）；
+ *   2. `slot`  —— 按语义化媒体位查询后台绑定；
+ *   3. 生成式织纹图形 —— 装饰性回退，屏幕阅读器会说明它不是产品照片。
  */
 
 type Tone = 'navy' | 'ink' | 'ivory' | 'sand';
+
+export interface PreviewAssetView {
+  type?: 'image' | 'video';
+  url: string;
+  posterUrl?: string | null;
+  alt: string;
+}
 
 interface ArtSpec {
   variant: WeaveVariant;
@@ -35,15 +47,18 @@ const SLOT_ART: Record<string, ArtSpec> = {
 };
 
 interface PreviewMediaProps {
-  slot: MediaSlot;
+  /** 语义化媒体位（可选：调用方直接给 asset 时不需要） */
+  slot?: MediaSlot;
   locale: Locale;
   /** SVG defs 的唯一前缀（同一页面内不可重复） */
   uid: string;
+  /** 调用方已持有的真实素材（如商品主图），优先于 slot */
+  asset?: PreviewAssetView | null;
   /** 覆盖媒体位默认的织纹结构 */
   variant?: WeaveVariant;
   /** 覆盖媒体位默认的色调 */
   tone?: Tone;
-  /** 真实素材的替代文本（未绑定素材时用于说明这是生成的装饰图形） */
+  /** 生成式图形对屏幕阅读器的说明（说明它不是产品照片） */
   alt?: string;
   className?: string;
 }
@@ -52,33 +67,55 @@ export async function PreviewMedia({
   slot,
   locale,
   uid,
+  asset,
   variant,
   tone,
   alt,
   className,
 }: PreviewMediaProps) {
-  const asset = await getMediaBySlot(slot, locale);
-  const art = SLOT_ART[slot] ?? { variant: 'warp', tone: 'navy' };
+  // 归一成单一形态，避免「调用方给的素材」与「后台媒体位素材」两套类型在渲染处交叉
+  let resolved: {
+    type: 'image' | 'video';
+    url: string;
+    posterUrl: string | null;
+    alt: string;
+  } | null = null;
+
+  if (asset) {
+    resolved = {
+      type: asset.type ?? 'image',
+      url: asset.url,
+      posterUrl: asset.posterUrl ?? null,
+      alt: asset.alt,
+    };
+  } else if (slot) {
+    const found = await getMediaBySlot(slot, locale);
+    if (found) {
+      resolved = {
+        type: found.type,
+        url: found.url,
+        posterUrl: found.posterUrl ?? null,
+        alt: altFor(found, locale),
+      };
+    }
+  }
+
+  const art = (slot ? SLOT_ART[slot] : undefined) ?? { variant: 'warp', tone: 'navy' };
 
   return (
     <div className={cn('pv-plate-art absolute inset-0', className)}>
-      {asset ? (
-        asset.type === 'video' ? (
+      {resolved ? (
+        resolved.type === 'video' ? (
           <video
             className="h-full w-full object-cover"
-            poster={asset.posterUrl}
+            poster={resolved.posterUrl ?? undefined}
             controls
             preload="metadata"
-            aria-label={asset.alt[locale]}
+            aria-label={resolved.alt}
           />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element -- 素材将来自 OSS 动态域名，接入后统一切换到 next/image + remotePatterns
-          <img
-            src={asset.url}
-            alt={asset.alt[locale]}
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
+          <img src={resolved.url} alt={resolved.alt} loading="lazy" className="pv-tile-img" />
         )
       ) : (
         <TextileArtwork
@@ -89,7 +126,7 @@ export async function PreviewMedia({
         />
       )}
       {/* 屏幕阅读器说明：这是生成的装饰图形，不是产品照片 */}
-      {!asset && alt ? <span className="sr-only">{alt}</span> : null}
+      {!resolved && alt ? <span className="sr-only">{alt}</span> : null}
     </div>
   );
 }

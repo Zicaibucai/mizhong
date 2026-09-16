@@ -1,30 +1,32 @@
 import { type Locale } from '@/lib/i18n';
-import { MEDIA_SLOTS } from '@/lib/media';
+import { MEDIA_SLOTS, getMediaBySlots } from '@/lib/media';
+import type { PreviewCopy } from '@/lib/preview/content';
 import { cssVars, ordinal } from '@/lib/preview/util';
 import { PreviewMedia } from '../preview-media';
 import { PreviewContainer, SectionHead } from '../shell';
 
 /**
- * 质量与信任：大幅材料细节 + 技术标注 + 层级排版。
+ * 质量与信任：通用供应链质量流程 + 材料细节。
  *
- * 公司尚未确认任何认证资质，因此这里**不渲染任何证书图形或占位框**：
- * 只用后台可编辑的说明文字（certificatesNote）如实陈述现状。
- * 材料细节同样是生成的织纹示意，不是产品照片。
+ * 上一版在大面积空白里放了一块「认证资质」区域，实际没有任何可展示的内容。
+ * 这一版改为两条实打实的信息：
+ *   1. 四条通用、可核对的供应链质量流程（规格确认 → 供应方与来料核验 →
+ *      出货前检验 → 包装与单证复核），用编号 + 流程线紧凑呈现；
+ *   2. 一个材料细节媒体位（后台绑定素材后自动替换织纹示意）。
+ *
+ * 关于证书：公司尚未确认任何认证资料，因此**不渲染任何证书图形或空框**，
+ * 也不虚构任何证书、工厂、产能或检测数据。证书位（certificate.1/2/3）已经
+ * 预留好：后台一旦上传真实素材，这里会自动出现缩略图；没有素材时只保留
+ * 一句简短、如实的说明。
  */
-const CALLOUTS: ReadonlyArray<{ left: string; top: string; width: string }> = [
-  { left: '8%', top: '20%', width: '5rem' },
-  { left: '52%', top: '47%', width: '7rem' },
-  { left: '16%', top: '74%', width: '4rem' },
-];
-
-export function PreviewQuality({
+export async function PreviewQuality({
   locale,
   index,
   eyebrow,
   title,
   subtitle,
   body,
-  principles,
+  copy,
   certificatesTitle,
   certificatesNote,
   artworkLabel,
@@ -35,13 +37,23 @@ export function PreviewQuality({
   title: string;
   subtitle: string;
   body: string;
-  principles: ReadonlyArray<{ title: string; desc: string }>;
+  copy: PreviewCopy;
   certificatesTitle: string;
   certificatesNote: string;
   artworkLabel: string;
 }) {
+  const certificates = await getMediaBySlots(
+    [MEDIA_SLOTS.certificate1, MEDIA_SLOTS.certificate2, MEDIA_SLOTS.certificate3],
+    locale,
+  );
+  const certificateList = Object.values(certificates).filter(
+    (asset): asset is NonNullable<typeof asset> => Boolean(asset),
+  );
+
+  const steps = copy.qualitySteps;
+
   return (
-    <section id="quality" className="relative bg-ivory-50 py-24 lg:py-32">
+    <section id="quality" className="pv-section relative bg-ivory-50">
       <PreviewContainer>
         <SectionHead
           index={index}
@@ -54,16 +66,47 @@ export function PreviewQuality({
         {body ? (
           <p
             data-reveal
-            className="pv-display mt-12 max-w-4xl text-[clamp(1.1rem,2.2vw,1.7rem)] text-navy-900/85"
+            className="pv-display mt-8 max-w-3xl text-[clamp(1rem,1.8vw,1.4rem)] text-navy-900/85"
           >
             {body}
           </p>
         ) : null}
 
-        <div className="mt-16 grid grid-cols-12 gap-x-6 gap-y-14">
-          {/* 材料细节：放大的经纬结构 + 编号引线 */}
-          <div className="col-span-12 lg:col-span-8" data-reveal="plate">
-            <div className="pv-plate relative aspect-[3/2] w-full">
+        <div className="pv-head-gap grid grid-cols-12 gap-x-6 gap-y-9">
+          {/* 左：四条通用质量流程，编号 + 流程线 */}
+          <div className="col-span-12 lg:col-span-7">
+            <p className="pv-mono text-[0.58rem] text-copper-700">{copy.qualityProcessLabel}</p>
+
+            <ol className="mt-3">
+              {steps.map((step, i) => (
+                <li
+                  key={step.title}
+                  data-reveal
+                  style={cssVars({ '--pv-delay': `${i * 70}ms` })}
+                  className="pv-step"
+                >
+                  <span className="pv-step-node">
+                    <span className="pv-num pv-mono text-[0.6rem] text-copper-700">
+                      {ordinal(i)}
+                    </span>
+                  </span>
+
+                  <div className="pb-1">
+                    <h3 className="text-[0.95rem] font-medium tracking-[-0.01em] text-navy-950">
+                      {step.title}
+                    </h3>
+                    <p className="mt-1.5 max-w-xl text-[0.84rem] leading-relaxed text-muted">
+                      {step.desc}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          {/* 右：材料细节媒体位（未绑定素材时为克制的织纹示意） */}
+          <div className="col-span-12 lg:col-span-5 lg:col-start-8" data-reveal="plate">
+            <div className="pv-slot relative aspect-[4/3] w-full">
               <PreviewMedia
                 slot={MEDIA_SLOTS.qualityImage}
                 locale={locale}
@@ -72,65 +115,45 @@ export function PreviewQuality({
                 tone="ink"
                 alt={artworkLabel}
               />
-
-              {/* 技术标注：编号 + 引线，指向材料结构的不同区域 */}
-              <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
-                {principles.slice(0, CALLOUTS.length).map((_, i) => (
-                  <div
-                    key={i}
-                    className="absolute flex items-center gap-2"
-                    style={{ left: CALLOUTS[i].left, top: CALLOUTS[i].top }}
-                  >
-                    <span className="pv-num pv-mono text-[0.58rem] text-copper-300">
-                      {ordinal(i)}
-                    </span>
-                    <span
-                      className="block h-px bg-copper-300/60"
-                      style={{ width: CALLOUTS[i].width }}
-                    />
-                  </div>
-                ))}
-              </div>
             </div>
-
-            <p className="pv-mono mt-4 text-[0.58rem] text-muted">{artworkLabel}</p>
-          </div>
-
-          {/* 三条原则：编号 + 细线，不做卡片 */}
-          <div className="col-span-12 lg:col-span-4">
-            <ol>
-              {principles.map((principle, i) => (
-                <li
-                  key={principle.title}
-                  data-reveal
-                  style={cssVars({ '--pv-delay': `${i * 90}ms` })}
-                  className="border-t border-[var(--pv-rule)] py-6 first:border-t-0 first:pt-0"
-                >
-                  <div className="flex items-baseline gap-4">
-                    <span className="pv-num pv-mono text-[0.6rem] text-copper-700">
-                      {ordinal(i)}
-                    </span>
-                    <h3 className="text-[1rem] font-medium tracking-[-0.01em] text-navy-950">
-                      {principle.title}
-                    </h3>
-                  </div>
-                  <p className="mt-2 pl-8 text-[0.85rem] leading-relaxed text-muted">
-                    {principle.desc}
-                  </p>
-                </li>
-              ))}
-            </ol>
+            <p className="pv-mono mt-3 text-[0.56rem] text-muted">{artworkLabel}</p>
           </div>
         </div>
 
-        {/* 认证资质：如实说明现状，不展示任何证书图形 */}
-        <div className="mt-20 grid grid-cols-12 gap-x-6 gap-y-4 border-t border-[var(--pv-rule)] pt-8">
+        {/* 认证资质：如实说明现状；后台绑定证书素材后自动出现缩略图 */}
+        <div className="mt-10 grid grid-cols-12 gap-x-6 gap-y-5 border-t border-[var(--pv-rule)] pt-6">
           <h3 className="pv-mono col-span-12 text-[0.6rem] text-muted lg:col-span-3">
             {certificatesTitle}
           </h3>
-          <p className="col-span-12 max-w-2xl text-[0.9rem] leading-relaxed text-navy-800 lg:col-span-8 lg:col-start-5">
-            {certificatesNote}
-          </p>
+
+          <div className="col-span-12 lg:col-span-8 lg:col-start-5">
+            <p className="max-w-2xl text-[0.88rem] leading-relaxed text-navy-800">
+              {certificatesNote}
+            </p>
+
+            {certificateList.length > 0 ? (
+              <ul className="mt-5 flex flex-wrap gap-3">
+                {certificateList.map((asset) => (
+                  <li key={asset.id}>
+                    <a
+                      href={asset.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="pv-slot block h-24 w-32 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-copper-500"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入后统一切换到 next/image */}
+                      <img
+                        src={asset.thumbnailUrl || asset.url}
+                        alt={asset.alt[locale] || asset.title[locale] || certificatesTitle}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </div>
       </PreviewContainer>
     </section>

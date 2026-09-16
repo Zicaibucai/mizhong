@@ -52,9 +52,9 @@ export function PreviewHeader({
     <header data-pv-header className="pv-header fixed inset-x-0 top-0 z-50">
       <PreviewContainer>
         <div className="pv-header-inner flex items-center justify-between gap-6">
-          {/* 品牌：未上传 Logo 时只显示文字公司名 */}
+          {/* 品牌：回到预览页自身（当前语言），未上传 Logo 时只显示文字公司名 */}
           <Link
-            href={`/${locale}`}
+            href={`/${locale}/design-preview`}
             className="flex min-w-0 items-center gap-3 text-current"
             aria-label={name}
           >
@@ -65,16 +65,27 @@ export function PreviewHeader({
           </Link>
 
           <nav aria-label={labels.primaryNav} className="hidden items-center gap-9 lg:flex">
-            {navItems.map((item) => (
-              <a
-                key={`${item.href}-${item.label}`}
-                href={item.href}
-                {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                className="pv-header-link pv-mono text-[0.75rem]"
-              >
-                {item.label}
-              </a>
-            ))}
+            {navItems.map((item) =>
+              // 站内路径用 next/link（客户端跳转 + 预取），页内锚点保持原生 <a>
+              !item.external && item.href.startsWith('/') ? (
+                <Link
+                  key={`${item.href}-${item.label}`}
+                  href={item.href}
+                  className="pv-header-link pv-mono text-[0.75rem]"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <a
+                  key={`${item.href}-${item.label}`}
+                  href={item.href}
+                  {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                  className="pv-header-link pv-mono text-[0.75rem]"
+                >
+                  {item.label}
+                </a>
+              ),
+            )}
           </nav>
 
           <div className="flex shrink-0 items-center gap-2">

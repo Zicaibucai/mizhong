@@ -10,7 +10,7 @@ import {
 } from '@/lib/i18n';
 import { site } from '@/lib/site-config';
 import { getSiteContent } from '@/lib/content';
-import { resolveChannels } from '@/lib/preview/util';
+import { resolveChannels, withLocale } from '@/lib/preview/util';
 import { BrandLogo } from '@/components/layout/brand-logo';
 import { PreviewHeader } from '@/components/preview/preview-header';
 import { PreviewFooter } from '@/components/preview/preview-footer';
@@ -58,19 +58,13 @@ export default async function PreviewLocaleLayout({
   const content = await getSiteContent(l);
   const channels = resolveChannels(l, t, content.contacts);
 
+  // 导航地址统一补上语言前缀：内容层里是 `/products` 这类与语言无关的写法，
+  // 预览页直接生成 `/{locale}/products`，少一次 308 跳转，也保证从商品页返回后
+  // 仍停留在当前语言（正式站由 middleware 兜底重定向，行为不变）。
+  const nav = content.nav.map((item) => ({ ...item, href: withLocale(l, item.href) }));
+
   return (
     <html lang={code} data-preview className={inter.variable}>
-      <head>
-        {/*
-          在首次绘制前标记 JS 可用：预览样式里所有「初始隐藏、滚动后揭示」的状态
-          都限定在 [data-js='on'] 之下，这样关闭 JS 时页面不会有任何内容缺失。
-        */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: "document.documentElement.setAttribute('data-js','on')",
-          }}
-        />
-      </head>
       <body>
         <a
           href="#main"
@@ -83,7 +77,7 @@ export default async function PreviewLocaleLayout({
           locale={l}
           name={content.company.name}
           logo={<BrandLogo locale={l} className="h-7 w-auto shrink-0" />}
-          nav={content.nav}
+          nav={nav}
           ctaHref="#inquiry"
           labels={{
             menu: t.nav.menu,
@@ -102,7 +96,7 @@ export default async function PreviewLocaleLayout({
           name={content.company.name}
           tagline={content.company.tagline}
           logo={<BrandLogo locale={l} className="h-8 w-auto shrink-0" />}
-          nav={content.nav}
+          nav={nav}
           channels={channels}
           labels={{
             company: t.footer.companyTitle,

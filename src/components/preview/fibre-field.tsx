@@ -37,6 +37,8 @@ export function FibreField({ className }: { className?: string }) {
     let running = true;
     let lastDraw = 0;
     let pointerActive = 0;
+    /** 窄屏（手机）：减少经线数量、降低绘制频率与像素密度 */
+    let lowPower = false;
 
     const pointer = { x: -9999, y: -9999 };
     let scrollPhase = window.scrollY;
@@ -45,7 +47,8 @@ export function FibreField({ className }: { className?: string }) {
       const rect = host.getBoundingClientRect();
       width = Math.max(1, rect.width);
       height = Math.max(1, rect.height);
-      dpr = Math.min(2, window.devicePixelRatio || 1);
+      lowPower = width < 640;
+      dpr = Math.min(lowPower ? 1.5 : 2, window.devicePixelRatio || 1);
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       canvas.style.width = `${width}px`;
@@ -59,7 +62,7 @@ export function FibreField({ className }: { className?: string }) {
       const dx = x - pointer.x;
       const dy = y - pointer.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const radius = 260;
+      const radius = lowPower ? 150 : 260;
       if (dist > radius) return 0;
       const falloff = 1 - dist / radius;
       return (dx >= 0 ? 1 : -1) * falloff * falloff * 26;
@@ -72,7 +75,7 @@ export function FibreField({ className }: { className?: string }) {
       const drift = (scrollPhase / Math.max(1, height)) * 0.6;
 
       /* ---- 细纤维：纵向密排，构成织物的"地"（不摆动，只做纹理） ---- */
-      const fineStep = width < 700 ? 12 : 9;
+      const fineStep = lowPower ? 16 : width < 700 ? 12 : 9;
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let x = 0; x <= width; x += fineStep) {
@@ -83,7 +86,10 @@ export function FibreField({ className }: { className?: string }) {
       ctx.stroke();
 
       /* ---- 经线：纵向丝束，构成织物的主体，随指针轻微让位 ---- */
-      const warpCount = Math.max(10, Math.min(42, Math.round(width / 52)));
+      // 手机端按屏宽稀疏取样（8–18 根），桌面最多 42 根
+      const warpCount = lowPower
+        ? Math.max(8, Math.min(18, Math.round(width / 96)))
+        : Math.max(10, Math.min(42, Math.round(width / 52)));
       for (let i = 0; i < warpCount; i += 1) {
         const baseX = ((i + 0.5) / warpCount) * width;
         const amplitude = 5 + (i % 4) * 2.4;
@@ -105,7 +111,7 @@ export function FibreField({ className }: { className?: string }) {
       }
 
       /* ---- 纬线：横向丝束，随滚动缓慢漂移 ---- */
-      const weftCount = width < 700 ? 9 : 16;
+      const weftCount = lowPower ? 6 : width < 700 ? 9 : 16;
       for (let i = 0; i < weftCount; i += 1) {
         const baseY = ((i + 0.5) / weftCount) * height;
         ctx.beginPath();
@@ -148,8 +154,8 @@ export function FibreField({ className }: { className?: string }) {
       if (!running) return;
       frame = requestAnimationFrame(loop);
 
-      // 指针静止时降频：环境漂移本身极慢，15fps 肉眼无差别
-      const interval = pointerActive > 0 ? 0 : 64;
+      // 指针静止时降频：环境漂移本身极慢，肉眼无差别；手机端进一步降到约 10fps
+      const interval = pointerActive > 0 ? 0 : lowPower ? 96 : 64;
       if (interval && time - lastDraw < interval) return;
       lastDraw = time;
       if (pointerActive > 0) pointerActive -= 1;
