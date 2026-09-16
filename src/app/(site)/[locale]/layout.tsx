@@ -11,6 +11,7 @@ import {
 } from '@/lib/i18n';
 import { site } from '@/lib/site-config';
 import { getSiteContent } from '@/lib/content';
+import { withLocale } from '@/lib/href';
 import { SiteHeader } from '@/components/layout/site-header';
 import { SiteFooter } from '@/components/layout/site-footer';
 import { ContactActions } from '@/components/layout/contact-actions';
@@ -93,6 +94,12 @@ export default async function LocaleLayout({
   const t = getDictionary(locale);
   const content = await getSiteContent(locale);
 
+  // 导航地址统一补语言前缀：内容层里是 `/products` 这类与语言无关的写法，
+  // 直接交给浏览器会落到 middleware 的 308，并被带到默认语言 zh ——
+  // 于是 /en 与 /vi 的访客点「产品」会掉回中文站。
+  // 页头、移动端菜单与页脚共用这一份结果，判断只在这里做一次。
+  const nav = content.nav.map((item) => ({ ...item, href: withLocale(locale, item.href) }));
+
   return (
     <html lang={code} className={inter.variable}>
       <body>
@@ -102,13 +109,13 @@ export default async function LocaleLayout({
         >
           {t.common.skipToContent}
         </a>
-        <SiteHeader locale={locale} name={content.company.name} nav={content.nav} />
+        <SiteHeader locale={locale} name={content.company.name} nav={nav} />
         <main id="main">{children}</main>
         <SiteFooter
           locale={locale}
           company={content.company}
           contacts={content.contacts}
-          nav={content.nav}
+          nav={nav}
         />
         <ContactActions locale={locale} contacts={content.contacts} />
       </body>

@@ -1,17 +1,11 @@
 import { getDictionary, type Locale } from '@/lib/i18n';
 import type { BlockView } from '@/lib/content';
 import { MEDIA_SLOTS, PRODUCT_MEDIA_SLOTS } from '@/lib/media';
+import { withLocale } from '@/lib/href';
 import { Container } from '@/components/ui/container';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { Button } from '@/components/ui/button';
 import { Media } from '@/components/ui/media';
-
-/** 站内路径补上语言前缀（锚点与绝对地址保持原样） */
-function withLocale(href: string, locale: Locale): string {
-  if (!href.startsWith('/')) return href;
-  if (/^\/(zh|en|vi)(\/|$)/.test(href)) return href;
-  return `/${locale}${href}`;
-}
 
 export function ProductsPreview({ locale, block }: { locale: Locale; block: BlockView }) {
   const t = getDictionary(locale);
@@ -43,7 +37,7 @@ export function ProductsPreview({ locale, block }: { locale: Locale; block: Bloc
         </div>
         {block.ctaLabel ? (
           <div className="mt-14 text-center">
-            <Button href={withLocale(block.ctaHref || '/products', locale)} variant="outline">
+            <Button href={withLocale(locale, block.ctaHref || '/products')} variant="outline">
               {block.ctaLabel}
             </Button>
           </div>

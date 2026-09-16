@@ -1,6 +1,5 @@
 import type { CSSProperties } from 'react';
 import type { Locale } from '@/lib/i18n/config';
-import { locales } from '@/lib/i18n';
 import type { Dict } from '@/lib/i18n';
 import type { ContactView } from '@/lib/content';
 import { PUBLIC_CONTACTS } from '@/lib/contact-config';
@@ -92,22 +91,10 @@ export function ordinal(index: number): string {
 }
 
 /**
- * 给站内绝对路径补上语言前缀。
- *
- * 内容层里的导航地址是 `#anchor`、`/products` 这类与语言无关的写法
- * （正式站依赖 middleware 做 308 重定向）。预览页直接生成带前缀的地址，
- * 既少一跳重定向，也保证从商品页返回时仍停留在当前语言。
+ * 站内链接补语言前缀：直接复用公共实现 `@/lib/href` 的 withLocale，
+ * 正式站与预览页共用同一套判断，不做第二份拷贝。
  */
-export function withLocale(locale: Locale, href: string): string {
-  const value = (href ?? '').trim();
-  if (!value) return `/${locale}`;
-  if (value.startsWith('#') || value.startsWith('//')) return value;
-  if (!value.startsWith('/')) return value;
-
-  const segments = value.split('/').filter(Boolean);
-  if (locales.includes(segments[0] as Locale)) return value;
-  return `/${locale}${value}`;
-}
+export { withLocale } from '@/lib/href';
 
 /**
  * 询盘入口：优先使用可预填主题的邮件地址，其次 WhatsApp，

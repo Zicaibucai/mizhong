@@ -1,6 +1,7 @@
 import { getDictionary, type Locale } from '@/lib/i18n';
 import type { BlockView } from '@/lib/content';
 import { MEDIA_SLOTS } from '@/lib/media';
+import { withLocale } from '@/lib/href';
 import { Container } from '@/components/ui/container';
 import { Button } from '@/components/ui/button';
 import { Eyebrow } from '@/components/ui/eyebrow';
@@ -36,7 +37,8 @@ export function Hero({ locale, block }: { locale: Locale; block: BlockView }) {
             </p>
           ) : null}
           <div className="mt-9 flex flex-wrap gap-4">
-            <Button href={block.ctaHref || '#products'} variant="accent" size="lg">
+            {/* 按钮地址来自后台，可能是 `/products` 这类无语言前缀的写法 */}
+            <Button href={withLocale(locale, block.ctaHref || '#products')} variant="accent" size="lg">
               {block.ctaLabel || t.hero.ctaPrimary}
             </Button>
             <Button href="#inquiry" variant="outlineLight" size="lg">
