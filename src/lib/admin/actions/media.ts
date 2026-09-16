@@ -471,7 +471,18 @@ export async function deleteAssetAction(_prev: FormState, formData: FormData): P
     });
     if (!asset) return { status: 'error', message: t.media.notFound };
 
-    const references = collectAssetReferences(asset, locale, t);
+    // posterUrl 是一个 URL 而非外键，因此单独查出「把该素材当封面的视频」
+    const posterUrls = [asset.url, asset.thumbnailUrl].filter(
+      (value): value is string => Boolean(value),
+    );
+    const posterOf = posterUrls.length
+      ? await db.asset.findMany({
+          where: { id: { not: asset.id }, posterUrl: { in: posterUrls } },
+          select: { id: true, key: true, type: true },
+        })
+      : [];
+
+    const references = collectAssetReferences({ ...asset, posterOf }, locale, t);
     if (references.length > 0 && !parsed.data.force) {
       return {
         status: 'error',
@@ -493,6 +504,12 @@ export async function deleteAssetAction(_prev: FormState, formData: FormData): P
         data: { coverAssetId: null },
       });
       await tx.slotBinding.deleteMany({ where: { assetId: asset.id } });
+      if (posterUrls.length) {
+        await tx.asset.updateMany({
+          where: { posterUrl: { in: posterUrls } },
+          data: { posterUrl: null },
+        });
+      }
       await tx.asset.delete({ where: { id: asset.id } });
     });
 

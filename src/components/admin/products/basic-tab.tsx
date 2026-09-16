@@ -26,12 +26,17 @@ import { AssetPicker } from './asset-picker';
 import { useDirtyForm } from './tabs';
 import type { ProductEditorData } from './types';
 
-function StatusButton({
-  value,
+/**
+ * Submit button for the publish control.
+ *
+ * The target value travels in a hidden input rather than on the button itself: React's form-action
+ * serialisation does not include the submitter button's name/value, so `<button name="target"
+ * value="publish">` would arrive without `target` and every publish attempt failed validation.
+ */
+function StatusSubmit({
   children,
   tone,
 }: {
-  value: 'publish' | 'draft';
   children: React.ReactNode;
   tone: 'primary' | 'secondary';
 }) {
@@ -40,8 +45,6 @@ function StatusButton({
   return (
     <button
       type="submit"
-      name="target"
-      value={value}
       disabled={pending}
       className={cn(
         'inline-flex h-10 items-center rounded-full px-5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
@@ -162,9 +165,7 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
       <section className="space-y-3 rounded-xl border border-navy-200 bg-white p-5">
         <h2 className="text-sm font-semibold text-navy-900">{t.products.publishStatus}</h2>
 
-        <form action={statusAction} className="space-y-3">
-          <input type="hidden" name="id" value={product.id} />
-
+        <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <span
               className={cn(
@@ -176,15 +177,17 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
             >
               {product.published ? t.products.statusPublished : t.products.statusDraft}
             </span>
-            {product.published ? (
-              <StatusButton value="draft" tone="secondary">
-                {t.products.unpublish}
-              </StatusButton>
-            ) : (
-              <StatusButton value="publish" tone="primary">
-                {t.products.publish}
-              </StatusButton>
-            )}
+            <form action={statusAction}>
+              <input type="hidden" name="id" value={product.id} />
+              <input
+                type="hidden"
+                name="target"
+                value={product.published ? 'draft' : 'publish'}
+              />
+              <StatusSubmit tone={product.published ? 'secondary' : 'primary'}>
+                {product.published ? t.products.unpublish : t.products.publish}
+              </StatusSubmit>
+            </form>
           </div>
 
           {statusState.status === 'error' && statusState.message ? (
@@ -193,7 +196,7 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
           {statusState.status === 'success' && statusState.message ? (
             <Alert kind="success">{statusState.message}</Alert>
           ) : null}
-        </form>
+        </div>
       </section>
 
       <section className="space-y-4 rounded-xl border border-navy-200 bg-white p-5">

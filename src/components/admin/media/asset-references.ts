@@ -27,6 +27,11 @@ export interface AssetReferenceSource {
   productMedia: { product: { slug: string; translations: NamedTranslation[] } }[];
   productCovers: { slug: string; translations: NamedTranslation[] }[];
   categoryCovers: { slug: string; translations: NamedTranslation[] }[];
+  /**
+   * 把本素材用作封面的视频。
+   * posterUrl 存的是 URL 而不是外键，因此这一项由调用方单独查询后附带传入。
+   */
+  posterOf?: { id: string; key: string; type: string }[];
 }
 
 /**
@@ -75,6 +80,10 @@ export function collectAssetReferences(
       group: t.productCategories.cover,
       label: pickName(category.translations, locale, category.slug),
     });
+  }
+
+  for (const poster of asset.posterOf ?? []) {
+    references.push({ group: t.media.posterLabel, label: poster.key });
   }
 
   return references;

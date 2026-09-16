@@ -29,8 +29,8 @@ export default async function AdminMediaDetailPage({
   const { id } = await params;
   const { locale, t } = await getAdminMessagesForRequest();
 
-  const asset = await tryDb((db) =>
-    db.asset.findUnique({
+  const asset = await tryDb(async (db) => {
+    const found = await db.asset.findUnique({
       where: { id },
       include: {
         translations: true,
@@ -40,8 +40,22 @@ export default async function AdminMediaDetailPage({
         productCovers: { include: { translations: true } },
         categoryCovers: { include: { translations: true } },
       },
-    }),
-  );
+    });
+    if (!found) return null;
+
+    // posterUrl 是 URL 而非外键：单独查出把该素材当作封面的视频
+    const posterUrls = [found.url, found.thumbnailUrl].filter(
+      (value): value is string => Boolean(value),
+    );
+    const posterOf = posterUrls.length
+      ? await db.asset.findMany({
+          where: { id: { not: found.id }, posterUrl: { in: posterUrls } },
+          select: { id: true, key: true, type: true },
+        })
+      : [];
+
+    return { ...found, posterOf };
+  });
 
   if (asset === null) {
     return (

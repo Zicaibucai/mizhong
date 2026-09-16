@@ -7,23 +7,26 @@ import { initialFormState } from '@/lib/admin/action-state';
 import { Alert } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
 
-function StatusButton({
-  value,
-  children,
+/**
+ * Submit button for the publish control.
+ *
+ * The status value travels in a hidden input rather than on the button: React's form-action
+ * serialisation does not include the submitter button's name/value, so a `<button name="status"
+ * value="PUBLISHED">` arrives without `status` and the action always failed validation.
+ */
+function StatusSubmit({
   tone,
   pendingText,
+  children,
 }: {
-  value: 'PUBLISHED' | 'DRAFT';
-  children: React.ReactNode;
   tone: 'primary' | 'secondary';
   pendingText: string;
+  children: React.ReactNode;
 }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      name="status"
-      value={value}
       disabled={pending}
       className={
         tone === 'primary'
@@ -45,27 +48,25 @@ export function PageStatusForm({
 }) {
   const t = useAdminT();
   const [state, formAction] = useActionState(setPageStatusAction, initialFormState);
+  const published = status === 'PUBLISHED';
 
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="status" value={published ? 'DRAFT' : 'PUBLISHED'} />
+
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-navy-700">
           {t.pageStatus.currentStatus}{' '}
-          <span className={status === 'PUBLISHED' ? 'text-emerald-700' : 'text-amber-700'}>
-            {status === 'PUBLISHED' ? t.pageStatus.published : t.pageStatus.draft}
+          <span className={published ? 'text-emerald-700' : 'text-amber-700'}>
+            {published ? t.pageStatus.published : t.pageStatus.draft}
           </span>
         </span>
-        {status === 'PUBLISHED' ? (
-          <StatusButton value="DRAFT" tone="secondary" pendingText={t.common.processing}>
-            {t.pageStatus.moveToDraft}
-          </StatusButton>
-        ) : (
-          <StatusButton value="PUBLISHED" tone="primary" pendingText={t.common.processing}>
-            {t.pageStatus.publish}
-          </StatusButton>
-        )}
+        <StatusSubmit tone={published ? 'secondary' : 'primary'} pendingText={t.common.processing}>
+          {published ? t.pageStatus.moveToDraft : t.pageStatus.publish}
+        </StatusSubmit>
       </div>
+
       {state.status === 'error' && state.message ? (
         <Alert kind="error">{state.message}</Alert>
       ) : null}
