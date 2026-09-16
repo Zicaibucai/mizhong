@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { randomBytes } from 'node:crypto';
 import { MEDIA_PUBLIC_BASE, UPLOAD_DIR, resolveInsideUploadDir } from './shared';
 
@@ -28,7 +28,7 @@ export async function streamToTempFile(
   let size = 0;
   let exceeded = false;
 
-  const counter = new (await import('node:stream')).Transform({
+  const counter = new Transform({
     transform(chunk, _enc, callback) {
       size += chunk.length;
       if (size > maxBytes) {
