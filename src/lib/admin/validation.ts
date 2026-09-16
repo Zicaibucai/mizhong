@@ -154,7 +154,9 @@ export function parseForm<S extends AnyZodObject>(
 ): ParseResult<z.infer<S>> {
   const raw: Record<string, unknown> = {};
   for (const key of Object.keys(schema.shape)) {
-    raw[key] = formData.get(key);
+    // 表单未提交的字段 get() 返回 null，而 Zod 的 .optional() 只接受 undefined，
+    // 因此这里必须把 null 归一化为 undefined，否则可选的 id 等字段会永远校验失败。
+    raw[key] = formData.get(key) ?? undefined;
   }
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {

@@ -48,7 +48,7 @@ function blockSeed(locale: SeedLocale): Record<BlockKey, BlockSeed> {
       title: t.products.title,
       subtitle: t.products.subtitle,
       ctaLabel: t.products.cta,
-      ctaHref: '#inquiry',
+      ctaHref: '/products',
     },
     supply: { title: t.supply.title, subtitle: t.supply.subtitle },
     quality: { title: t.quality.title, subtitle: t.quality.subtitle },
@@ -62,7 +62,7 @@ function blockSeed(locale: SeedLocale): Record<BlockKey, BlockSeed> {
 }
 
 const NAV_SEED = [
-  { href: '#products', key: 'products' },
+  { href: '/products', key: 'products' },
   { href: '#supply', key: 'supply' },
   { href: '#quality', key: 'quality' },
   { href: '#inquiry', key: 'contact' },

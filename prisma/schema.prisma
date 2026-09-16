@@ -276,7 +276,7 @@ model PageBlockTranslation {
 }
 
 // ---------------------------------------------------------------------------
-// 素材库（本阶段仅保留模型，OSS 上传在阶段 3）
+// 素材库
 // ---------------------------------------------------------------------------
 
 enum AssetType {
@@ -284,21 +284,42 @@ enum AssetType {
   VIDEO
 }
 
+/// 存储后端。local = 服务器本地磁盘（当前使用）；oss = 阿里云 OSS 接口已预留
+enum StorageDriver {
+  LOCAL
+  OSS
+}
+
 model Asset {
-  id           String             @id @default(cuid())
+  id           String        @id @default(cuid())
   type         AssetType
-  key          String             @unique // OSS object key
+  driver       StorageDriver @default(LOCAL)
+  /// 对象 key（本地为相对路径，OSS 为 object key）
+  key          String        @unique
   url          String
-  posterUrl    String? // 视频封面（type = VIDEO 时）
+  /// 生成的缩略图（图片）
+  thumbnailUrl String?
+  /// 视频封面
+  posterUrl    String?
   mimeType     String
+  originalName String?
   width        Int?
   height       Int?
   size         Int?
-  sortOrder    Int                @default(0)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  translations AssetTranslation[]
-  slots        SlotBinding[]
+  enabled      Boolean       @default(true)
+  sortOrder    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  translations   AssetTranslation[]
+  slots          SlotBinding[]
+  productMedia   ProductMedia[]
+  productCovers  Product[]          @relation("ProductCover")
+  categoryCovers ProductCategory[]  @relation("CategoryCover")
+
+  @@index([type])
+  @@index([enabled])
+  @@index([sortOrder])
 }
 
 model AssetTranslation {
@@ -322,20 +343,28 @@ model SlotBinding {
   position Int    @default(0)
 
   @@unique([slot, position])
+  @@index([assetId])
 }
 
 // ---------------------------------------------------------------------------
-// 产品（本阶段仅保留模型，产品管理在阶段 4）
+// 产品
 // ---------------------------------------------------------------------------
 
 model ProductCategory {
-  id           String                @id @default(cuid())
-  slug         String                @unique
-  sortOrder    Int                   @default(0)
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  coverAssetId String?
+  coverAsset   Asset?   @relation("CategoryCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  enabled      Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   products     Product[]
   translations CategoryTranslation[]
+
+  @@index([enabled])
+  @@index([sortOrder])
 }
 
 model CategoryTranslation {
@@ -349,26 +378,63 @@ model CategoryTranslation {
   @@unique([categoryId, locale])
 }
 
+/// 商品图库中素材的用途
+enum ProductMediaRole {
+  GALLERY
+  VIDEO
+}
+
 model Product {
-  id           String               @id @default(cuid())
-  categoryId   String?
-  category     ProductCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  id           String           @id @default(cuid())
+  slug         String           @unique
   sku          String?
-  sortOrder    Int                  @default(0)
-  published    Boolean              @default(false)
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  categoryId   String?
+  category     ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  coverAssetId String?
+  coverAsset   Asset?           @relation("ProductCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  featured     Boolean          @default(false)
+  published    Boolean          @default(false)
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
   translations ProductTranslation[]
+  media        ProductMedia[]
+
+  @@index([published])
+  @@index([featured])
+  @@index([categoryId])
+  @@index([sortOrder])
+}
+
+/// 商品图库：有序、带用途的素材关联
+model ProductMedia {
+  id        String           @id @default(cuid())
+  productId String
+  product   Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  assetId   String
+  asset     Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  role      ProductMediaRole @default(GALLERY)
+  sortOrder Int              @default(0)
+  createdAt DateTime         @default(now())
+
+  @@unique([productId, assetId, role])
+  @@index([productId, sortOrder])
+  @@index([assetId])
 }
 
 model ProductTranslation {
-  id          String  @id @default(cuid())
-  productId   String
-  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  locale      Locale
-  name        String
-  description String?
-  spec        String?
+  id               String  @id @default(cuid())
+  productId        String
+  product          Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  locale           Locale
+  name             String
+  shortDescription String?
+  description      String?
+  spec             String?
+  application      String?
+  seoTitle         String?
+  seoDescription   String?
 
   @@unique([productId, locale])
 }

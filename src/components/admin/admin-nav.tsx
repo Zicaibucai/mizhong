@@ -11,6 +11,9 @@ const ITEMS = [
   { href: '/admin/contacts', key: 'contacts' },
   { href: '/admin/navigation', key: 'navigation' },
   { href: '/admin/pages', key: 'pages' },
+  { href: '/admin/media', key: 'media' },
+  { href: '/admin/product-categories', key: 'productCategories' },
+  { href: '/admin/products', key: 'products' },
   { href: '/admin/audit', key: 'audit' },
 ] as const;
 

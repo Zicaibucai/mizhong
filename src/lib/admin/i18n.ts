@@ -12,6 +12,15 @@
  * `next/headers` is pulled in lazily inside `getAdminLocale()` — a static import would drag the
  * server-only module into the client bundle and break the build.
  */
+import {
+  mediaMessagesEn,
+  mediaMessagesZh,
+  productCategoryMessagesEn,
+  productCategoryMessagesZh,
+  productMessagesEn,
+  productMessagesZh,
+} from './messages/catalog';
+
 export const ADMIN_UI_LOCALES = ['en', 'zh'] as const;
 export type AdminUiLocale = (typeof ADMIN_UI_LOCALES)[number];
 
@@ -67,6 +76,9 @@ const en = {
     contacts: 'Contacts',
     navigation: 'Navigation',
     pages: 'Pages & blocks',
+    media: 'Media library',
+    productCategories: 'Product categories',
+    products: 'Products',
     audit: 'Audit log',
   },
   shell: {
@@ -326,6 +338,9 @@ const en = {
     pagePublished: 'Published page "{slug}"',
     pageDrafted: 'Moved page "{slug}" to draft',
   },
+  media: mediaMessagesEn,
+  productCategories: productCategoryMessagesEn,
+  products: productMessagesEn,
 };
 
 export type AdminMessages = typeof en;
@@ -360,6 +375,9 @@ const zh: AdminMessages = {
     contacts: '联系方式',
     navigation: '导航菜单',
     pages: '页面与区块',
+    media: '媒体库',
+    productCategories: '商品分类',
+    products: '商品',
     audit: '操作日志',
   },
   shell: {
@@ -605,6 +623,9 @@ const zh: AdminMessages = {
     pagePublished: '发布了页面「{slug}」',
     pageDrafted: '将页面「{slug}」转为草稿',
   },
+  media: mediaMessagesZh,
+  productCategories: productCategoryMessagesZh,
+  products: productMessagesZh,
 };
 
 const MESSAGES: Record<AdminUiLocale, AdminMessages> = { en, zh };

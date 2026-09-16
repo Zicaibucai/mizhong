@@ -6,8 +6,16 @@ import { SectionHeading } from '@/components/ui/section-heading';
 import { Button } from '@/components/ui/button';
 import { Media } from '@/components/ui/media';
 
+/** 站内路径补上语言前缀（锚点与绝对地址保持原样） */
+function withLocale(href: string, locale: Locale): string {
+  if (!href.startsWith('/')) return href;
+  if (/^\/(zh|en|vi)(\/|$)/.test(href)) return href;
+  return `/${locale}${href}`;
+}
+
 export function ProductsPreview({ locale, block }: { locale: Locale; block: BlockView }) {
   const t = getDictionary(locale);
+  const catalogueHref = `/${locale}/products`;
 
   return (
     <section id="products" className="scroll-mt-20 bg-white py-20 lg:py-28">
@@ -20,7 +28,7 @@ export function ProductsPreview({ locale, block }: { locale: Locale; block: Bloc
         />
         <div className="mt-14 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {t.products.categories.map((cat, i) => (
-            <a key={cat.name} href="#inquiry" className="group block">
+            <a key={cat.name} href={catalogueHref} className="group block">
               <Media
                 slot={PRODUCT_MEDIA_SLOTS[i] ?? MEDIA_SLOTS.heroImage}
                 locale={locale}
@@ -35,7 +43,7 @@ export function ProductsPreview({ locale, block }: { locale: Locale; block: Bloc
         </div>
         {block.ctaLabel ? (
           <div className="mt-14 text-center">
-            <Button href={block.ctaHref || '#inquiry'} variant="outline">
+            <Button href={withLocale(block.ctaHref || '/products', locale)} variant="outline">
               {block.ctaLabel}
             </Button>
           </div>

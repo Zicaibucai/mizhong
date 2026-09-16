@@ -85,7 +85,7 @@ function defaultBlocks(t: Dict): Record<string, BlockView> {
 /** 默认导航（数据库未配置时使用，保持与首页区块锚点一致） */
 function defaultNav(t: Dict): NavView[] {
   return [
-    { id: 'n-products', label: t.nav.products, href: '#products', external: false },
+    { id: 'n-products', label: t.nav.products, href: '/products', external: false },
     { id: 'n-supply', label: t.nav.supply, href: '#supply', external: false },
     { id: 'n-quality', label: t.nav.quality, href: '#quality', external: false },
     { id: 'n-contact', label: t.nav.contact, href: '#inquiry', external: false },
