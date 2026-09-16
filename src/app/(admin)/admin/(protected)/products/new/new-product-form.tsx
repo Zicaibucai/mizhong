@@ -14,6 +14,7 @@ import {
   TextInput,
 } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
+import { SlugAutoFill } from '@/components/admin/products/slug-auto-fill';
 
 /**
  * Creates a draft product (slug + optional category + an optional name in any language) and opens
@@ -24,7 +25,10 @@ export function NewProductForm({ categories }: { categories: { id: string; name:
   const [state, formAction] = useActionState(createProductAction, initialFormState);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form id="new-product-form" action={formAction} className="space-y-5">
+      {/* 英文名称 → slug 建议；管理员手动改过 slug 后不再覆盖 */}
+      <SlugAutoFill formId="new-product-form" nameFieldId="en_name" slugFieldId="slug" />
+
       {state.status === 'error' && state.message ? (
         <Alert kind="error">{state.message}</Alert>
       ) : null}

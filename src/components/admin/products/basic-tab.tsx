@@ -11,6 +11,7 @@ import { initialFormState } from '@/lib/admin/action-state';
 import { Alert, Checkbox, Field, Select, SubmitButton, TextInput } from '@/components/admin/form';
 import { DeleteForm } from '@/components/admin/delete-form';
 import { useAdminT } from '@/components/admin/i18n-provider';
+import { SlugAutoFill } from './slug-auto-fill';
 import { useDirtyForm } from './tabs';
 import type { ProductEditorData } from './types';
 
@@ -43,6 +44,13 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
       >
         <section className="space-y-4 rounded-xl border border-navy-200 bg-white p-5">
           <h2 className="text-sm font-semibold text-navy-900">{t.products.basicSection}</h2>
+
+          {/* slug 为空时按英文名称建议；已有 slug 或手动改过后不覆盖 */}
+          <SlugAutoFill
+            formId="product-form-basic"
+            nameFieldId="en_name"
+            slugFieldId="slug"
+          />
 
           <input type="hidden" name="id" value={product.id} />
 
