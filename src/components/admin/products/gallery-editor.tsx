@@ -174,7 +174,9 @@ export function AddMediaForm({ productId, assets }: { productId: string; assets:
  * server action, and HTML5 drag-and-drop reorders as a progressive enhancement (also persisted).
  * Both paths update the list optimistically, then refresh from the server.
  *
- * Each row can also be promoted to the product cover or the hover video without leaving the page.
+ * Each row can also be promoted to the product cover or the hover video without leaving the page,
+ * and links to the media library entry in a new tab — that is where a file is replaced and where a
+ * video actually plays. Opening it in a new tab keeps this editor's unsaved state intact.
  */
 export function GalleryEditor({
   productId,
@@ -292,13 +294,25 @@ export function GalleryEditor({
                 ⠿
               </span>
 
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-navy-200 bg-navy-50">
+              {/* 视频缩略图点开就是真实播放器（素材详情页），图片同理可以进去替换文件 */}
+              <a
+                href={`/admin/media/${item.assetId}`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={item.type === 'VIDEO' ? t.products.videoPreview : t.products.openAsset}
+                className="relative block h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-navy-200 bg-navy-50 transition-colors hover:border-copper-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+              >
                 <GalleryThumb
                   item={item}
                   className="h-full w-full"
                   imgClassName="h-full w-full object-cover"
                 />
-              </div>
+                {item.type === 'VIDEO' ? (
+                  <span className="absolute inset-0 flex items-center justify-center bg-navy-950/35">
+                    <PlayIcon className="h-4 w-4 text-ivory-50" />
+                  </span>
+                ) : null}
+              </a>
 
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-navy-900">{item.name || item.url}</p>
@@ -348,6 +362,15 @@ export function GalleryEditor({
                     {t.products.setAsHoverVideo}
                   </button>
                 ) : null}
+
+                <a
+                  href={`/admin/media/${item.assetId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+                >
+                  {t.products.openAsset}
+                </a>
 
                 <button
                   type="button"
