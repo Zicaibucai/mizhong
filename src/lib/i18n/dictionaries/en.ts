@@ -141,6 +141,16 @@ export const en = {
     toBeConfirmed: 'To be confirmed',
     skipToContent: 'Skip to main content',
   },
+  /**
+   * 设计预览页（/en/design-preview）专用文案。
+   * 仅用于新增的编辑式版式与动效所需的最小标签，不引入任何未经确认的事实。
+   */
+  preview: {
+    scroll: 'Scroll',
+    stage: 'Stage',
+    artwork: 'Generated weave study — decorative graphic, not a product photograph',
+    channels: 'Direct contact channels',
+  },
 };
 
 export type Dict = typeof en;

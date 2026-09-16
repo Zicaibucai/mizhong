@@ -141,4 +141,11 @@ export const vi: Dict = {
     toBeConfirmed: 'Chờ xác nhận',
     skipToContent: 'Chuyển đến nội dung chính',
   },
+  /** Nội dung riêng cho trang xem trước thiết kế (/vi/design-preview) */
+  preview: {
+    scroll: 'Cuộn xuống',
+    stage: 'Giai đoạn',
+    artwork: 'Mẫu dệt minh họa — đồ họa trang trí, không phải ảnh sản phẩm',
+    channels: 'Kênh liên hệ trực tiếp',
+  },
 };

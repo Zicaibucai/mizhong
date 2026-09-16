@@ -133,4 +133,11 @@ export const zh: Dict = {
     toBeConfirmed: '待确认',
     skipToContent: '跳转到主要内容',
   },
+  /** 设计预览页（/zh/design-preview）专用文案，见 en.ts 中的说明 */
+  preview: {
+    scroll: '向下滚动',
+    stage: '阶段',
+    artwork: '生成的织纹示意图——装饰性图形，非产品照片',
+    channels: '直接联系渠道',
+  },
 };
