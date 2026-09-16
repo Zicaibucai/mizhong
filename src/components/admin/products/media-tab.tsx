@@ -70,6 +70,7 @@ export function MediaTab({ data }: { data: ProductEditorData }) {
                     remove: t.products.removeCover,
                     none: t.productCategories.noCover,
                     empty: t.products.noAssets,
+                    unavailable: t.products.assetUnavailable,
                   }}
                 />
               </div>
@@ -89,6 +90,7 @@ export function MediaTab({ data }: { data: ProductEditorData }) {
                     remove: t.products.removeHoverVideo,
                     none: t.products.noVideos,
                     empty: t.products.noVideos,
+                    unavailable: t.products.assetUnavailable,
                   }}
                 />
               </div>

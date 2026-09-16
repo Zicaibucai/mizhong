@@ -55,6 +55,8 @@ export interface ProductCardView extends ProductPriceView {
 
 export interface ProductMediaView {
   id: string;
+  /** 素材主键：用于把封面并入主媒体列表时去重 */
+  assetId: string;
   type: 'image' | 'video';
   url: string;
   thumbnailUrl: string | null;
@@ -76,6 +78,12 @@ export interface ProductDetailView extends ProductCardView {
   application: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
+  /**
+   * 主媒体列表（详情页左侧查看器用）：**封面在最前**，其后是图库，按素材去重。
+   * 只设置了封面、没有加图库的商品同样有图可看 —— 发布只要求封面，不要求图库。
+   */
+  media: ProductMediaView[];
+  /** 图库（详情页下方网格用）：仅 ProductMedia 行，不含自动补入的封面 */
   gallery: ProductMediaView[];
   specifications: ProductSpecView[];
   /** 当前语言缺失、已回退英文时为 true（页面据此提示，而不是显示字段名） */
@@ -230,23 +238,31 @@ export async function listProducts(options: {
         : {}),
     };
 
-    const [total, rows] = await Promise.all([
-      db.product.count({ where }),
+    const include = {
+      translations: true,
+      category: { include: { translations: true } },
+      coverAsset: { include: { translations: true } },
+      hoverVideoAsset: true,
+    } as const;
+
+    const fetchPage = (target: number) =>
       db.product.findMany({
         where,
         orderBy: orderByFor(sort),
-        skip: (page - 1) * PRODUCTS_PER_PAGE,
+        skip: (target - 1) * PRODUCTS_PER_PAGE,
         take: PRODUCTS_PER_PAGE,
-        include: {
-          translations: true,
-          category: { include: { translations: true } },
-          coverAsset: { include: { translations: true } },
-          hoverVideoAsset: true,
-        },
-      }),
-    ]);
+        include,
+      });
 
-    return { total, rows };
+    const total = await db.product.count({ where });
+    const pageCount = Math.max(1, Math.ceil(total / PRODUCTS_PER_PAGE));
+
+    // 页码钳制：?page=99 落回最后一页。否则页面会一边显示「共 N 件产品」，
+    // 一边因为这一页没有数据而渲染出「目录为空」的空状态 —— 自相矛盾。
+    const effectivePage = Math.min(page, pageCount);
+    const rows = await fetchPage(effectivePage);
+
+    return { total, rows, page: effectivePage, pageCount };
   });
 
   if (!result) return empty;
@@ -281,22 +297,29 @@ export async function listProducts(options: {
   return {
     items,
     total: result.total,
-    page,
+    page: result.page,
     pageSize: PRODUCTS_PER_PAGE,
-    pageCount: Math.max(1, Math.ceil(result.total / PRODUCTS_PER_PAGE)),
+    pageCount: result.pageCount,
   };
 }
 
+/**
+ * 按 slug 取商品详情。
+ *
+ * `includeUnpublished` 只由后台的草稿预览路由使用（那里已经校验过管理员会话）；
+ * 前台永远只看得到已发布商品。
+ */
 export async function getProductBySlug(
   slug: string,
   locale: Locale,
+  options: { includeUnpublished?: boolean } = {},
 ): Promise<ProductDetailView | null> {
   const clean = slug.trim();
   if (!clean) return null;
 
   const row = await tryDb((db) =>
     db.product.findFirst({
-      where: { slug: clean, published: true },
+      where: options.includeUnpublished ? { slug: clean } : { slug: clean, published: true },
       include: {
         translations: true,
         category: { include: { translations: true } },
@@ -338,6 +361,7 @@ export async function getProductBySlug(
 
       return {
         id: item.id,
+        assetId: item.assetId,
         type: item.asset.type === 'VIDEO' ? 'video' : 'image',
         url: item.asset.url,
         thumbnailUrl: item.asset.thumbnailUrl,
@@ -346,6 +370,24 @@ export async function getProductBySlug(
         caption,
       };
     });
+
+  // 封面并入主媒体：只设了封面、没加图库的商品（发布只要求封面）也必须有主图可看
+  const media: ProductMediaView[] = [...gallery];
+  if (row.coverAsset && row.coverAsset.enabled && row.coverAsset.url) {
+    const alreadyPresent = media.some((item) => item.assetId === row.coverAssetId);
+    if (!alreadyPresent) {
+      media.unshift({
+        id: `cover-${row.coverAsset.id}`,
+        assetId: row.coverAsset.id,
+        type: 'image',
+        url: row.coverAsset.url,
+        thumbnailUrl: row.coverAsset.thumbnailUrl,
+        posterUrl: null,
+        alt: cover.alt ?? '',
+        caption: null,
+      });
+    }
+  }
 
   // 结构化参数：当前语言缺失时回退英文，两边都为空的行直接隐藏（不显示空行）
   const specifications: ProductSpecView[] = row.specifications
@@ -378,6 +420,7 @@ export async function getProductBySlug(
     coverAlt: cover.alt,
     hoverVideoUrl: hover.url,
     hoverVideoPosterUrl: hover.posterUrl,
+    media,
     gallery,
     specifications,
     usingFallback: Boolean(tr) && !exact,

@@ -21,15 +21,13 @@ import type { FormState } from '@/lib/admin/action-state';
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * Success text for the plain "saved" cases.
+ * 商品保存成功的统一提示。
  *
- * The admin message catalog (src/lib/admin/messages/catalog.ts) is frozen for this workstream and
- * carries no generic product-saved confirmation, so `t.common.saveChanges` is reused — it is the
- * only existing string that reads as "your edits are in". Product-specific confirmations that do
- * exist are used where they apply (`t.products.duplicated`, `t.products.deleted`, …).
+ * 用 `products.saved`（「已保存修改。」/「Changes saved.」）而不是通用的
+ * `common.saveChanges`（那个字符串是按钮文案「保存修改」，当提示语读起来不像一句确认）。
  */
 function savedMessage(t: AdminMessages): string {
-  return t.common.saveChanges;
+  return t.products.saved;
 }
 
 // ---------------------------------------------------------------------------
@@ -361,10 +359,15 @@ async function checkImageAsset(
 }
 
 /**
- * Ensures the given asset id exists, is enabled and really is a VIDEO.
+ * Ensures the given asset id exists and really is a VIDEO.
  *
  * The type check is re-done on the server even though the picker only offers videos:
  * an asset id is just a string in a form body, so it can be swapped for an image id.
+ *
+ * 刻意**不要求 `enabled`**（与 checkImageAsset 一致）：素材可能在绑定之后被停用，
+ * 那时若保存封面时连带校验悬停视频，就会出现「改封面保存不了、提示悬停视频必须是视频文件」
+ * 这种与用户操作完全无关的报错，而且被停用的旧视频在媒体库里已经选不到、也清不掉。
+ * 停用素材在前台由 catalog 层的 `enabled` 过滤负责隐藏，不需要在写入侧拦截。
  */
 async function checkVideoAsset(
   db: PrismaClient,
@@ -372,11 +375,8 @@ async function checkVideoAsset(
   t: AdminMessages,
 ): Promise<FormState | null> {
   if (!assetId) return null;
-  const asset = await db.asset.findUnique({
-    where: { id: assetId },
-    select: { type: true, enabled: true },
-  });
-  if (!asset || asset.type !== 'VIDEO' || !asset.enabled) {
+  const asset = await db.asset.findUnique({ where: { id: assetId }, select: { type: true } });
+  if (!asset || asset.type !== 'VIDEO') {
     return { status: 'error', message: t.products.hoverVideoMustBeVideo };
   }
   return null;
@@ -616,16 +616,13 @@ export async function saveProductTranslationsAction(
         if (existing && !existing.seoTitle && !existing.seoDescription) {
           await db.productTranslation.delete({ where: { id: existing.id } });
         } else if (existing) {
-          await db.productTranslation.update({
-            where: { id: existing.id },
-            data: {
-              shortDescription: null,
-              description: null,
-              sizeSummary: null,
-              spec: null,
-              application: null,
-            },
-          });
+          // name 是 NOT NULL：SEO 文案还在时这一行不能删，也就不能把名称清空。
+          // 静默保留旧名称会让「编辑器里已清空、前台仍在显示」长期不一致，
+          // 所以这里明确拒绝并给出可执行的下一步。
+          return {
+            status: 'error',
+            message: `${getContentLocaleLabel(t, locale)}: ${t.products.nameCannotBeCleared}`,
+          };
         }
         continue;
       }

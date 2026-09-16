@@ -24,6 +24,8 @@ export interface AssetPickerLabels {
   none: string;
   /** The media library is empty */
   empty: string;
+  /** 已选素材当前不可用（被停用或已删除）时的提示 */
+  unavailable: string;
 }
 
 /**
@@ -104,6 +106,9 @@ export function AssetPicker({
   }, [initialId]);
 
   const selected = assets.find((asset) => asset.id === selectedId) ?? null;
+  // 已选素材可能不在候选列表里：它在绑定之后被停用了（媒体库只提供已启用素材），
+  // 或者已从媒体库删除。此时必须仍然能「移除」——否则这个字段既清不掉、又会挡住整份保存。
+  const missingSelection = Boolean(selectedId) && !selected;
 
   return (
     <div className="space-y-3">
@@ -129,7 +134,7 @@ export function AssetPicker({
           >
             {selected ? labels.change : labels.choose}
           </button>
-          {selected ? (
+          {selected || missingSelection ? (
             <button
               type="button"
               onClick={() => {
@@ -176,6 +181,9 @@ export function AssetPicker({
       ) : null}
 
       {selected ? <p className="text-xs text-muted">{selected.name}</p> : null}
+      {missingSelection ? (
+        <p className="text-xs text-amber-700">{labels.unavailable}</p>
+      ) : null}
     </div>
   );
 }

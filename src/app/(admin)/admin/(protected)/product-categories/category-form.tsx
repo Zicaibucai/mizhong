@@ -105,6 +105,7 @@ export function CategoryForm({
             remove: t.productCategories.removeCover,
             none: t.productCategories.noCover,
             empty: t.media.empty,
+            unavailable: t.productCategories.coverUnavailable,
           }}
         />
       </Field>

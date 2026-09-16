@@ -16,9 +16,8 @@ import type { FormState } from '@/lib/admin/action-state';
 /**
  * Dirty-state plumbing for the product editor tabs.
  *
- * NOTE: the admin message catalog (src/lib/admin/messages/catalog.ts) is frozen for this
- * workstream and carries no dedicated "unsaved changes" string, so the switch-tab confirmation
- * reuses `t.common.saveChanges` — the closest existing way to say "you have edits pending".
+ * 离开前的确认使用 `t.products.unsavedWarning`（「当前有未保存的修改，确定离开并放弃这些修改吗？」），
+ * 而不是通用按钮文案 —— 提示语必须说清后果。
  */
 
 interface TabsContextValue {
@@ -128,7 +127,7 @@ export function ProductTabs({
 
   const select = (id: string) => {
     if (id === active) return;
-    if (anyDirty && !window.confirm(t.common.saveChanges)) return;
+    if (anyDirty && !window.confirm(t.products.unsavedWarning)) return;
     setActive(id);
     // replaceState keeps the URL in sync without stacking history entries.
     window.history.replaceState(null, '', `#${id}`);

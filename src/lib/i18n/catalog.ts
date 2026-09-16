@@ -89,6 +89,8 @@ const en = {
     relatedTitle: 'Related products',
     relatedSubtitle: 'More from {category}.',
     relatedFallbackSubtitle: 'Other products from our catalogue.',
+    draftNotice:
+      'Draft preview — this product is not published yet, so only signed-in administrators can see this page.',
   },
   search: {
     title: 'Search',
@@ -192,6 +194,7 @@ const zh: CatalogDict = {
     relatedTitle: '相关产品',
     relatedSubtitle: '来自「{category}」的更多产品。',
     relatedFallbackSubtitle: '目录中的其它产品。',
+    draftNotice: '草稿预览 —— 该商品尚未发布，只有已登录的管理员能看到本页。',
   },
   search: {
     title: '搜索',
@@ -294,6 +297,8 @@ const vi: CatalogDict = {
     relatedTitle: 'Sản phẩm liên quan',
     relatedSubtitle: 'Thêm sản phẩm từ “{category}”.',
     relatedFallbackSubtitle: 'Các sản phẩm khác trong danh mục.',
+    draftNotice:
+      'Xem trước bản nháp — sản phẩm chưa được đăng, chỉ quản trị viên đã đăng nhập mới xem được trang này.',
   },
   search: {
     title: 'Tìm kiếm',

@@ -103,7 +103,9 @@ export function formatMoq(
   moqUnit: string | null,
   locale: Locale,
 ): string | null {
-  if (moq === null || moq === undefined) return null;
+  // 0 与「未填写」等价：起订量为 0 不是一条有意义的信息，
+  // 显示「最小起订量 0 件」只会误导客户，所以与 null 一样隐藏该行。
+  if (moq === null || moq === undefined || moq <= 0) return null;
   const dict = getCatalogDict(locale);
   const unit = unitLabel(moqUnit, dict.units);
   return format(unit ? dict.detail.moqValue : '{quantity}', {

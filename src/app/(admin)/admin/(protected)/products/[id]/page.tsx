@@ -145,7 +145,8 @@ export default async function AdminProductDetailPage({
     videoAssets,
     galleryAssets,
     media,
-    previewHref: `/${defaultLocale}/products/${encodeURIComponent(product.slug)}`,
+    // 指向草稿预览路由：未发布商品在正式详情页会 404，而「预览产品」的意义正是看草稿
+    previewHref: `/${defaultLocale}/products/${encodeURIComponent(product.slug)}/preview`,
   };
 
   return <ProductEditor data={data} />;

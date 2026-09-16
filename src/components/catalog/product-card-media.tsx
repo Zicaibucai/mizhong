@@ -55,10 +55,16 @@ export function useHoverVideo(hoverVideoUrl: string | null) {
     // 首次悬停才真正开始加载，避免列表页为不可见的视频付出带宽
     if (!video.getAttribute('src')) video.setAttribute('src', hoverVideoUrl);
 
-    // play() 返回 Promise，被拒绝（自动播放策略 / 解码失败）时静默回退封面
+    // play() 返回 Promise。**只有真正的失败才回退封面**：
+    // 鼠标很快移开时 pause() 会打断尚未完成的 play()，浏览器以 AbortError 拒绝该 Promise。
+    // 那是正常交互（快速划过卡片），若把它当成解码失败就会永久关掉这一票卡片的悬停视频。
     const started = video.play();
     if (started && typeof started.catch === 'function') {
-      started.catch(() => setVideoFailed(true));
+      started.catch((error: unknown) => {
+        const name = error instanceof Error ? error.name : '';
+        if (name === 'AbortError' || name === 'NotAllowedError') return;
+        setVideoFailed(true);
+      });
     }
   }, [hoverVideoUrl, videoFailed]);
 

@@ -5,6 +5,9 @@ import type { AdminLocale } from '@/lib/admin/validation';
 import { adminDateLocale, formatMessage, getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import { Alert } from '@/components/admin/form';
 import { cn } from '@/lib/cn';
+import { formatPrice } from '@/lib/product-format';
+import { decimalToString, normalizeCurrency } from '@/lib/pricing';
+import type { Locale } from '@/lib/i18n/config';
 import { ProductFilters } from './product-filters';
 
 export const dynamic = 'force-dynamic';
@@ -111,6 +114,11 @@ export default async function AdminProductsPage({
     return query ? `/admin/products?${query}` : '/admin/products';
   };
 
+  // 价格文案按后台界面语言渲染（后台只有 en / zh 两套界面）
+  const priceLocale: Locale = locale === 'zh' ? 'zh' : 'en';
+  const negotiable = (row: { priceMode: string; priceMin: unknown }) =>
+    row.priceMode === 'NEGOTIABLE' || !decimalToString(row.priceMin);
+
   const productName = (translations: { locale: AdminLocale; name: string }[], slug: string) =>
     translations.find((item) => item.locale === locale)?.name ||
     translations.find((item) => item.locale === 'en')?.name ||
@@ -156,6 +164,7 @@ export default async function AdminProductsPage({
                 <th className="px-5 py-3 font-medium">{t.products.colProduct}</th>
                 <th className="px-5 py-3 font-medium">{t.products.colSku}</th>
                 <th className="px-5 py-3 font-medium">{t.products.colCategory}</th>
+                <th className="px-5 py-3 font-medium">{t.products.colPrice}</th>
                 <th className="px-5 py-3 font-medium">{t.products.colStatus}</th>
                 <th className="px-5 py-3 font-medium">{t.products.colFeatured}</th>
                 <th className="px-5 py-3 font-medium">{t.products.colUpdated}</th>
@@ -201,6 +210,27 @@ export default async function AdminProductsPage({
                       {product.sku ?? '—'}
                     </td>
                     <td className="px-5 py-3 text-navy-600">{categoryName ?? t.products.noCategory}</td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={cn(
+                          'text-sm',
+                          negotiable(product)
+                            ? 'text-navy-500'
+                            : 'font-medium text-copper-800',
+                        )}
+                      >
+                        {formatPrice(
+                          {
+                            priceMode: product.priceMode,
+                            currency: normalizeCurrency(product.currency),
+                            priceMin: decimalToString(product.priceMin),
+                            priceMax: decimalToString(product.priceMax),
+                            priceUnit: product.priceUnit,
+                          },
+                          priceLocale,
+                        )}
+                      </span>
+                    </td>
                     <td className="px-5 py-3">
                       <span
                         className={cn(

@@ -35,7 +35,7 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
 
   /** In-app navigation guard: the beforeunload listener in ProductTabs handles full page loads. */
   const guardNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (anyDirty && !window.confirm(t.common.saveChanges)) event.preventDefault();
+    if (anyDirty && !window.confirm(t.products.unsavedWarning)) event.preventDefault();
   };
 
   const tabs = useMemo<TabDef[]>(
