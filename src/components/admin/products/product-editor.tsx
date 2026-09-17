@@ -12,6 +12,7 @@ import { SpecsTab } from './specs-tab';
 import { MediaTab } from './media-tab';
 import { SeoTab } from './seo-tab';
 import { VersionsTab } from './versions-tab';
+import { VisualProductEditor } from './visual-product-editor';
 import type { ProductEditorData } from './types';
 
 /**
@@ -42,6 +43,7 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
 
   const tabs = useMemo<TabDef[]>(
     () => [
+      { id: 'visual', label: t.products.tabVisual },
       { id: 'basic', label: t.products.tabBasic },
       { id: 'pricing', label: t.products.tabPricing },
       { id: 'translations', label: t.products.tabTranslations },
@@ -94,14 +96,21 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
         </p>
       ) : null}
 
-      {/* 空草稿直接打开「多语言」分区：商品名称在那里，先填名称最自然 */}
+      {/* 空草稿直接打开可视化编辑：名称、媒体、价格和详情都在同一张页面上 */}
       <ProductTabs
         tabs={tabs}
         statuses={statuses}
         onReportStatus={reportStatus}
-        initialTab={isFreshDraft ? 'translations' : undefined}
+        initialTab={isFreshDraft ? 'visual' : undefined}
       >
-        <ProductActionBar data={data} />
+        <ProductActionBar
+          data={data}
+          saveFormIds={['product-form-visual', 'product-form-visual-specs']}
+        />
+
+        <TabPanel id="visual">
+          <VisualProductEditor data={data} />
+        </TabPanel>
 
         <TabPanel id="basic">
           <BasicTab data={data} />

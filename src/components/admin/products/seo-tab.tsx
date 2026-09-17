@@ -21,13 +21,13 @@ import type { ProductEditorData } from './types';
 export function SeoTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const [state, formAction, isPending] = useActionState(saveProductSeoAction, initialFormState);
-  useAutoSaveForm('seo', 'product-form-seo', state, isPending);
+  const { formProps } = useAutoSaveForm('seo', 'product-form-seo', state, isPending, formAction);
   
 
   return (
     <form
       id="product-form-seo"
-      action={formAction}
+      {...formProps}
       
       className="space-y-5"
     >

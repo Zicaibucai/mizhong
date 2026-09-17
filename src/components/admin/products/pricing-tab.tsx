@@ -54,7 +54,7 @@ function UnitInput({
 export function PricingTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const [state, formAction, isPending] = useActionState(saveProductPricingAction, initialFormState);
-  useAutoSaveForm('pricing', 'product-form-pricing', state, isPending);
+  const { formProps } = useAutoSaveForm('pricing', 'product-form-pricing', state, isPending, formAction);
   
   const [mode, setMode] = useState<PriceMode>(data.product.priceMode);
 
@@ -63,7 +63,7 @@ export function PricingTab({ data }: { data: ProductEditorData }) {
   return (
     <form
       id="product-form-pricing"
-      action={formAction}
+      {...formProps}
       
       className="space-y-5"
     >

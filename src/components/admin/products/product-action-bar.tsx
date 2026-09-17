@@ -32,7 +32,14 @@ function aggregate(statuses: Record<string, SaveStatus>): SaveStatus {
  * 「发布」是整个系统里唯一让改动对客人可见的动作 —— 在按下它之前，
  * 前台一直显示上一版内容。
  */
-export function ProductActionBar({ data }: { data: ProductEditorData }) {
+export function ProductActionBar({
+  data,
+  saveFormIds,
+}: {
+  data: ProductEditorData;
+  /** A visual editor has several independent server-action forms on screen. */
+  saveFormIds?: string[];
+}) {
   const t = useAdminT();
   const locale = useAdminLocale();
   const router = useRouter();
@@ -87,6 +94,17 @@ export function ProductActionBar({ data }: { data: ProductEditorData }) {
             : t.products.saveStatusIdle;
 
   const blocked = data.publishBlockers.length > 0;
+  const saveTargets = active === 'visual'
+    ? saveFormIds ?? []
+    : active
+      ? [`product-form-${active}`]
+      : [];
+  const saveVisualForms = () => {
+    for (const formId of saveTargets) {
+      const form = document.getElementById(formId);
+      if (form instanceof HTMLFormElement) form.requestSubmit();
+    }
+  };
 
   return (
     <div className="sticky top-0 z-20 -mx-5 border-b border-navy-200 bg-ivory-50/95 px-5 py-3 backdrop-blur lg:-mx-8 lg:px-8">
@@ -125,8 +143,9 @@ export function ProductActionBar({ data }: { data: ProductEditorData }) {
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
-            type="submit"
-            form={active ? `product-form-${active}` : undefined}
+            type={saveTargets.length > 0 ? 'button' : 'submit'}
+            form={saveTargets.length > 0 ? undefined : active ? `product-form-${active}` : undefined}
+            onClick={saveTargets.length > 0 ? saveVisualForms : undefined}
             className="inline-flex h-10 items-center rounded-full border border-navy-300 px-5 text-sm font-medium text-navy-800 transition-colors hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
           >
             {t.products.saveDraft}

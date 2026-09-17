@@ -29,7 +29,7 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
   const { product, categories } = data;
 
   const [state, formAction, isPending] = useActionState(saveProductBasicAction, initialFormState);
-  useAutoSaveForm('basic', 'product-form-basic', state, isPending);
+  const { formProps } = useAutoSaveForm('basic', 'product-form-basic', state, isPending, formAction);
   
 
   const [duplicateState, duplicateAction] = useActionState(
@@ -41,7 +41,7 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
     <div className="space-y-5">
       <form
         id="product-form-basic"
-        action={formAction}
+        {...formProps}
         
         className="space-y-5"
       >

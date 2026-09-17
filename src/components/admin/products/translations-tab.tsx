@@ -21,13 +21,13 @@ import type { ProductEditorData } from './types';
 export function TranslationsTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const [state, formAction, isPending] = useActionState(saveProductTranslationsAction, initialFormState);
-  useAutoSaveForm('translations', 'product-form-translations', state, isPending);
+  const { formProps } = useAutoSaveForm('translations', 'product-form-translations', state, isPending, formAction);
   
 
   return (
     <form
       id="product-form-translations"
-      action={formAction}
+      {...formProps}
       
       className="space-y-5"
     >

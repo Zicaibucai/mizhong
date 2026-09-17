@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type FormEvent,
   type ReactNode,
 } from 'react';
 import { cn } from '@/lib/cn';
@@ -56,7 +57,20 @@ export function useAutoSaveForm(
   formId: string,
   state: FormState,
   isPending: boolean,
-): { status: SaveStatus; scheduleSave: () => void } {
+  /**
+   * `useActionState` 的 dispatch。
+   *
+   * 传进来是为了**自己接管提交**，而不是把 `action` 交给 `<form>`：
+   * React 19 会在 `<form action={fn}>` 的动作完成后自动 reset 整个非受控表单，
+   * 而 reset 用的是当前渲染里的 `defaultValue`。我们的 defaultValue 来自服务端数据，
+   * 保存后并不会立刻更新 —— 于是「存完 → 表单被重置回旧值 → 下一次自动保存把旧值写回去」，
+   * 表现为：改完名称再改描述，名称被清空。实测确认过。
+   *
+   * 改成在 `onSubmit` 里自己 `preventDefault()` 再派发动作，就没有这次自动 reset，
+   * 输入框的 DOM 值（也就是用户真正在编辑的东西）不会被抹掉。
+   */
+  dispatch: (payload: FormData) => void,
+): { status: SaveStatus; scheduleSave: () => void; formProps: { onSubmit: (event: FormEvent<HTMLFormElement>) => void } } {
   const context = useContext(TabsContext);
   const reportStatus = context?.reportStatus;
   const [waiting, setWaiting] = useState(false);
@@ -92,6 +106,14 @@ export function useAutoSaveForm(
     };
   }, [formId, scheduleSave]);
 
+  const onSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      dispatch(new FormData(event.currentTarget));
+    },
+    [dispatch],
+  );
+
   const status: SaveStatus = isPending
     ? 'saving'
     : waiting
@@ -106,7 +128,7 @@ export function useAutoSaveForm(
     reportStatus?.(tab, status);
   }, [tab, status, reportStatus]);
 
-  return { status, scheduleSave };
+  return { status, scheduleSave, formProps: { onSubmit } };
 }
 
 /**

@@ -27,7 +27,7 @@ export function MediaTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(saveProductMediaSettingsAction, initialFormState);
-  useAutoSaveForm('media', 'product-form-media', state, isPending);
+  const { formProps } = useAutoSaveForm('media', 'product-form-media', state, isPending, formAction);
   
 
   // 保存封面 / 悬停视频后重新读取，让图库上的「当前封面 / 悬停视频」标记同步
@@ -39,7 +39,7 @@ export function MediaTab({ data }: { data: ProductEditorData }) {
     <div className="space-y-5">
       <form
         id="product-form-media"
-        action={formAction}
+        {...formProps}
         
         className="space-y-5"
       >

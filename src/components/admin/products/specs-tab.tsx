@@ -35,10 +35,20 @@ function newRow(): SpecRowData {
  * 为什么用「整表提交」而不是每行一个表单：顺序是这张表的语义的一部分，
  * 逐行保存会让「删除中间一行」变成两次不一致的写入。
  */
-export function SpecsTab({ data }: { data: ProductEditorData }) {
+export function SpecsTab({
+  data,
+  formId = 'product-form-specs',
+  statusTab = 'specs',
+}: {
+  data: ProductEditorData;
+  /** The visual editor also uses this component, so its form id must stay unique. */
+  formId?: string;
+  /** Status key reported to the shared product action bar. */
+  statusTab?: string;
+}) {
   const t = useAdminT();
   const [state, formAction, isPending] = useActionState(saveProductSpecificationsAction, initialFormState);
-  const { scheduleSave } = useAutoSaveForm('specs', 'product-form-specs', state, isPending);
+  const { scheduleSave, formProps } = useAutoSaveForm(statusTab, formId, state, isPending, formAction);
   const [rows, setRows] = useState<SpecRowData[]>(data.specifications);
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -107,7 +117,7 @@ export function SpecsTab({ data }: { data: ProductEditorData }) {
   };
 
   return (
-    <form id="product-form-specs" action={formAction} className="space-y-5">
+    <form id={formId} {...formProps} className="space-y-5">
       <input type="hidden" name="productId" value={data.product.id} />
       {/*
         动态行整表序列化：服务端会用 Zod 重新校验每一行。

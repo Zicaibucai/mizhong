@@ -461,6 +461,109 @@ export async function saveProductBasicAction(
 }
 
 /**
+ * Save the customer-shaped product editor in one request.
+ *
+ * The visual surface deliberately puts name, price, trade details and the publish settings
+ * together. Keeping one action for those fields prevents a quick edit in the lower details
+ * section from racing a name/price autosave and overwriting the other half of the draft.
+ * Media attachments and structured specifications still use their dedicated actions because
+ * both have their own collection semantics.
+ */
+export async function saveProductVisualAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const base = parseForm(makeProductBaseSchema(t), formData, t);
+  if (!base.ok) return { status: 'error', message: base.message };
+
+  const pricing = parseForm(makeProductPricingSchema(t), formData, t);
+  if (!pricing.ok) return { status: 'error', message: pricing.message };
+
+  const translationSchema = makeProductTranslationSchema();
+  const payloads: { locale: AdminLocale; data: z.infer<typeof translationSchema> }[] = [];
+  for (const locale of ADMIN_LOCALES) {
+    const parsed = parseLocaleFields(translationSchema, locale, formData, t);
+    if (!parsed.ok) return { status: 'error', message: parsed.message };
+    payloads.push({ locale, data: parsed.data });
+  }
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const loaded = await loadWorkingDraft(db, base.data.id, t);
+    if (!loaded.ok) return loaded.error;
+
+    const slugOwner = await db.product.findFirst({
+      where: { slug: base.data.slug, id: { not: base.data.id } },
+      select: { id: true },
+    });
+    if (slugOwner) return { status: 'error', message: t.actions.slugTaken };
+
+    if (base.data.categoryId) {
+      const category = await db.productCategory.findUnique({
+        where: { id: base.data.categoryId },
+        select: { id: true },
+      });
+      if (!category) return { status: 'error', message: t.validation.invalidInput };
+    }
+
+    const translations = { ...loaded.draft.translations };
+    for (const { locale, data } of payloads) {
+      translations[locale] = {
+        ...translations[locale],
+        name: data.name,
+        shortDescription: data.shortDescription,
+        description: data.description,
+        sizeSummary: data.sizeSummary,
+        spec: data.spec,
+        application: data.application,
+      };
+    }
+
+    const draft: ProductDraft = {
+      ...loaded.draft,
+      basic: {
+        ...loaded.draft.basic,
+        slug: base.data.slug,
+        sku: base.data.sku,
+        categoryId: base.data.categoryId ?? null,
+        featured: base.data.featured,
+        sortOrder: base.data.sortOrder,
+      },
+      pricing: {
+        priceMode: pricing.data.priceMode,
+        currency: pricing.data.currency,
+        priceMin: decimalToString(pricing.data.priceMin),
+        priceMax: decimalToString(pricing.data.priceMax),
+        priceUnit: pricing.data.priceUnit ?? null,
+        moq: pricing.data.moq ?? null,
+        moqUnit: pricing.data.moqUnit ?? null,
+      },
+      translations,
+    };
+
+    return await persistDraft(db, {
+      productId: base.data.id,
+      draft,
+      user,
+      summary: t.products.visualTitle,
+      t,
+      detail: { slug: base.data.slug, locales: payloads.map((item) => item.locale) },
+    });
+  } catch (error) {
+    console.error('[admin] save visual product failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+}
+
+/**
  * 三语内容：整片写进草稿的 `translations`，只覆盖这六个正文字段。
  *
  * SEO 的两个字段与前台的名称共用同一份翻译对象，所以这里**逐个字段赋值**而不是
