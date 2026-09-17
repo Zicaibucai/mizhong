@@ -56,7 +56,7 @@ export function ProductMediaViewer({
             >
               {item.type === 'video' && item.url ? (
                 <video
-                  className="aspect-[4/3] w-full rounded-2xl border border-navy-200/80 bg-navy-950 object-contain"
+                  className="aspect-[4/3] w-full border border-navy-200/80 bg-navy-950 object-contain"
                   controls
                   preload="metadata"
                   poster={poster}
@@ -70,7 +70,7 @@ export function ProductMediaViewer({
                   src={item.url}
                   alt={label}
                   loading={index === 0 ? 'eager' : 'lazy'}
-                  className="aspect-[4/3] w-full rounded-2xl border border-navy-200/80 bg-white object-cover"
+                  className="aspect-[4/3] w-full border border-navy-200/80 bg-white object-cover"
                 />
               ) : null}
 
@@ -94,7 +94,7 @@ export function ProductMediaViewer({
                 <a
                   href={`#${slideId(index)}`}
                   aria-label={`${item.type === 'video' ? dict.detail.videoLabel : dict.detail.imageLabel} ${index + 1}`}
-                  className="group relative block h-20 w-20 overflow-hidden rounded-lg border border-navy-200 bg-navy-50 transition-colors hover:border-copper-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+                  className="group relative block h-20 w-20 overflow-hidden border border-navy-200 bg-navy-50 transition-colors hover:border-copper-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
                 >
                   {src ? (
                     // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换
@@ -137,9 +137,9 @@ export function ProductSpecTable({
   if (specs.length === 0) return null;
 
   return (
-    <table className={cn('w-full border-collapse text-left text-sm', className)}>
+    <table className={cn('w-full border-collapse border-t border-navy-200 text-left text-sm', className)}>
       {caption ? <caption className="sr-only">{caption}</caption> : null}
-      <tbody className="divide-y divide-navy-100">
+      <tbody className="divide-y divide-navy-200">
         {specs.map((spec) => (
           <tr key={spec.id} className="align-top">
             <th

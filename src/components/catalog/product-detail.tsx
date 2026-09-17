@@ -4,6 +4,7 @@ import { format, getCatalogDict } from '@/lib/i18n/catalog';
 import type { ProductDetailView, ProductCardView } from '@/lib/catalog';
 import type { ContactView } from '@/lib/content';
 import { formatMoq, formatPrice, productUnitLabel } from '@/lib/product-format';
+import { cn } from '@/lib/cn';
 import { Container } from '@/components/ui/container';
 import { ArrowRightIcon, MailIcon, PhoneIcon, WhatsAppIcon } from '@/components/ui/icons';
 import { ProductMediaViewer, ProductSpecTable } from '@/components/catalog/product-media-viewer';
@@ -36,7 +37,7 @@ function SummaryInquiry({
   if (!whatsapp && !email && !phone) return null;
 
   const chip =
-    'inline-flex h-10 max-w-full items-center gap-2 rounded-full border border-navy-200 px-4 text-sm font-medium text-navy-800 transition-colors hover:border-navy-400 hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500';
+    'inline-flex h-10 max-w-full items-center gap-2 border border-navy-200 px-4 text-sm font-medium text-navy-800 transition-colors hover:border-copper-500 hover:bg-ivory-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500';
 
   return (
     <ul className="mt-3 flex flex-wrap gap-2">
@@ -101,7 +102,7 @@ export function ProductDetail({
   const galleryItems = product.media;
 
   return (
-    <article className="pb-16 lg:pb-24">
+    <article className="bg-ivory-50 pb-16 pt-[4.25rem] lg:pb-24">
       {variant === 'draft' ? (
         <div className="border-b border-amber-200 bg-amber-50">
           <Container className="py-3">
@@ -111,7 +112,7 @@ export function ProductDetail({
       ) : null}
 
       {/* 面包屑 */}
-      <Container className="pt-6">
+      <Container className="border-b border-navy-200 py-5">
         <nav aria-label={dict.detail.breadcrumbProducts}>
           <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-navy-500">
             <li>
@@ -149,8 +150,15 @@ export function ProductDetail({
         </nav>
       </Container>
 
-      <Container className="mt-8">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start lg:gap-14">
+      <Container className="mt-10 lg:mt-14">
+        <div
+          className={cn(
+            'grid gap-10 lg:items-start lg:gap-16',
+            galleryItems.length > 0
+              ? 'lg:grid-cols-[minmax(0,1.2fr)_minmax(0,420px)]'
+              : 'lg:grid-cols-[minmax(0,720px)]',
+          )}
+        >
           {/* 左：主媒体 + 缩略图 */}
           {galleryItems.length > 0 ? (
             <ProductMediaViewer
@@ -162,23 +170,28 @@ export function ProductDetail({
           ) : null}
 
           {/* 右：产品概要 */}
-          <div className="min-w-0 lg:pt-1">
+          <div
+            className={cn(
+              'min-w-0 border-t border-navy-200 pt-5',
+              galleryItems.length > 0 && 'lg:sticky lg:top-20',
+            )}
+          >
             {product.categoryName ? (
               categoryHref ? (
                 <Link
                   href={categoryHref}
-                  className="inline-flex w-fit items-center rounded-full bg-copper-50 px-3.5 py-1.5 text-xs font-medium text-copper-700 transition-colors hover:bg-copper-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+                  className="pv-mono inline-flex w-fit text-[0.58rem] text-copper-700 transition-colors hover:text-copper-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
                 >
                   {product.categoryName}
                 </Link>
               ) : (
-                <span className="inline-flex w-fit items-center rounded-full bg-copper-50 px-3.5 py-1.5 text-xs font-medium text-copper-700">
+                <span className="pv-mono inline-flex w-fit text-[0.58rem] text-copper-700">
                   {product.categoryName}
                 </span>
               )
             ) : null}
 
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-navy-900 sm:text-[2.1rem] sm:leading-tight">
+            <h1 className="pv-display mt-5 text-4xl text-navy-950 sm:text-5xl">
               {product.name}
             </h1>
 
@@ -194,7 +207,7 @@ export function ProductDetail({
             ) : null}
 
             {/* 价格 / 贸易信息：未填写的行直接隐藏，不渲染空框 */}
-            <dl className="mt-7 divide-y divide-navy-100 border-y border-navy-100">
+            <dl className="mt-7 divide-y divide-navy-200 border-y border-navy-200">
               <div className="flex flex-wrap items-baseline justify-between gap-3 py-4">
                 <dt className="text-sm text-navy-500">{dict.detail.priceLabel}</dt>
                 <dd
@@ -230,7 +243,7 @@ export function ProductDetail({
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Link
                 href="#inquiry"
-                className="inline-flex h-11 items-center rounded-full bg-copper-700 px-6 text-sm font-medium text-ivory-50 transition-colors hover:bg-copper-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+                className="pv-btn pv-btn-solid h-12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
               >
                 {dict.detail.sendInquiry}
                 <ArrowRightIcon className="ml-2 h-4 w-4" />
@@ -241,7 +254,7 @@ export function ProductDetail({
             <SummaryInquiry locale={locale} contacts={contacts} />
 
             {product.usingFallback ? (
-              <p className="mt-6 rounded-xl border border-copper-200 bg-copper-50 px-4 py-3 text-sm leading-relaxed text-copper-800">
+              <p className="mt-6 border border-copper-200 bg-copper-50 px-4 py-3 text-sm leading-relaxed text-copper-800">
                 {dict.detail.fallbackNotice}
               </p>
             ) : null}
@@ -252,51 +265,49 @@ export function ProductDetail({
       {/* 产品介绍 / 结构化规格 / 应用场景：全部为空时整个区块不渲染 */}
       {overview || product.specifications.length > 0 || freeTextSpec || application ? (
         <Container className="mt-14 lg:mt-20">
-          <div className="max-w-3xl space-y-12">
+          <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-x-16 lg:gap-y-14">
             {overview ? (
-              <section>
-                <h2 className="text-xl font-semibold tracking-tight text-navy-900 sm:text-2xl">
+              <section className="border-t border-navy-200 pt-5 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16">
+                <h2 className="pv-mono text-[0.62rem] text-copper-700">
                   {dict.detail.overview}
                 </h2>
-                <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-navy-800">
+                <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-navy-800 lg:mt-0">
                   {overview}
                 </p>
               </section>
             ) : null}
 
             {product.specifications.length > 0 ? (
-              <section>
-                <h2 className="text-xl font-semibold tracking-tight text-navy-900 sm:text-2xl">
+              <section className="border-t border-navy-200 pt-5 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16">
+                <h2 className="pv-mono text-[0.62rem] text-copper-700">
                   {dict.detail.specs}
                 </h2>
-                <ProductSpecTable
-                  specs={product.specifications}
-                  caption={dict.detail.specs}
-                  className="mt-4"
-                />
-                {freeTextSpec ? (
-                  <p className="mt-6 whitespace-pre-line text-base leading-relaxed text-navy-800">
-                    {freeTextSpec}
-                  </p>
-                ) : null}
+                <div>
+                  <ProductSpecTable specs={product.specifications} caption={dict.detail.specs} />
+                  {freeTextSpec ? (
+                    <p className="mt-6 whitespace-pre-line text-base leading-relaxed text-navy-800">
+                      {freeTextSpec}
+                    </p>
+                  ) : null}
+                </div>
               </section>
             ) : freeTextSpec ? (
-              <section>
-                <h2 className="text-xl font-semibold tracking-tight text-navy-900 sm:text-2xl">
+              <section className="border-t border-navy-200 pt-5 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16">
+                <h2 className="pv-mono text-[0.62rem] text-copper-700">
                   {dict.detail.specs}
                 </h2>
-                <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-navy-800">
+                <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-navy-800 lg:mt-0">
                   {freeTextSpec}
                 </p>
               </section>
             ) : null}
 
             {application ? (
-              <section>
-                <h2 className="text-xl font-semibold tracking-tight text-navy-900 sm:text-2xl">
+              <section className="border-t border-navy-200 pt-5 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16">
+                <h2 className="pv-mono text-[0.62rem] text-copper-700">
                   {dict.detail.applications}
                 </h2>
-                <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-navy-800">
+                <p className="mt-4 whitespace-pre-line text-base leading-relaxed text-navy-800 lg:mt-0">
                   {application}
                 </p>
               </section>
@@ -308,7 +319,8 @@ export function ProductDetail({
       {/* 图库：与顶部查看器相互独立，保证「所有图片」始终可访问（含无 JavaScript 时） */}
       {product.gallery.length > 1 ? (
         <Container className="mt-14 lg:mt-20">
-          <h2 className="text-xl font-semibold tracking-tight text-navy-900 sm:text-2xl">
+          <p className="pv-mono text-[0.58rem] text-copper-700">MEDIA / GALLERY</p>
+          <h2 className="pv-display mt-4 text-3xl text-navy-950 sm:text-4xl">
             {dict.detail.gallery}
           </h2>
           <ul className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -318,7 +330,7 @@ export function ProductDetail({
                 <li key={item.id}>
                   {item.type === 'video' && item.url ? (
                     <video
-                      className="aspect-[4/3] w-full rounded-xl border border-navy-200/80 bg-navy-950 object-cover"
+                      className="aspect-[4/3] w-full border border-navy-200/80 bg-navy-950 object-cover"
                       controls
                       preload="metadata"
                       poster={item.posterUrl?.trim() || undefined}
@@ -332,7 +344,7 @@ export function ProductDetail({
                       src={item.thumbnailUrl ?? item.url}
                       alt={label}
                       loading="lazy"
-                      className="aspect-[4/3] w-full rounded-xl border border-navy-200/80 bg-white object-cover"
+                      className="aspect-[4/3] w-full border border-navy-200/80 bg-white object-cover"
                     />
                   ) : null}
                   {item.caption ? (
@@ -353,7 +365,8 @@ export function ProductDetail({
 
       {related.length > 0 ? (
         <Container className="mt-16 lg:mt-20">
-          <h2 className="text-xl font-semibold tracking-tight text-navy-900 sm:text-2xl">
+          <p className="pv-mono text-[0.58rem] text-copper-700">RELATED / PRODUCTS</p>
+          <h2 className="pv-display mt-4 text-3xl text-navy-950 sm:text-4xl">
             {dict.detail.relatedTitle}
           </h2>
           <p className="mt-2 text-sm text-muted">
@@ -361,7 +374,6 @@ export function ProductDetail({
               ? format(dict.detail.relatedSubtitle, { category: product.categoryName })
               : dict.detail.relatedFallbackSubtitle}
           </p>
-          <div className="mt-3 h-px w-16 bg-copper-300" />
           <ProductGrid locale={locale} products={related} className="mt-10" />
         </Container>
       ) : null}

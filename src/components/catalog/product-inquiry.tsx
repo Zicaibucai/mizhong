@@ -14,7 +14,7 @@ import { absoluteProductUrl } from './urls';
  */
 
 const actionBase =
-  'inline-flex h-12 max-w-full items-center gap-2.5 rounded-full px-6 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2';
+  'inline-flex h-12 max-w-full items-center gap-2.5 border px-6 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2';
 
 /** wa.me 链接在原有链接上追加预填文案（链接自带查询参数时也不会拼接错误） */
 function withWhatsAppText(href: string, message: string): string {
@@ -58,9 +58,10 @@ export function ProductInquiry({
   const subject = product.sku ? `${product.name} (${product.sku})` : product.name;
 
   return (
-    <section className={cn('texture-weave-dark rounded-2xl bg-navy-900 px-6 py-12 text-ivory-50 sm:px-12', className)}>
-      <div className="max-w-2xl">
-        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+    <section className={cn('texture-weave-dark bg-navy-900 px-6 py-12 text-ivory-50 sm:px-12 lg:py-16', className)}>
+      <div className="max-w-3xl">
+        <p className="pv-mono text-[0.58rem] text-copper-300">DIRECT / INQUIRY</p>
+        <h2 className="pv-display mt-5 text-3xl sm:text-5xl">
           {dict.detail.inquiryTitle}
         </h2>
         <p className="mt-4 text-base leading-relaxed text-navy-100">{dict.detail.inquirySubtitle}</p>
@@ -72,7 +73,7 @@ export function ProductInquiry({
                 href={withWhatsAppText(whatsapp.href, message)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={cn(actionBase, 'bg-[#25D366] text-white hover:bg-[#1FAE55] focus-visible:outline-[#128C7E]')}
+                className={cn(actionBase, 'border-[#25D366] bg-[#25D366] text-white hover:bg-[#1FAE55] focus-visible:outline-[#128C7E]')}
               >
                 <WhatsAppIcon className="h-4 w-4 shrink-0" />
                 {dict.detail.whatsapp}
@@ -84,7 +85,7 @@ export function ProductInquiry({
             <li>
               <a
                 href={withMailBody(email.href, subject, message)}
-                className={cn(actionBase, 'bg-copper-700 text-ivory-50 hover:bg-copper-800 focus-visible:outline-copper-300')}
+                className={cn(actionBase, 'border-copper-700 bg-copper-700 text-ivory-50 hover:bg-copper-800 focus-visible:outline-copper-300')}
               >
                 <MailIcon className="h-4 w-4 shrink-0" />
                 {dict.detail.email}

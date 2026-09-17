@@ -48,7 +48,7 @@ export function ProductCard({
   return (
     <article
       {...hover.handlers}
-      className={cn('group relative flex h-full flex-col', className)}
+      className={cn('group relative flex h-full flex-col border-t border-navy-200 pt-3', className)}
     >
       <ProductCardMedia
         coverUrl={product.coverThumbnailUrl ?? product.coverUrl}
@@ -63,18 +63,18 @@ export function ProductCard({
           categoryHref ? (
             <Link
               href={categoryHref}
-              className="relative z-10 inline-flex w-fit items-center rounded-full bg-copper-50 px-3 py-1 text-xs font-medium text-copper-700 transition-colors hover:bg-copper-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+              className="pv-mono relative z-10 inline-flex w-fit text-[0.55rem] text-copper-700 transition-colors hover:text-copper-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
             >
               {product.categoryName}
             </Link>
           ) : (
-            <span className="inline-flex w-fit items-center rounded-full bg-copper-50 px-3 py-1 text-xs font-medium text-copper-700">
+            <span className="pv-mono inline-flex w-fit text-[0.55rem] text-copper-700">
               {product.categoryName}
             </span>
           )
         ) : null}
 
-        <h3 className="mt-3 text-base font-semibold leading-snug text-navy-900">
+        <h3 className="mt-2.5 text-[1.05rem] font-medium leading-snug tracking-[-0.015em] text-navy-950">
           <Link
             href={href}
             className="transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-copper-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
@@ -91,7 +91,7 @@ export function ProductCard({
 
         <p
           className={cn(
-            'mt-3 text-[15px] font-semibold tracking-tight',
+            'mt-3 text-[0.9rem] font-medium tracking-tight',
             negotiable ? 'text-navy-600' : 'text-copper-800',
           )}
         >
@@ -115,7 +115,7 @@ export function ProductCard({
           </dl>
         ) : null}
 
-        <div className="mt-auto flex flex-wrap items-center gap-x-4 gap-y-1 pt-5 text-sm font-medium">
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-navy-100 pt-4 text-sm font-medium">
           <span className="inline-flex items-center gap-1.5 text-copper-700">
             {dict.list.viewDetails}
             <ArrowRightIcon className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { defaultLocale, isLocale, type Locale } from '@/lib/i18n';
 import { format, getCatalogDict } from '@/lib/i18n/catalog';
 import { listProducts, normalizeQuery } from '@/lib/catalog';
-import { Container } from '@/components/ui/container';
+import { PreviewContainer } from '@/components/preview/shell';
 import { CatalogPageHeader } from '@/components/catalog/page-header';
 import { CatalogSearchForm } from '@/components/catalog/catalog-search-form';
 import { CatalogEmptyState, ProductGrid } from '@/components/catalog/product-grid';
@@ -69,8 +69,8 @@ export default async function SearchPage({
     return (
       <>
         <CatalogPageHeader title={dict.search.title} />
-        <section className="py-12 lg:py-16">
-          <Container>
+        <section className="bg-ivory-50 py-12 lg:py-20">
+          <PreviewContainer>
             <div className="mb-10">{form}</div>
             <CatalogEmptyState
               message={dict.search.emptyQuery}
@@ -78,7 +78,7 @@ export default async function SearchPage({
               actionHref={catalogueHref}
               actionLabel={dict.search.backToCatalogue}
             />
-          </Container>
+          </PreviewContainer>
         </section>
       </>
     );
@@ -99,8 +99,8 @@ export default async function SearchPage({
         subtitle={format(dict.search.resultsFor, { query })}
       />
 
-      <section className="py-12 lg:py-16">
-        <Container>
+      <section className="bg-ivory-50 py-12 lg:py-20">
+        <PreviewContainer>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="text-sm text-muted">{countLabel}</p>
             <Link
@@ -133,7 +133,7 @@ export default async function SearchPage({
           />
 
           <div className="mt-14 border-t border-navy-100 pt-10">{form}</div>
-        </Container>
+        </PreviewContainer>
       </section>
     </>
   );

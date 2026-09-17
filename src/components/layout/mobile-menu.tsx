@@ -73,7 +73,7 @@ export function MobileMenu({
         aria-expanded={open}
         aria-controls="mobile-nav"
         aria-label={open ? closeLabel : menuLabel}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full text-navy-900 transition-colors hover:bg-navy-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+        className="inline-flex h-10 w-10 items-center justify-center text-navy-900 transition-colors hover:bg-navy-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
       >
         {open ? <CloseIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
       </button>
@@ -92,7 +92,7 @@ export function MobileMenu({
                     href={item.href}
                     {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
                     onClick={() => setOpen(false)}
-                    className="block rounded-lg px-3 py-3 text-lg font-medium text-navy-900 transition-colors hover:bg-ivory-100"
+                    className="block border-t border-navy-100 px-3 py-3 text-lg font-medium text-navy-900 transition-colors hover:border-copper-500 hover:bg-ivory-100"
                   >
                     {item.label}
                   </a>
@@ -102,7 +102,7 @@ export function MobileMenu({
             <a
               href={ctaHref}
               onClick={() => setOpen(false)}
-              className="mt-4 flex h-12 items-center justify-center rounded-full bg-navy-900 px-6 text-sm font-medium text-ivory-50"
+              className="mt-4 flex h-12 items-center justify-center border border-navy-900 bg-navy-900 px-6 text-sm font-medium text-ivory-50"
             >
               {ctaLabel}
             </a>

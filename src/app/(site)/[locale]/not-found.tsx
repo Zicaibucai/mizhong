@@ -13,15 +13,17 @@ export default async function NotFound({ params }: { params?: Promise<{ locale?:
   const t = getDictionary(locale);
 
   return (
-    <Container className="flex flex-col items-center py-24 text-center sm:py-32">
-      <p className="font-mono text-sm text-copper-600">404</p>
-      <h1 className="mt-4 text-3xl font-semibold tracking-tight text-navy-900 sm:text-4xl">
+    <div className="texture-weave-dark min-h-[70vh] bg-navy-950 pt-[4.25rem] text-ivory-50">
+      <Container className="flex flex-col items-center py-24 text-center sm:py-32">
+      <p className="pv-mono text-copper-300">ERROR / 404</p>
+      <h1 className="pv-display mt-6 text-5xl sm:text-7xl">
         {t.notFound.title}
       </h1>
-      <p className="mt-4 max-w-md text-muted">{t.notFound.description}</p>
-      <Button href={`/${locale}`} variant="primary" className="mt-8">
+      <p className="mt-6 max-w-md text-navy-200">{t.notFound.description}</p>
+      <Button href={`/${locale}`} variant="outlineLight" className="mt-8 !rounded-none">
         {t.notFound.back}
       </Button>
-    </Container>
+      </Container>
+    </div>
   );
 }

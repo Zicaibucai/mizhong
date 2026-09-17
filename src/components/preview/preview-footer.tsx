@@ -16,6 +16,7 @@ export function PreviewFooter({
   logo,
   nav,
   channels,
+  homeLanguages = false,
   labels,
 }: {
   locale: Locale;
@@ -24,6 +25,8 @@ export function PreviewFooter({
   logo: ReactNode;
   nav: NavView[];
   channels: PreviewChannel[];
+  /** 正式站语言入口指向各语言首页；设计预览保留 /design-preview 后缀。 */
+  homeLanguages?: boolean;
   labels: {
     company: string;
     contact: string;
@@ -101,7 +104,7 @@ export function PreviewFooter({
               {locales.map((item) => (
                 <li key={item}>
                   <Link
-                    href={`/${item}/design-preview`}
+                    href={homeLanguages ? `/${item}` : `/${item}/design-preview`}
                     lang={item}
                     aria-current={item === locale ? 'true' : undefined}
                     className={

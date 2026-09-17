@@ -1,5 +1,4 @@
 import { cn } from '@/lib/cn';
-import { Button } from '@/components/ui/button';
 
 interface CatalogSearchFormProps {
   /** 表单提交地址（GET），例如 /zh/products */
@@ -42,11 +41,14 @@ export function CatalogSearchForm({
         defaultValue={defaultQuery}
         placeholder={placeholder}
         autoComplete="off"
-        className="h-11 min-w-0 flex-1 rounded-full border border-navy-200 bg-white px-5 text-sm text-navy-900 placeholder:text-navy-400 focus:border-navy-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+        className="h-12 min-w-0 flex-1 border border-navy-200 bg-transparent px-4 text-sm text-navy-900 placeholder:text-navy-400 focus:border-copper-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
       />
-      <Button type="submit" variant="primary">
+      <button
+        type="submit"
+        className="pv-btn pv-btn-ink h-12 shrink-0 px-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+      >
         {buttonLabel}
-      </Button>
+      </button>
     </form>
   );
 }

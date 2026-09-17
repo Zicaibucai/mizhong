@@ -32,6 +32,7 @@ export function PreviewHeader({
   logo,
   nav,
   ctaHref,
+  homeHref,
   labels,
 }: {
   locale: Locale;
@@ -40,6 +41,8 @@ export function PreviewHeader({
   logo: ReactNode;
   nav: NavView[];
   ctaHref: string;
+  /** 正式站传入 /{locale}；设计预览默认回到 /{locale}/design-preview */
+  homeHref?: string;
   labels: HeaderLabels;
 }) {
   const navItems = nav.map((item) => ({
@@ -54,7 +57,7 @@ export function PreviewHeader({
         <div className="pv-header-inner flex items-center justify-between gap-6">
           {/* 品牌：回到预览页自身（当前语言），未上传 Logo 时只显示文字公司名 */}
           <Link
-            href={`/${locale}/design-preview`}
+            href={homeHref ?? `/${locale}/design-preview`}
             className="flex min-w-0 items-center gap-3 text-current"
             aria-label={name}
           >

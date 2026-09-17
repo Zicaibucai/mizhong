@@ -120,7 +120,7 @@ export function ProductCardMedia({
   className?: string;
 }) {
   return (
-    <div className={cn('relative overflow-hidden rounded-xl', className)}>
+    <div className={cn('relative overflow-hidden bg-navy-100', className)}>
       {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换
         <img
@@ -128,7 +128,7 @@ export function ProductCardMedia({
           alt={coverAlt}
           loading="lazy"
           className={cn(
-            'aspect-[4/3] w-full rounded-xl border border-navy-200/80 object-cover transition-transform duration-500 motion-safe:group-hover:scale-[1.03]',
+            'aspect-[4/3] w-full border border-navy-200/80 object-cover transition-transform duration-700 motion-safe:group-hover:scale-[1.035]',
             hover.enabled ? 'motion-safe:group-hover:opacity-0' : null,
           )}
         />
@@ -148,7 +148,7 @@ export function ProductCardMedia({
           aria-hidden="true"
           tabIndex={-1}
           onError={hover.onError}
-          className="pointer-events-none absolute inset-0 h-full w-full rounded-xl border border-navy-200/80 bg-navy-950 object-cover opacity-0 transition-opacity duration-300 motion-safe:group-hover:opacity-100"
+          className="pointer-events-none absolute inset-0 h-full w-full border border-navy-200/80 bg-navy-950 object-cover opacity-0 transition-opacity duration-300 motion-safe:group-hover:opacity-100"
         />
       ) : null}
     </div>

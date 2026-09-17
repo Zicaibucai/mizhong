@@ -9,7 +9,7 @@ import {
   normalizeQuery,
   parseProductSort,
 } from '@/lib/catalog';
-import { Container } from '@/components/ui/container';
+import { PreviewContainer } from '@/components/preview/shell';
 import { CatalogPageHeader } from '@/components/catalog/page-header';
 import { CatalogSearchForm } from '@/components/catalog/catalog-search-form';
 import { CategoryMobilePanel, CategorySidebar } from '@/components/catalog/category-sidebar';
@@ -88,8 +88,8 @@ export default async function ProductsPage({
     <>
       <CatalogPageHeader title={dict.list.title} subtitle={dict.list.subtitle} />
 
-      <section className="py-10 lg:py-14">
-        <Container>
+      <section className="bg-ivory-50 py-12 lg:py-20">
+        <PreviewContainer>
           <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-12">
             <CategorySidebar
               locale={l}
@@ -109,7 +109,7 @@ export default async function ProductsPage({
                 sort={sort === 'recommended' ? undefined : sort}
               />
 
-              <div className="flex flex-col gap-4 border-b border-navy-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 border-b border-navy-200 pb-6 sm:flex-row sm:items-center sm:justify-between">
                 <CatalogSearchForm
                   action={basePath}
                   defaultQuery={query}
@@ -177,7 +177,7 @@ export default async function ProductsPage({
               />
             </div>
           </div>
-        </Container>
+        </PreviewContainer>
       </section>
 
       {featured.length > 0 ? <FeaturedProducts locale={l} products={featured} /> : null}

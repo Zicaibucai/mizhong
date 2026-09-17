@@ -21,7 +21,7 @@ export function ProductGrid({
   return (
     <ul
       className={cn(
-        'grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-8',
+        'grid grid-cols-1 gap-x-5 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-7',
         className,
       )}
     >
@@ -47,14 +47,14 @@ export function CatalogEmptyState({
   actionLabel?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-navy-200 bg-white px-6 py-16 text-center">
-      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-copper-300/60 text-copper-500">
+    <div className="v2-surface px-6 py-16 text-center">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center border border-copper-300/60 text-copper-500">
         <ImageIcon className="h-5 w-5" />
       </span>
       <p className="mt-5 text-base font-medium text-navy-900">{message}</p>
       {hint ? <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">{hint}</p> : null}
       {actionHref && actionLabel ? (
-        <Button href={actionHref} variant="outline" className="mt-7">
+        <Button href={actionHref} variant="outline" className="mt-7 !rounded-none">
           {actionLabel}
         </Button>
       ) : null}

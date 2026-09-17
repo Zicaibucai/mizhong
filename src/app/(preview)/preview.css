@@ -6,10 +6,8 @@
  *
  * 动效原则：
  *   1. 只动 transform / opacity / clip-path —— 不触发布局，避免 CLS 与掉帧；
- *   2. **内容默认可见**。滚动揭示的「初始隐藏」状态由 ScrollChoreography 在
- *      确认 IntersectionObserver 可用之后，才写到根元素的 [data-pv-anim='on'] 上，
- *      并且只作用于首屏之外的元素 —— 关闭 JS、observer 失效、reduced-motion
- *      三种情况下页面都完整可读；
+ *   2. **内容始终可见**。Preview 2.0 不再把视口外正文设为透明，自动截图、
+ *      快速滚动、关闭 JS 与 reduced-motion 都直接得到完整页面；
  *   3. 由 ScrollChoreography 单一 rAF 循环写入 CSS 变量，样式层只消费变量；
  *   4. prefers-reduced-motion 下全部降级为静态终态。
  *
@@ -29,7 +27,7 @@
   --pv-ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* 区块纵向节奏：手机 / 平板 88px、宽屏 112px —— 保留呼吸感但不留空屏 */
-  --pv-section-y: clamp(5.5rem, 8vw, 7rem);
+  --pv-section-y: clamp(4.75rem, 7vw, 6.5rem);
 
   background-color: var(--color-ivory-50);
   color: var(--color-navy-900);
@@ -51,6 +49,40 @@
 
 [data-preview] .pv-section {
   padding-block: var(--pv-section-y);
+}
+
+/* Preview 2.0 内页页头：与首页首屏共用织线语言，但高度更克制。 */
+[data-preview] .v2-page-hero {
+  position: relative;
+  overflow: hidden;
+  padding-top: calc(4.25rem + clamp(3.5rem, 7vw, 6rem));
+  padding-bottom: clamp(3.5rem, 7vw, 6rem);
+}
+
+[data-preview] .v2-page-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.38;
+  background-image:
+    linear-gradient(90deg, transparent 0 7.9%, rgb(255 255 255 / 0.09) 8%, transparent 8.1%),
+    linear-gradient(0deg, transparent 0 49.8%, rgb(255 255 255 / 0.08) 50%, transparent 50.2%);
+  background-size: 12.5% 100%, 100% 5rem;
+}
+
+[data-preview] .v2-surface {
+  border: 1px solid var(--pv-rule);
+  background: color-mix(in srgb, var(--color-ivory-50) 93%, white);
+}
+
+[data-preview] .v2-rule-hover {
+  transition: border-color 0.35s var(--pv-ease-soft), color 0.35s var(--pv-ease-soft);
+}
+
+[data-preview] .v2-rule-hover:hover,
+[data-preview] .v2-rule-hover:focus-within {
+  border-color: var(--color-copper-500);
 }
 
 /* 区块标题与内容之间的间距（比页面留白小一档，让每个视口都有内容） */
@@ -233,8 +265,17 @@
     background-color 0.5s var(--pv-ease-soft),
     border-color 0.5s var(--pv-ease-soft),
     backdrop-filter 0.5s var(--pv-ease-soft);
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid var(--pv-rule);
+  background-color: color-mix(in srgb, var(--color-ivory-50) 92%, transparent);
+  backdrop-filter: saturate(140%) blur(14px);
+  color: var(--color-navy-900);
+}
+
+/* 只有真正拥有深色首屏的首页使用透明浅字页头；所有内页首帧即为实底。 */
+[data-preview]:has([data-pv-hero]) .pv-header:not([data-scrolled='true']) {
+  border-bottom-color: transparent;
   background-color: transparent;
+  backdrop-filter: none;
   color: var(--color-ivory-50);
 }
 
@@ -307,13 +348,13 @@
  * 首屏之上页头是透明的深底，而复用的语言切换器 / 移动端菜单按浅色页头配色，
  * 这里在「未滚动」状态下反转它们的文字与 hover 底色。
  */
-[data-preview] .pv-header:not([data-scrolled='true']) .pv-lang button,
-[data-preview] .pv-header:not([data-scrolled='true']) .pv-mobile button {
+[data-preview]:has([data-pv-hero]) .pv-header:not([data-scrolled='true']) .pv-lang button,
+[data-preview]:has([data-pv-hero]) .pv-header:not([data-scrolled='true']) .pv-mobile button {
   color: var(--color-ivory-50);
 }
 
-[data-preview] .pv-header:not([data-scrolled='true']) .pv-lang button:hover,
-[data-preview] .pv-header:not([data-scrolled='true']) .pv-mobile button:hover {
+[data-preview]:has([data-pv-hero]) .pv-header:not([data-scrolled='true']) .pv-lang button:hover,
+[data-preview]:has([data-pv-hero]) .pv-header:not([data-scrolled='true']) .pv-mobile button:hover {
   background-color: color-mix(in srgb, var(--color-ivory-50) 14%, transparent);
 }
 

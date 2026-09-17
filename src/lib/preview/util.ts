@@ -6,9 +6,8 @@ import { PUBLIC_CONTACTS } from '@/lib/contact-config';
 import { deriveContactHref, sanitizeHref } from '@/lib/href';
 
 /**
- * 设计预览页专用工具集。
- *
- * 只被 /[locale]/design-preview 路由使用，不参与正式首页渲染。
+ * Preview 2.0 的视觉与联系工具集。
+ * 正式站和 /[locale]/design-preview 共用，保证评审版与上线版一致。
  */
 
 /** 把 CSS 自定义属性写进 style（React 的类型定义不接受任意 --var 键） */

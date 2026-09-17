@@ -18,12 +18,12 @@ export function FeaturedProducts({
   const dict = getCatalogDict(locale);
 
   return (
-    <section className="border-b border-navy-100 bg-white py-12 lg:py-16">
+    <section className="border-y border-navy-200 bg-ivory-100 py-14 lg:py-20">
       <Container>
-        <h2 className="text-xl font-semibold tracking-tight text-navy-900 sm:text-2xl">
+        <p className="pv-mono text-[0.58rem] text-copper-700">CURATED / 01</p>
+        <h2 className="pv-display mt-4 text-3xl text-navy-950 sm:text-4xl">
           {dict.list.featuredTitle}
         </h2>
-        <div className="mt-3 h-px w-16 bg-copper-300" />
         <ProductGrid locale={locale} products={products} className="mt-10" />
       </Container>
     </section>

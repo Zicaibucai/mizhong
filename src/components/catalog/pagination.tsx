@@ -6,7 +6,7 @@ import { ArrowRightIcon } from '@/components/ui/icons';
 import { withQuery } from './urls';
 
 const base =
-  'inline-flex h-11 items-center gap-2 rounded-full border px-5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500';
+  'inline-flex h-11 items-center gap-2 border px-5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500';
 const enabled = 'border-navy-300 text-navy-900 hover:border-navy-900 hover:bg-navy-50';
 const disabled = 'border-navy-200 text-navy-300';
 

@@ -57,7 +57,7 @@ export function SortSelect({
         name="sort"
         defaultValue={value}
         onChange={(event) => event.currentTarget.form?.requestSubmit()}
-        className="h-10 min-w-0 rounded-full border border-navy-200 bg-white px-4 pr-8 text-sm text-navy-900 focus:border-navy-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+        className="h-11 min-w-0 border border-navy-200 bg-transparent px-4 pr-8 text-sm text-navy-900 focus:border-copper-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

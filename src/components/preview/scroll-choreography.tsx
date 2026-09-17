@@ -9,15 +9,13 @@ import { useEffect } from 'react';
  *   --pv-progress        0→1 阅读进度（进度条 / 侧边织线消费）
  *   --pv-hero-shift      首屏视差位移（px，视口内封顶，避免长页面位移失控）
  *   header[data-scrolled]    页头透明 / 实底状态
- *   [data-pv-anim='on']  滚动揭示的「初始隐藏」开关（见下）
  *   [data-stage-row] / [data-stage-nav] 的 data-active  当前采购阶段
  *
  * 内容可见性优先于动效：
  *   1. 服务器渲染的 HTML 默认就是终态，无需任何 JS 也完整可读；
- *   2. 只有确认 IntersectionObserver 可用、且用户未要求减少动效时，才把
- *      首屏内的元素先标记为可见，再加 [data-pv-anim='on'] 隐藏视口外的元素；
- *   3. 除 observer 外还有「滚动兜底扫描」与「超时全量显示」两道保险，
- *      任何情况下都不会有内容停留在隐藏态。
+ *   2. Preview 2.0 不再隐藏视口外正文；observer 只添加 is-visible 状态，
+ *      内容在自动截图、快速滚动与低性能设备上都从第一帧完整可见；
+ *   3. 兜底扫描继续保留，供阶段标记与未来的非关键装饰动效使用。
  */
 export function ScrollChoreography() {
   useEffect(() => {
@@ -26,7 +24,7 @@ export function ScrollChoreography() {
     const hero = document.querySelector<HTMLElement>('[data-pv-hero]');
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    let heroThreshold = window.innerHeight * 0.8;
+    let heroThreshold = hero ? window.innerHeight * 0.8 : -1;
     let maxScroll = 1;
     let ticking = false;
     let lastProgress = -1;
@@ -35,7 +33,8 @@ export function ScrollChoreography() {
 
     function measure() {
       maxScroll = Math.max(1, root.scrollHeight - window.innerHeight);
-      heroThreshold = hero ? Math.max(120, hero.offsetHeight - 80) : window.innerHeight * 0.8;
+      // 内页没有深色首屏，页头从第一帧起就使用象牙白实底。
+      heroThreshold = hero ? Math.max(120, hero.offsetHeight - 80) : -1;
     }
 
     function write() {
@@ -103,10 +102,8 @@ export function ScrollChoreography() {
     const canAnimate = !reduceMotion && typeof IntersectionObserver !== 'undefined';
 
     if (canAnimate) {
-      // 先标记首屏内的元素，再加动画开关：两者在同一个同步块里完成，
-      // 浏览器不会绘制出「内容先消失再出现」的中间帧。
+      // Preview 2.0 不写 data-pv-anim：正文不再先隐藏，observer 只记录进入状态。
       sweep();
-      root.setAttribute('data-pv-anim', 'on');
 
       observer = new IntersectionObserver(
         (entries) => {

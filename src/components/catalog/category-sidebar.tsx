@@ -16,9 +16,9 @@ interface BaseProps {
 }
 
 const itemBase =
-  'flex w-full items-baseline justify-between gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500';
-const itemActive = 'bg-navy-900 font-medium text-ivory-50';
-const itemIdle = 'text-navy-700 hover:bg-navy-50 hover:text-navy-900';
+  'flex w-full items-baseline justify-between gap-3 border-t border-navy-200 px-0 py-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500';
+const itemActive = 'border-copper-500 font-medium text-copper-800';
+const itemIdle = 'text-navy-700 hover:border-navy-900 hover:text-navy-950';
 
 /** 分类清单：桌面侧栏与移动端展开面板共用同一份链接结构 */
 function CategoryLinks({ locale, categories, activeSlug, query, sort }: BaseProps) {
@@ -80,7 +80,7 @@ export function CategorySidebar(props: BaseProps & { className?: string }) {
         aria-label={dict.list.categorySidebarTitle}
         className="lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pb-4"
       >
-        <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-[0.18em] text-navy-400">
+        <p className="pv-mono pb-4 text-[0.58rem] text-copper-700">
           {dict.list.categorySidebarTitle}
         </p>
         <CategoryLinks {...props} />
@@ -104,14 +104,14 @@ export function CategoryMobilePanel(props: BaseProps & { className?: string }) {
   const currentLabel = active?.name ?? dict.list.allCategories;
 
   return (
-    <details className={cn('group rounded-xl border border-navy-200 bg-white lg:hidden', props.className)}>
+    <details className={cn('group border border-navy-200 bg-transparent lg:hidden', props.className)}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-navy-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500 [&::-webkit-details-marker]:hidden">
         <span className="flex min-w-0 items-center gap-2">
           <span className="shrink-0">{dict.list.filtersButton}</span>
           <span
             className={cn(
-              'truncate rounded-full px-2.5 py-0.5 text-xs',
-              active ? 'bg-navy-900 text-ivory-50' : 'bg-navy-100 text-navy-700',
+              'truncate border px-2.5 py-0.5 text-xs',
+              active ? 'border-copper-500 text-copper-800' : 'border-navy-200 text-navy-700',
             )}
           >
             {currentLabel}

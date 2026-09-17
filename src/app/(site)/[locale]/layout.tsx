@@ -12,10 +12,15 @@ import {
 import { site } from '@/lib/site-config';
 import { getSiteContent } from '@/lib/content';
 import { withLocale } from '@/lib/href';
-import { SiteHeader } from '@/components/layout/site-header';
-import { SiteFooter } from '@/components/layout/site-footer';
-import { ContactActions } from '@/components/layout/contact-actions';
+import { resolveChannels } from '@/lib/preview/util';
+import { BrandLogo } from '@/components/layout/brand-logo';
+import { PreviewHeader } from '@/components/preview/preview-header';
+import { PreviewFooter } from '@/components/preview/preview-footer';
+import { PreviewContactRail } from '@/components/preview/contact-rail';
+import { ThreadRail } from '@/components/preview/thread-rail';
+import { ScrollChoreography } from '@/components/preview/scroll-choreography';
 import '../../globals.css';
+import '../../(preview)/preview.css';
 
 const inter = Inter({
   subsets: ['latin', 'latin-ext', 'vietnamese'],
@@ -93,15 +98,20 @@ export default async function LocaleLayout({
   const code = localeCodes[locale];
   const t = getDictionary(locale);
   const content = await getSiteContent(locale);
+  const channels = resolveChannels(locale, t, content.contacts);
 
   // 导航地址统一补语言前缀：内容层里是 `/products` 这类与语言无关的写法，
   // 直接交给浏览器会落到 middleware 的 308，并被带到默认语言 zh ——
   // 于是 /en 与 /vi 的访客点「产品」会掉回中文站。
   // 页头、移动端菜单与页脚共用这一份结果，判断只在这里做一次。
-  const nav = content.nav.map((item) => ({ ...item, href: withLocale(locale, item.href) }));
+  const nav = content.nav.map((item) => ({
+    ...item,
+    // 产品、搜索和详情内页没有首页区块；锚点导航统一回到当前语言首页。
+    href: item.href.startsWith('#') ? `/${locale}${item.href}` : withLocale(locale, item.href),
+  }));
 
   return (
-    <html lang={code} className={inter.variable}>
+    <html lang={code} data-preview className={inter.variable}>
       <body>
         <a
           href="#main"
@@ -109,15 +119,41 @@ export default async function LocaleLayout({
         >
           {t.common.skipToContent}
         </a>
-        <SiteHeader locale={locale} name={content.company.name} nav={nav} />
-        <main id="main">{children}</main>
-        <SiteFooter
+        <PreviewHeader
           locale={locale}
-          company={content.company}
-          contacts={content.contacts}
+          name={content.company.name}
+          logo={<BrandLogo locale={locale} className="h-7 w-auto shrink-0" />}
           nav={nav}
+          ctaHref={`/${locale}#inquiry`}
+          homeHref={`/${locale}`}
+          labels={{
+            menu: t.nav.menu,
+            close: t.nav.close,
+            mobileNav: t.nav.mobile,
+            primaryNav: t.nav.primary,
+            lang: t.lang.label,
+            cta: t.nav.cta,
+          }}
         />
-        <ContactActions locale={locale} contacts={content.contacts} />
+        <main id="main">{children}</main>
+        <PreviewFooter
+          locale={locale}
+          name={content.company.name}
+          tagline={content.company.tagline}
+          logo={<BrandLogo locale={locale} className="h-8 w-auto shrink-0" />}
+          nav={nav}
+          channels={channels}
+          homeLanguages
+          labels={{
+            company: t.footer.companyTitle,
+            contact: t.footer.contactTitle,
+            language: t.lang.label,
+            copyright: t.footer.copyright,
+          }}
+        />
+        <PreviewContactRail channels={channels} />
+        <ThreadRail />
+        <ScrollChoreography />
       </body>
     </html>
   );
