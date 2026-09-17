@@ -22,6 +22,7 @@ import { AssetThumb, type PickerAsset } from './asset-picker';
 import { ProductMediaUploader } from './product-uploader';
 import { SeoTab } from './seo-tab';
 import { SpecsTab } from './specs-tab';
+import { VariantOptionsEditor } from './variant-options-editor';
 import { useAutoSaveForm } from './tabs';
 import type { GalleryItemData } from './gallery-editor';
 import type { ProductEditorData } from './types';
@@ -489,24 +490,19 @@ function VisualDetailsFields({
 }) {
   return (
     <section className="space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5 lg:col-span-2">
+      {/* 旧数据仍随表单原样提交，但不再在新编辑器里重复展示尺寸/规格自由文本。 */}
+      <input type="hidden" name={`${locale}_sizeSummary`} defaultValue={data.translations[locale].sizeSummary} />
+      <input type="hidden" name={`${locale}_spec`} defaultValue={data.translations[locale].spec} />
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.14em] text-copper-700">{t.products.detailsSection}</p>
         <h2 className="mt-2 text-lg font-semibold tracking-tight text-navy-950">{t.products.detailsSection}</h2>
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.8fr)]">
-        <Field label={t.products.sizeSummaryLabel} htmlFor={`visual-${locale}-sizeSummary`} hint={t.products.sizeSummaryHint}>
-          <TextInput id={`visual-${locale}-sizeSummary`} name={`${locale}_sizeSummary`} defaultValue={data.translations[locale].sizeSummary} placeholder="25 mm × 2 mm" />
-        </Field>
+      <div className="grid gap-4 lg:grid-cols-2">
         <Field label={t.products.descriptionLabel} htmlFor={`visual-${locale}-description`}>
           <TextArea id={`visual-${locale}-description`} name={`${locale}_description`} defaultValue={data.translations[locale].description} rows={5} placeholder={t.products.descriptionLabel} />
         </Field>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Field label={t.products.specLabel} htmlFor={`visual-${locale}-spec`}>
-          <TextArea id={`visual-${locale}-spec`} name={`${locale}_spec`} defaultValue={data.translations[locale].spec} rows={3} />
-        </Field>
         <Field label={t.products.applicationLabel} htmlFor={`visual-${locale}-application`}>
-          <TextArea id={`visual-${locale}-application`} name={`${locale}_application`} defaultValue={data.translations[locale].application} rows={3} />
+          <TextArea id={`visual-${locale}-application`} name={`${locale}_application`} defaultValue={data.translations[locale].application} rows={5} />
         </Field>
       </div>
     </section>
@@ -586,14 +582,14 @@ function VisualProductForm({
         ))}
         <VisualPricingFields data={data} t={t} />
       </div>
-      <div className="order-4 lg:col-span-2">
+      <div className="order-5 lg:col-span-2">
         {ADMIN_LOCALES.map((locale) => (
           <div key={`details-${locale}`} className={cn(locale === activeLocale ? 'contents' : 'hidden')}>
             <VisualDetailsFields locale={locale} data={data} t={t} />
           </div>
         ))}
       </div>
-      <div className="order-5 lg:col-span-2">
+      <div className="order-6 lg:col-span-2">
         <VisualBasicFields data={data} t={t} state={state} />
       </div>
     </form>
@@ -656,6 +652,7 @@ export function VisualProductEditor({ data }: { data: ProductEditorData }) {
           hoverVideoAssetId={data.product.hoverVideoAssetId}
           className="order-1"
         />
+        <VariantOptionsEditor data={data} activeLocale={activeLocale} />
         <SpecsTab
           data={data}
           formId="product-form-visual-specs"

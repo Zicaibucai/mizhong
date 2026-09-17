@@ -2,6 +2,7 @@ import type { AdminLocale } from '@/lib/admin/validation';
 import type {
   DraftSection,
   ProductDraftSpecTable,
+  ProductDraftVariantGroup,
   ProductTranslationValues,
 } from '@/lib/product-draft';
 import type { PickerAsset } from './asset-picker';
@@ -52,6 +53,7 @@ export interface SpecRowData {
 
 /** 可视化规格/颜色表，单元格按语言保存。 */
 export type SpecTableData = ProductDraftSpecTable;
+export type VariantGroupData = ProductDraftVariantGroup;
 
 export interface CategoryOption {
   id: string;
@@ -78,6 +80,7 @@ export interface ProductEditorData {
   translations: Record<AdminLocale, ProductTranslationValues>;
   specifications: SpecRowData[];
   specTable: SpecTableData;
+  variantGroups: VariantGroupData[];
   categories: CategoryOption[];
   /** Enabled media-library images (cover picker). */
   coverAssets: PickerAsset[];

@@ -441,6 +441,9 @@ model Product {
   /// 发布后的可配置规格/颜色表，列和单元格内容按三种语言保存
   specTable      Json?
 
+  /// 发布后的型号/颜色选项组；每个选项可绑定一张缩略图
+  variantGroups  Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

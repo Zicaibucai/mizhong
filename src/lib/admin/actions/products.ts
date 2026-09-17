@@ -32,6 +32,7 @@ import {
   type ProductDraft,
   type ProductDraftSpec,
   type ProductDraftSpecTable,
+  type ProductDraftVariantGroup,
 } from '@/lib/product-draft';
 import type { FormState } from '@/lib/admin/action-state';
 
@@ -1040,6 +1041,7 @@ export async function duplicateProductAction(
         moq: source.moq,
         moqUnit: source.moqUnit,
         specTable: source.specTable ?? undefined,
+        variantGroups: source.variantGroups ?? undefined,
         translations: {
           create: source.translations.map((item) => ({
             locale: item.locale,
@@ -1513,6 +1515,119 @@ export async function saveProductSpecificationsAction(
     });
   } catch (error) {
     console.error('[admin] save product specifications failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1688 风格型号 / 颜色选项
+// ---------------------------------------------------------------------------
+
+const variantGroupsPayloadSchema = (t: AdminMessages) =>
+  z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(80),
+        values: tableTextSchema(120),
+        options: z
+          .array(
+            z.object({
+              id: z.string().trim().min(1).max(80),
+              assetId: z.string().trim().max(200).nullable(),
+              values: tableTextSchema(200),
+            }),
+          )
+          .max(100, t.products.variantTooMany),
+      }),
+    )
+    .max(10, t.products.variantTooMany)
+    .superRefine((groups, context) => {
+      const groupIds = groups.map((group) => group.id);
+      const optionIds = groups.flatMap((group) => group.options.map((option) => option.id));
+      if (new Set(groupIds).size !== groupIds.length || new Set(optionIds).size !== optionIds.length) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: t.products.variantDuplicate });
+      }
+      if (optionIds.length > 200) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: t.products.variantTooMany });
+      }
+    });
+
+const variantGroupsFormSchema = (t: AdminMessages) =>
+  z.object({
+    productId: requiredIdField(t),
+    payload: z.string().max(400_000, t.products.variantTooMany),
+  });
+
+/**
+ * 保存带图片的型号/颜色卡片。它们与尺寸、材质等参数表是两套独立数据：
+ * 参数表用来阅读，选项卡用来让客人逐项选择。
+ */
+export async function saveProductVariantGroupsAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const form = parseForm(variantGroupsFormSchema(t), formData, t);
+  if (!form.ok) return { status: 'error', message: form.message };
+
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(form.data.payload);
+  } catch {
+    return { status: 'error', message: t.validation.invalidInput };
+  }
+
+  const parsed = variantGroupsPayloadSchema(t).safeParse(decoded);
+  if (!parsed.success) {
+    return {
+      status: 'error',
+      message: parsed.error.issues[0]?.message ?? t.validation.invalidInput,
+    };
+  }
+
+  const groups = parsed.data as ProductDraftVariantGroup[];
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const assetIds = [
+      ...new Set(
+        groups.flatMap((group) =>
+          group.options.flatMap((option) => (option.assetId ? [option.assetId] : [])),
+        ),
+      ),
+    ];
+    if (assetIds.length > 0) {
+      const enabledImages = await db.asset.findMany({
+        where: { id: { in: assetIds }, enabled: true, type: 'IMAGE' },
+        select: { id: true },
+      });
+      if (enabledImages.length !== assetIds.length) {
+        return { status: 'error', message: t.products.variantAssetInvalid };
+      }
+    }
+
+    const loaded = await loadWorkingDraft(db, form.data.productId, t);
+    if (!loaded.ok) return loaded.error;
+
+    return await persistDraft(db, {
+      productId: form.data.productId,
+      draft: { ...loaded.draft, variantGroups: groups },
+      user,
+      summary: t.products.variantsSection,
+      t,
+      detail: {
+        groups: groups.length,
+        options: groups.reduce((total, group) => total + group.options.length, 0),
+      },
+    });
+  } catch (error) {
+    console.error('[admin] save product variant groups failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
 }

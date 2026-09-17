@@ -171,7 +171,7 @@ export function SpecsTab({
       <input type="hidden" name="productId" value={data.product.id} />
       <input type="hidden" name="payload" readOnly value={JSON.stringify(table)} />
 
-      <section className={cn('space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5', layout === 'grid' ? 'order-3 lg:col-span-2' : null)}>
+      <section className={cn('space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5', layout === 'grid' ? 'order-4 lg:col-span-2' : null)}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-[0.14em] text-copper-700">

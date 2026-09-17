@@ -14,6 +14,7 @@ import {
 } from '@/components/catalog/product-media-viewer';
 import { ProductGrid } from '@/components/catalog/product-grid';
 import { ProductInquiry } from '@/components/catalog/product-inquiry';
+import { ProductVariantSelector } from '@/components/catalog/product-variant-selector';
 import { catalogPath, withQuery } from '@/components/catalog/urls';
 
 /**
@@ -248,6 +249,8 @@ export function ProductDetail({
                 </div>
               ) : null}
             </dl>
+
+            <ProductVariantSelector groups={product.variantGroups} />
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Link

@@ -4,6 +4,7 @@ import { decimalToString, normalizeCurrency } from '@/lib/pricing';
 import {
   readDraft,
   readSpecTable,
+  readVariantGroups,
   specTableFromLegacySpecs,
   type ProductDraft,
   type ProductMediaRoleValue,
@@ -106,6 +107,7 @@ function toDraft(row: ProductWithRelations): ProductDraft {
     // 老商品还没有 JSON 表时，从既有的 ProductSpecification 关系表平移一次；
     // 后续保存/发布都会把管理员的新表结构保留下来。
     specTable: readSpecTable(row.specTable) ?? specTableFromLegacySpecs(specs),
+    variantGroups: readVariantGroups(row.variantGroups) ?? [],
     media: row.media.map((item) => ({ assetId: item.assetId, role: item.role })),
   };
 }
@@ -202,6 +204,7 @@ export async function applyDraftToLive(
       moq: draft.pricing.moq,
       moqUnit: draft.pricing.moqUnit,
       specTable: draft.specTable as unknown as Prisma.InputJsonValue,
+      variantGroups: draft.variantGroups as unknown as Prisma.InputJsonValue,
     },
   });
 

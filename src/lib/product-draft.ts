@@ -57,6 +57,23 @@ export interface ProductDraftSpecTable {
   rows: ProductDraftSpecTableRow[];
 }
 
+/** 一个带可选图片的型号/颜色选项。 */
+export interface ProductDraftVariantOption {
+  id: string;
+  assetId: string | null;
+  values: Record<AdminLocale, string>;
+}
+
+/**
+ * 1688 风格选项组（例如“型号”、“颜色”）。
+ * 三语共用结构与图片，组名和选项名分别翻译。
+ */
+export interface ProductDraftVariantGroup {
+  id: string;
+  values: Record<AdminLocale, string>;
+  options: ProductDraftVariantOption[];
+}
+
 export interface ProductDraftMedia {
   assetId: string;
   role: ProductMediaRoleValue;
@@ -86,6 +103,8 @@ export interface ProductDraft {
   specs: ProductDraftSpec[];
   /** 可配置的规格/颜色表；旧 specs 仅作为兼容数据保留。 */
   specTable: ProductDraftSpecTable;
+  /** 带缩略图的型号/颜色选项，与尺寸/参数表分开。 */
+  variantGroups: ProductDraftVariantGroup[];
   /** 数组顺序即图库顺序 */
   media: ProductDraftMedia[];
 }
@@ -169,6 +188,25 @@ const specTableShape = z.object({
     .default([]),
 });
 
+const variantGroupsShape = z
+  .array(
+    z.object({
+      id: z.string().min(1).max(80),
+      values: localizedTableTextShape(120),
+      options: z
+        .array(
+          z.object({
+            id: z.string().min(1).max(80),
+            assetId: z.string().max(200).nullable().default(null),
+            values: localizedTableTextShape(200),
+          }),
+        )
+        .max(100)
+        .default([]),
+    }),
+  )
+  .max(10);
+
 const draftShape = z.object({
   basic: z.object({
     slug: z.string().default(''),
@@ -206,6 +244,7 @@ const draftShape = z.object({
     )
     .default([]),
   specTable: specTableShape.default({ columns: [], rows: [] }),
+  variantGroups: variantGroupsShape.default([]),
   media: z
     .array(
       z.object({
@@ -233,17 +272,17 @@ export function readDraft(value: unknown): ProductDraft | null {
   return parsed.data as ProductDraft;
 }
 
-/** 新商品默认提供“规格/型号 + 颜色”两列，管理员可以继续改名、增列或删列。 */
+/** 新商品默认提供“参数 + 参数值”两列；型号/颜色由独立选项组维护。 */
 export function emptySpecTable(): ProductDraftSpecTable {
   return {
     columns: [
       {
         id: 'specification',
-        values: { zh: '规格/型号', en: 'Specification / Model', vi: 'Quy cách / Mẫu mã' },
+        values: { zh: '参数', en: 'Parameter', vi: 'Thông số' },
       },
       {
-        id: 'color',
-        values: { zh: '颜色', en: 'Color', vi: 'Màu sắc' },
+        id: 'value',
+        values: { zh: '参数值', en: 'Value', vi: 'Giá trị' },
       },
     ],
     rows: [],
@@ -287,6 +326,13 @@ export function readSpecTable(value: unknown): ProductDraftSpecTable | null {
   return parsed.data as ProductDraftSpecTable;
 }
 
+/** 读取发布后的型号/颜色 JSON；结构不对时安全回退。 */
+export function readVariantGroups(value: unknown): ProductDraftVariantGroup[] | null {
+  const parsed = variantGroupsShape.safeParse(value);
+  if (!parsed.success) return null;
+  return parsed.data as ProductDraftVariantGroup[];
+}
+
 // ---------------------------------------------------------------------------
 // 比较
 // ---------------------------------------------------------------------------
@@ -305,8 +351,8 @@ export function changedSections(draft: ProductDraft, live: ProductDraft): DraftS
   return DRAFT_SECTIONS.filter((section) => {
     if (section === 'specs') {
       return !sectionEqual(
-        { specs: draft.specs, specTable: draft.specTable },
-        { specs: live.specs, specTable: live.specTable },
+        { specs: draft.specs, specTable: draft.specTable, variantGroups: draft.variantGroups },
+        { specs: live.specs, specTable: live.specTable, variantGroups: live.variantGroups },
       );
     }
     return !sectionEqual(draft[section], live[section]);

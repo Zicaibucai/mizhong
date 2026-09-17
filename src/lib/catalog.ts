@@ -1,7 +1,7 @@
 import { tryDb } from '@/lib/db';
 import type { Locale } from '@/lib/i18n/config';
 import { decimalToString, normalizeCurrency, type PriceMode } from '@/lib/pricing';
-import { readSpecTable } from '@/lib/product-draft';
+import { readSpecTable, readVariantGroups } from '@/lib/product-draft';
 
 export const PRODUCTS_PER_PAGE = 12;
 const MAX_QUERY_LENGTH = 80;
@@ -79,6 +79,13 @@ export interface ProductSpecTableView {
   rows: { id: string; cells: Record<string, string> }[];
 }
 
+/** 前台可选的型号/颜色组，每一项可带一张缩略图。 */
+export interface ProductVariantGroupView {
+  id: string;
+  label: string;
+  options: { id: string; label: string; imageUrl: string | null }[];
+}
+
 export interface ProductDetailView extends ProductCardView {
   description: string | null;
   spec: string | null;
@@ -94,6 +101,7 @@ export interface ProductDetailView extends ProductCardView {
   gallery: ProductMediaView[];
   specifications: ProductSpecView[];
   specificationTable: ProductSpecTableView | null;
+  variantGroups: ProductVariantGroupView[];
   /** 当前语言缺失、已回退英文时为 true（页面据此提示，而不是显示字段名） */
   usingFallback: boolean;
 }
@@ -438,6 +446,48 @@ export async function getProductBySlug(
     })
     .filter((spec): spec is ProductSpecView => spec !== null);
 
+  const publishedVariantGroups = readVariantGroups(row.variantGroups) ?? [];
+  const variantAssetIds = [
+    ...new Set(
+      publishedVariantGroups.flatMap((group) =>
+        group.options.flatMap((option) => (option.assetId ? [option.assetId] : [])),
+      ),
+    ),
+  ];
+  const variantAssetRows =
+    variantAssetIds.length > 0
+      ? await tryDb((db) =>
+          db.asset.findMany({
+            where: { id: { in: variantAssetIds }, enabled: true, type: 'IMAGE' },
+            select: { id: true, url: true, thumbnailUrl: true },
+          }),
+        )
+      : [];
+  const variantAssetById = new Map(
+    (variantAssetRows ?? []).map((asset) => [asset.id, asset.thumbnailUrl ?? asset.url]),
+  );
+  const variantGroups: ProductVariantGroupView[] = publishedVariantGroups
+    .map((group) => {
+      const label =
+        group.values[locale].trim() ||
+        group.values.en.trim() ||
+        group.values.zh.trim() ||
+        group.values.vi.trim();
+      const options = group.options
+        .map((option) => ({
+          id: option.id,
+          label:
+            option.values[locale].trim() ||
+            option.values.en.trim() ||
+            option.values.zh.trim() ||
+            option.values.vi.trim(),
+          imageUrl: option.assetId ? variantAssetById.get(option.assetId) ?? null : null,
+        }))
+        .filter((option) => option.label.length > 0);
+      return { id: group.id, label, options };
+    })
+    .filter((group) => group.label.length > 0 && group.options.length > 0);
+
   return {
     id: row.id,
     slug: row.slug,
@@ -462,6 +512,7 @@ export async function getProductBySlug(
     gallery,
     specifications,
     specificationTable,
+    variantGroups,
     usingFallback: Boolean(tr) && !exact,
     ...priceOf(row),
   };

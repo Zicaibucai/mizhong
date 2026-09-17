@@ -95,6 +95,7 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
           data={data}
           saveFormIds={[
             'product-form-visual',
+            'product-form-visual-variants',
             'product-form-visual-specs',
             'product-form-visual-seo',
           ]}
