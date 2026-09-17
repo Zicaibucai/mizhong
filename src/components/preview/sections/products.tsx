@@ -6,6 +6,7 @@ import { cn } from '@/lib/cn';
 import { cssVars, ordinal } from '@/lib/preview/util';
 import type { WeaveVariant } from '../textile-artwork';
 import { PreviewMedia } from '../preview-media';
+import { PreviewTileMedia } from '../tile-media';
 import { SectionHead, PreviewContainer } from '../shell';
 
 /**
@@ -18,7 +19,8 @@ import { SectionHead, PreviewContainer } from '../shell';
  *
  * 版面：桌面为错落的编辑式栅格（每一格栏宽、比例、垂直偏移都不同）；
  * 手机为紧凑的双列拼贴，避免六张接近全屏的大卡片。所有图注默认可见，
- * hover 只做放大与箭头位移的增强，不承载任何信息。
+ * hover 只做放大、箭头位移与「悬停视频」的增强，不承载任何信息 ——
+ * 悬停视频与产品目录卡片共用同一套行为（见 tile-media.tsx）。
  */
 
 type Tone = 'navy' | 'ink' | 'ivory' | 'sand';
@@ -97,6 +99,8 @@ interface Tile {
   description: string | null;
   /** 真实主图；分类概览时为 null，回退生成式织纹 */
   cover: { url: string; alt: string } | null;
+  /** 列表悬停视频（后台在商品上配置过 VIDEO 素材时才有） */
+  hoverVideo: { url: string; posterUrl: string | null } | null;
 }
 
 export function PreviewProducts({
@@ -138,6 +142,10 @@ export function PreviewProducts({
               alt: product.coverAlt?.trim() || product.name,
             }
           : null,
+        // 与目录卡片同源：数据层已经过滤掉非 VIDEO / 已停用的素材
+        hoverVideo: product.hoverVideoUrl
+          ? { url: product.hoverVideoUrl, posterUrl: product.hoverVideoPosterUrl }
+          : null,
       }))
     : categories.map((category) => ({
         key: category.name,
@@ -146,6 +154,7 @@ export function PreviewProducts({
         title: category.name,
         description: category.desc,
         cover: null,
+        hoverVideo: null,
       }));
 
   const specs = specsFor(tiles.length);
@@ -187,14 +196,22 @@ export function PreviewProducts({
                   className="group block focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-copper-500"
                 >
                   <div className={cn('pv-tile relative w-full', spec.aspect)} data-tone={dark ? 'dark' : 'light'}>
-                    <PreviewMedia
-                      locale={locale}
-                      uid={`product-${i}`}
-                      asset={tile.cover}
-                      variant={spec.variant}
-                      tone={spec.tone}
-                      alt={artworkLabel}
-                    />
+                    {tile.cover ? (
+                      <PreviewTileMedia
+                        coverUrl={tile.cover.url}
+                        coverAlt={tile.cover.alt}
+                        hoverVideoUrl={tile.hoverVideo?.url ?? null}
+                        hoverVideoPosterUrl={tile.hoverVideo?.posterUrl ?? null}
+                      />
+                    ) : (
+                      <PreviewMedia
+                        locale={locale}
+                        uid={`product-${i}`}
+                        variant={spec.variant}
+                        tone={spec.tone}
+                        alt={artworkLabel}
+                      />
+                    )}
 
                     <span className="pv-index pv-num pv-mono text-[0.6rem]" aria-hidden="true">
                       {ordinal(i)}

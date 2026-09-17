@@ -421,6 +421,26 @@
   object-fit: cover;
 }
 
+/* 悬停视频：盖在主图之上，默认透明。
+   淡入是纯视觉增强 —— 视频没加载出来 / 播放失败时它保持透明，
+   下层主图始终可见，不会出现黑框或空白。 */
+[data-preview] .pv-tile-video {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s var(--pv-ease-soft);
+}
+
+/* 只在指针悬停时淡入。键盘 focus 不触发：那时视频还没开始播放，
+   露出它的首帧没有意义，键盘用户保持看到普通主图即可。 */
+[data-preview] .pv-tile:hover .pv-tile-video {
+  opacity: 1;
+}
+
 /* 图注：名称 / 分类 / 简短描述，全部默认可见 */
 [data-preview] .pv-tile-cap {
   border-top: 1px solid var(--pv-rule);
