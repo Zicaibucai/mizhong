@@ -200,3 +200,47 @@ export function ProductSpecTable({
     </table>
   );
 }
+
+/** 可配置规格/颜色表：桌面完整展示，窄屏允许横向滚动而不挤压单元格。 */
+export function ProductVariantTable({
+  table,
+  caption,
+  className,
+}: {
+  table: {
+    columns: { id: string; label: string }[];
+    rows: { id: string; cells: Record<string, string> }[];
+  };
+  caption?: string;
+  className?: string;
+}) {
+  if (table.columns.length === 0 || table.rows.length === 0) return null;
+
+  return (
+    <div className={cn('overflow-x-auto border-t border-navy-200', className)}>
+      <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+        {caption ? <caption className="sr-only">{caption}</caption> : null}
+        <thead className="border-b border-navy-200 bg-ivory-100/70">
+          <tr>
+            {table.columns.map((column) => (
+              <th key={column.id} scope="col" className="px-4 py-3 font-medium text-navy-700">
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-navy-200">
+          {table.rows.map((row) => (
+            <tr key={row.id} className="align-top">
+              {table.columns.map((column) => (
+                <td key={column.id} className="px-4 py-3 text-navy-900">
+                  {row.cells[column.id] || '—'}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

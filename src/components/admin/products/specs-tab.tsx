@@ -3,285 +3,317 @@
 import { useActionState, useCallback, useEffect, useRef, useState } from 'react';
 import { saveProductSpecificationsAction } from '@/lib/admin/actions/products';
 import { initialFormState } from '@/lib/admin/action-state';
-import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
+import type { AdminLocale } from '@/lib/admin/validation';
 import { getContentLocaleLabel } from '@/lib/admin/labels';
-import { Alert, SubmitButton } from '@/components/admin/form';
+import { Alert } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
 import { cn } from '@/lib/cn';
+import { defaultLocale } from '@/lib/i18n/config';
 import { useAutoSaveForm } from './tabs';
-import type { ProductEditorData, SpecRowData, SpecRowValues } from './types';
+import type { ProductEditorData, SpecTableData } from './types';
 
-let rowSequence = 0;
+let sequence = 0;
 
-function emptyValues(): Record<AdminLocale, SpecRowValues> {
+function newId(prefix: string): string {
+  sequence += 1;
+  return `${prefix}-${Date.now().toString(36)}-${sequence}`;
+}
+
+function emptyLocalizedText(): Record<AdminLocale, string> {
+  return { zh: '', en: '', vi: '' };
+}
+
+function newColumn(): SpecTableData['columns'][number] {
+  return { id: newId('column'), values: emptyLocalizedText() };
+}
+
+function newRow(table: SpecTableData): SpecTableData['rows'][number] {
   return {
-    zh: { name: '', value: '' },
-    en: { name: '', value: '' },
-    vi: { name: '', value: '' },
+    id: newId('row'),
+    cells: Object.fromEntries(table.columns.map((column) => [column.id, emptyLocalizedText()])),
   };
 }
 
-function newRow(): SpecRowData {
-  rowSequence += 1;
-  return { key: `new-${rowSequence}`, id: null, values: emptyValues() };
+function cloneTable(table: SpecTableData): SpecTableData {
+  return {
+    columns: table.columns.map((column) => ({
+      id: column.id,
+      values: { ...column.values },
+    })),
+    rows: table.rows.map((row) => ({
+      id: row.id,
+      cells: Object.fromEntries(
+        Object.entries(row.cells).map(([columnId, values]) => [columnId, { ...values }]),
+      ),
+    })),
+  };
 }
 
 /**
- * 结构化参数编辑器。
+ * 可视化规格/颜色表。
  *
- * 每一行是一条参数，三种语言各有一组「名称 / 值」输入 —— 管理员可以任意增加、删除、
- * 编辑并用拖动（或上移 / 下移按钮）调整顺序，保存时整表提交，顺序即前台的展示顺序。
- *
- * 为什么用「整表提交」而不是每行一个表单：顺序是这张表的语义的一部分，
- * 逐行保存会让「删除中间一行」变成两次不一致的写入。
+ * 列是规格维度（例如规格/型号、颜色、包装），行是一组可询价的组合。
+ * 结构和内容都按语言保存，但三种语言共用同一套行列，所以切换语言时布局不会变。
  */
 export function SpecsTab({
   data,
   formId = 'product-form-specs',
   statusTab = 'specs',
+  activeLocale = defaultLocale,
+  layout = 'stacked',
 }: {
   data: ProductEditorData;
   /** The visual editor also uses this component, so its form id must stay unique. */
   formId?: string;
   /** Status key reported to the shared product action bar. */
   statusTab?: string;
+  /** The language selected in the visual editor header. */
+  activeLocale?: AdminLocale;
+  /** `grid` lets this form contribute a full-width card to the visual layout. */
+  layout?: 'stacked' | 'grid';
 }) {
   const t = useAdminT();
   const [state, formAction, isPending] = useActionState(saveProductSpecificationsAction, initialFormState);
   const { scheduleSave, formProps } = useAutoSaveForm(statusTab, formId, state, isPending, formAction);
-  const [rows, setRows] = useState<SpecRowData[]>(data.specifications);
-  const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [table, setTable] = useState<SpecTableData>(() => cloneTable(data.specTable));
+  const lastSignature = useRef(JSON.stringify(data.specTable));
 
-  // 服务端数据变化（保存成功 / 刷新）后对齐，但绝不在编辑过程中覆盖用户输入
-  const signature = data.specifications
-    .map((row) => `${row.id ?? ''}:${JSON.stringify(row.values)}`)
-    .join('|');
-  const lastSignature = useRef(signature);
+  // 服务端刷新后对齐；编辑过程中不被旧的 server props 覆盖。
+  const signature = JSON.stringify(data.specTable);
   useEffect(() => {
     if (lastSignature.current === signature) return;
     lastSignature.current = signature;
-    setRows(data.specifications);
-  }, [signature, data.specifications]);
+    setTable(cloneTable(data.specTable));
+  }, [data.specTable, signature]);
 
-  const update = useCallback(
-    (key: string, locale: AdminLocale, field: keyof SpecRowValues, value: string) => {
-      setRows((current) =>
-        current.map((row) =>
-          row.key === key
-            ? { ...row, values: { ...row.values, [locale]: { ...row.values[locale], [field]: value } } }
-            : row,
-        ),
-      );
+  const updateTable = useCallback(
+    (update: (current: SpecTableData) => SpecTableData) => {
+      setTable((current) => update(current));
       scheduleSave();
     },
     [scheduleSave],
   );
 
-  const addRow = () => {
-    setRows((current) => [...current, newRow()]);
-    scheduleSave();
+  const updateColumn = (columnId: string, value: string) => {
+    updateTable((current) => ({
+      ...current,
+      columns: current.columns.map((column) =>
+        column.id === columnId
+          ? { ...column, values: { ...column.values, [activeLocale]: value } }
+          : column,
+      ),
+    }));
   };
 
-  const removeRow = (key: string) => {
-    setConfirmingKey(null);
-    setRows((current) => current.filter((row) => row.key !== key));
-    scheduleSave();
+  const updateCell = (rowId: string, columnId: string, value: string) => {
+    updateTable((current) => ({
+      ...current,
+      rows: current.rows.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              cells: {
+                ...row.cells,
+                [columnId]: { ...(row.cells[columnId] ?? emptyLocalizedText()), [activeLocale]: value },
+              },
+            }
+          : row,
+      ),
+    }));
   };
 
-  const move = (index: number, delta: -1 | 1) => {
-    const target = index + delta;
-    if (target < 0 || target >= rows.length) return;
-    setRows((current) => {
-      const next = [...current];
-      const [moved] = next.splice(index, 1);
-      next.splice(target, 0, moved);
-      return next;
+  const addColumn = () => {
+    updateTable((current) => {
+      const column = newColumn();
+      return {
+        columns: [...current.columns, column],
+        rows: current.rows.map((row) => ({
+          ...row,
+          cells: { ...row.cells, [column.id]: emptyLocalizedText() },
+        })),
+      };
     });
-    scheduleSave();
   };
 
-  const drop = (index: number) => {
-    if (dragIndex === null || dragIndex === index) {
-      setDragIndex(null);
-      return;
-    }
-    setRows((current) => {
-      const next = [...current];
-      const [moved] = next.splice(dragIndex, 1);
-      next.splice(index, 0, moved);
-      return next;
-    });
-    setDragIndex(null);
-    scheduleSave();
+  const removeColumn = (columnId: string) => {
+    if (table.columns.length <= 1) return;
+    updateTable((current) => ({
+      columns: current.columns.filter((column) => column.id !== columnId),
+      rows: current.rows.map((row) => {
+        const cells = { ...row.cells };
+        delete cells[columnId];
+        return { ...row, cells };
+      }),
+    }));
   };
+
+  const addRow = () => updateTable((current) => ({ ...current, rows: [...current.rows, newRow(current)] }));
+
+  const removeRow = (rowId: string) => {
+    updateTable((current) => ({ ...current, rows: current.rows.filter((row) => row.id !== rowId) }));
+  };
+
+  const moveRow = (rowIndex: number, direction: -1 | 1) => {
+    const target = rowIndex + direction;
+    if (target < 0 || target >= table.rows.length) return;
+    updateTable((current) => {
+      const rows = [...current.rows];
+      const [moved] = rows.splice(rowIndex, 1);
+      rows.splice(target, 0, moved);
+      return { ...current, rows };
+    });
+  };
+
+  const formClassName = layout === 'grid' ? 'contents' : 'space-y-5';
 
   return (
-    <form id={formId} {...formProps} className="space-y-5">
+    <form id={formId} {...formProps} className={formClassName}>
       <input type="hidden" name="productId" value={data.product.id} />
-      {/*
-        动态行整表序列化：服务端会用 Zod 重新校验每一行。
-        这里必须转成**服务端契约的形状**（name / value 两种语言映射），
-        而不是直接 stringify 本组件的行状态 —— 后者字段名对不上时会被 Zod 静默剥掉，
-        表现为「保存成功但一条参数都没写进去」。
-      */}
-      <input
-        type="hidden"
-        name="payload"
-        readOnly
-        value={JSON.stringify(
-          rows.map((row) => ({
-            id: row.id,
-            name: {
-              zh: row.values.zh.name,
-              en: row.values.en.name,
-              vi: row.values.vi.name,
-            },
-            value: {
-              zh: row.values.zh.value,
-              en: row.values.en.value,
-              vi: row.values.vi.value,
-            },
-          })),
-        )}
-      />
+      <input type="hidden" name="payload" readOnly value={JSON.stringify(table)} />
 
-      <section className="space-y-4 rounded-xl border border-navy-200 bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-navy-900">{t.products.specsSection}</h2>
-            <p className="mt-1 text-xs text-muted">{t.products.specsHint}</p>
+      <section className={cn('space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5', layout === 'grid' ? 'order-3 lg:col-span-2' : null)}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-copper-700">
+              {t.products.specsSection}
+            </p>
+            <h2 className="mt-2 text-lg font-semibold tracking-tight text-navy-950">
+              {t.products.specTableTitle}
+            </h2>
+            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted">
+              {t.products.specTableHint}
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={addRow}
-            className="inline-flex h-9 items-center rounded-full border border-navy-300 px-4 text-sm font-medium text-navy-800 transition-colors hover:bg-navy-50"
-          >
-            + {t.products.specAddRow}
-          </button>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+            <span className="rounded-full bg-navy-50 px-3 py-1.5">
+              {table.columns.length} {t.products.specColumnCount}
+            </span>
+            <span className="rounded-full bg-navy-50 px-3 py-1.5">
+              {table.rows.length} {t.products.specRowCount}
+            </span>
+            <button
+              type="button"
+              onClick={addColumn}
+              disabled={table.columns.length >= 20}
+              className="inline-flex h-9 items-center rounded-full border border-navy-300 px-4 font-medium text-navy-800 transition-colors hover:border-copper-500 hover:bg-copper-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              + {t.products.specAddColumn}
+            </button>
+            <button
+              type="button"
+              onClick={addRow}
+              disabled={table.rows.length >= 100}
+              className="inline-flex h-9 items-center rounded-full bg-navy-900 px-4 font-medium text-ivory-50 transition-colors hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              + {t.products.specAddRow}
+            </button>
+          </div>
         </div>
 
-        {state.status === 'error' && state.message ? (
-          <Alert kind="error">{state.message}</Alert>
-        ) : null}
-        {state.status === 'success' && state.message ? (
-          <Alert kind="success">{state.message}</Alert>
-        ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-copper-100 bg-copper-50/60 px-4 py-3 text-xs text-copper-900">
+          <span>{t.products.specTableLanguageHint}</span>
+          <span className="font-medium">{getContentLocaleLabel(t, activeLocale)}</span>
+        </div>
 
-        {rows.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-navy-200 bg-white px-5 py-6 text-sm text-muted">
-            {t.products.specEmpty}
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {rows.map((row, index) => (
-              <li
-                key={row.key}
-                draggable
-                onDragStart={() => setDragIndex(index)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  drop(index);
-                }}
-                onDragEnd={() => setDragIndex(null)}
-                className={cn(
-                  'rounded-xl border border-navy-200 bg-white p-4',
-                  dragIndex === index ? 'opacity-60' : null,
-                )}
-              >
-                <div className="flex flex-wrap items-center gap-3">
-                  <span aria-hidden className="cursor-grab select-none text-navy-300">
-                    ⠿
-                  </span>
-                  <span className="font-mono text-xs text-navy-500">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-navy-700">
-                    {row.values.zh.name || row.values.en.name || row.values.vi.name || '—'}
-                  </span>
+        {state.status === 'error' && state.message ? <Alert kind="error">{state.message}</Alert> : null}
+        {state.status === 'success' && state.message ? <Alert kind="success">{state.message}</Alert> : null}
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={index === 0}
-                      onClick={() => move(index, -1)}
-                      className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {t.products.specMoveUp}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={index === rows.length - 1}
-                      onClick={() => move(index, 1)}
-                      className="rounded-full border border-navy-200 px-3 py-1.5 text-xs text-navy-700 transition-colors hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {t.products.specMoveDown}
-                    </button>
-
-                    {confirmingKey === row.key ? (
-                      <span className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => removeRow(row.key)}
-                          className="rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-700 transition-colors hover:bg-red-50"
-                        >
-                          {t.common.confirmDelete}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmingKey(null)}
-                          className="rounded-full px-2 py-1.5 text-xs text-navy-600 hover:bg-navy-100"
-                        >
-                          {t.common.cancel}
-                        </button>
-                      </span>
-                    ) : (
+        <div className="overflow-x-auto rounded-xl border border-navy-200">
+          <table className="min-w-[760px] w-full border-collapse text-left text-sm">
+            <thead className="bg-navy-50/80">
+              <tr className="border-b border-navy-200">
+                <th scope="col" className="w-28 px-3 py-3 text-xs font-medium text-muted">
+                  #
+                </th>
+                {table.columns.map((column) => (
+                  <th key={column.id} scope="col" className="min-w-[190px] px-3 py-2 align-top">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={column.values[activeLocale]}
+                        onChange={(event) => updateColumn(column.id, event.target.value)}
+                        placeholder={t.products.specColumnPlaceholder}
+                        aria-label={`${t.products.specColumnLabel} ${getContentLocaleLabel(t, activeLocale)}`}
+                        className="min-w-0 flex-1 rounded-lg border border-navy-200 bg-white px-3 py-2 text-sm font-semibold text-navy-900 placeholder:font-normal placeholder:text-navy-300 focus:border-copper-500 focus:outline-none focus:ring-2 focus:ring-copper-500/20"
+                      />
                       <button
                         type="button"
-                        onClick={() => setConfirmingKey(row.key)}
-                        className="rounded-full px-3 py-1.5 text-xs text-navy-600 transition-colors hover:bg-navy-100"
+                        onClick={() => removeColumn(column.id)}
+                        disabled={table.columns.length <= 1}
+                        aria-label={t.products.specDeleteColumn}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none text-navy-400 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-30"
                       >
-                        {t.products.specRemove}
+                        ×
                       </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                  {ADMIN_LOCALES.map((locale) => (
-                    <fieldset key={locale} className="rounded-lg border border-navy-100 p-3">
-                      <legend className="px-1 text-xs font-medium text-navy-500">
-                        {getContentLocaleLabel(t, locale)}
-                      </legend>
-                      <div className="space-y-2">
-                        <input
-                          aria-label={`${getContentLocaleLabel(t, locale)} · ${t.products.specName}`}
-                          value={row.values[locale].name}
-                          onChange={(event) => update(row.key, locale, 'name', event.target.value)}
-                          placeholder={t.products.specNamePlaceholder}
-                          className="block w-full rounded-lg border border-navy-200 bg-white px-3 py-2 text-sm text-navy-900 placeholder:text-navy-300 focus:border-copper-500 focus:outline-none focus:ring-2 focus:ring-copper-500/30"
-                        />
-                        <input
-                          aria-label={`${getContentLocaleLabel(t, locale)} · ${t.products.specValue}`}
-                          value={row.values[locale].value}
-                          onChange={(event) => update(row.key, locale, 'value', event.target.value)}
-                          placeholder={t.products.specValuePlaceholder}
-                          className="block w-full rounded-lg border border-navy-200 bg-white px-3 py-2 text-sm text-navy-900 placeholder:text-navy-300 focus:border-copper-500 focus:outline-none focus:ring-2 focus:ring-copper-500/30"
-                        />
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-navy-100 bg-white">
+              {table.rows.map((row, rowIndex) => (
+                <tr key={row.id} className="align-top hover:bg-navy-50/40">
+                  <th scope="row" className="px-3 py-3 font-normal text-muted">
+                    <div className="flex flex-col items-start gap-2">
+                      <span className="font-mono text-xs">{String(rowIndex + 1).padStart(2, '0')}</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={rowIndex === 0}
+                          onClick={() => moveRow(rowIndex, -1)}
+                          aria-label={t.products.specMoveUp}
+                          className="rounded border border-navy-200 px-1.5 py-1 text-xs text-navy-600 hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={rowIndex === table.rows.length - 1}
+                          onClick={() => moveRow(rowIndex, 1)}
+                          aria-label={t.products.specMoveDown}
+                          className="rounded border border-navy-200 px-1.5 py-1 text-xs text-navy-600 hover:bg-navy-50 disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row.id)}
+                          aria-label={t.products.specRemove}
+                          className="rounded border border-transparent px-1.5 py-1 text-xs text-navy-500 hover:border-red-100 hover:bg-red-50 hover:text-red-700"
+                        >
+                          ×
+                        </button>
                       </div>
-                    </fieldset>
+                    </div>
+                  </th>
+                  {table.columns.map((column) => (
+                    <td key={column.id} className="px-3 py-3">
+                      <input
+                        value={row.cells[column.id]?.[activeLocale] ?? ''}
+                        onChange={(event) => updateCell(row.id, column.id, event.target.value)}
+                        placeholder={t.products.specCellPlaceholder}
+                        aria-label={`${column.values[activeLocale] || t.products.specColumnLabel} ${rowIndex + 1}`}
+                        className="block w-full rounded-lg border border-navy-200 bg-white px-3 py-2.5 text-sm text-navy-900 placeholder:text-navy-300 focus:border-copper-500 focus:outline-none focus:ring-2 focus:ring-copper-500/20"
+                      />
+                    </td>
                   ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                </tr>
+              ))}
+              {table.rows.length === 0 ? (
+                <tr>
+                  <td colSpan={table.columns.length + 1} className="px-5 py-10 text-center text-sm text-muted">
+                    <p>{t.products.specTableEmpty}</p>
+                    <button type="button" onClick={addRow} className="mt-3 font-medium text-copper-700 hover:underline">
+                      + {t.products.specAddRow}
+                    </button>
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
 
-      <div className="flex justify-end">
-        <SubmitButton pendingText={t.common.saving}>{t.products.saveDraft}</SubmitButton>
-      </div>
+        <p className="text-xs leading-relaxed text-muted">{t.products.specTableFooterHint}</p>
+      </section>
     </form>
   );
 }

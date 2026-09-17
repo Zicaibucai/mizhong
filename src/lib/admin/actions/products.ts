@@ -27,9 +27,11 @@ import {
   draftMediaRoleFor,
   readDraft,
   resolveDraftPrice,
+  specTableFromLegacySpecs,
   validateForPublish,
   type ProductDraft,
   type ProductDraftSpec,
+  type ProductDraftSpecTable,
 } from '@/lib/product-draft';
 import type { FormState } from '@/lib/admin/action-state';
 
@@ -1037,6 +1039,7 @@ export async function duplicateProductAction(
         priceUnit: source.priceUnit,
         moq: source.moq,
         moqUnit: source.moqUnit,
+        specTable: source.specTable ?? undefined,
         translations: {
           create: source.translations.map((item) => ({
             locale: item.locale,
@@ -1392,37 +1395,53 @@ export async function removeProductMediaAction(
 }
 
 // ---------------------------------------------------------------------------
-// 结构化参数（ProductSpecification）
+// 结构化参数 / 规格颜色表
 // ---------------------------------------------------------------------------
 
-/** 一行参数：id 为空表示新增；三种语言各自可留空 */
-const specRowSchema = () =>
+const tableTextSchema = (max: number) =>
   z.object({
-    id: z
-      .preprocess(
-        (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
-        z.string().max(200).optional(),
-      ),
-    name: z.object({
-      zh: textField(120),
-      en: textField(120),
-      vi: textField(120),
-    }),
-    value: z.object({
-      zh: textField(300),
-      en: textField(300),
-      vi: textField(300),
-    }),
+    zh: textField(max),
+    en: textField(max),
+    vi: textField(max),
   });
 
-const specPayloadSchema = (t: AdminMessages) =>
-  z.object({
-    productId: requiredIdField(t),
-    rows: z.array(specRowSchema()).max(60, t.products.specTooMany),
-  });
+const specTablePayloadSchema = (t: AdminMessages) =>
+  z
+    .object({
+      productId: requiredIdField(t),
+      table: z.object({
+        columns: z
+          .array(
+            z.object({
+              id: z.string().trim().min(1).max(80),
+              values: tableTextSchema(120),
+            }),
+          )
+          .min(1, t.products.specColumnRequired)
+          .max(20, t.products.specTooMany),
+        rows: z
+          .array(
+            z.object({
+              id: z.string().trim().min(1).max(80),
+              cells: z.record(tableTextSchema(300)),
+            }),
+          )
+          .max(100, t.products.specTooMany),
+      }),
+    })
+    .superRefine((value, context) => {
+      const columnIds = value.table.columns.map((column) => column.id);
+      if (new Set(columnIds).size !== columnIds.length) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: t.products.specColumnDuplicate });
+      }
+      const rowIds = value.table.rows.map((row) => row.id);
+      if (new Set(rowIds).size !== rowIds.length) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: t.products.specRowDuplicate });
+      }
+    });
 
 /**
- * 表单版本：参数行是动态的，因此整表序列化成 JSON 放进一个隐藏字段。
+ * 表单版本：表头、表格行和三语单元格都是动态的，因此整表序列化成 JSON 放进一个隐藏字段。
  *
  * JSON 只是**传输方式**，不是信任边界 —— 解析后仍然走上面的 Zod 校验，
  * 行数上限、字段长度、语言枚举都由服务端重新检查。
@@ -1434,14 +1453,8 @@ const specFormSchema = (t: AdminMessages) =>
   });
 
 /**
- * 保存整个参数表（顺序即 sortOrder）。
- *
- * 语义是「以提交内容为准」：新行创建、已有行更新、没提交的行删除。用 id 做差分而不是
- * 全删重建，这样未改动的行在数据库里保持稳定（审计与后续引用都不会出现无意义的抖动）。
- *
- * 校验规则：
- *   - 三种语言的名称与值都为空的行直接丢弃（用户点了「增加一条」却没填，不算错误）；
- *   - 只要某一行填了值却没有任何语言的名称，就整体拒绝并提示 —— 静默丢弃用户输入才是真问题。
+ * 保存完整的可配置表。结构只存进草稿/发布后的 JSON，不再受固定的「名称 + 值」两列限制。
+ * 仍兼容旧版客户端传来的 rows 数组，以便正在打开旧页面的管理员不会保存失败。
  */
 export async function saveProductSpecificationsAction(
   _prev: FormState,
@@ -1456,47 +1469,32 @@ export async function saveProductSpecificationsAction(
   const form = parseForm(specFormSchema(t), formData, t);
   if (!form.ok) return { status: 'error', message: form.message };
 
-  let rawRows: unknown[];
+  let decoded: unknown;
   try {
-    const decoded: unknown = JSON.parse(form.data.payload);
-    if (!Array.isArray(decoded)) return { status: 'error', message: t.validation.invalidInput };
-    rawRows = decoded;
+    decoded = JSON.parse(form.data.payload);
   } catch {
     return { status: 'error', message: t.validation.invalidInput };
   }
 
-  // 形状体检：客户端与服务端的字段名一旦漂移，Zod 会把不认识的键安静地剥掉，
-  // 结果是「保存成功但一行都没写」。这里把这种情况变成显式错误。
-  if (
-    rawRows.length > 0 &&
-    !rawRows.some(
-      (row) => row !== null && typeof row === 'object' && 'name' in (row as Record<string, unknown>),
-    )
-  ) {
-    console.error('[admin] save product specifications: payload shape mismatch');
-    return { status: 'error', message: t.validation.invalidInput };
+  // 兼容上一版固定两列编辑器：先转换成新表结构，再走同一套校验。
+  if (Array.isArray(decoded)) {
+    const legacyRows = decoded as Array<Record<string, unknown>>;
+    const table = specTableFromLegacyRows(legacyRows);
+    decoded = { table };
   }
 
-  const parsed = specPayloadSchema(t).safeParse({
+  const parsed = specTablePayloadSchema(t).safeParse({
     productId: form.data.productId,
-    rows: rawRows,
+    table: decoded && typeof decoded === 'object' && 'table' in decoded
+      ? (decoded as { table: unknown }).table
+      : decoded,
   });
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return { status: 'error', message: issue?.message ?? t.validation.invalidInput };
   }
 
-  // 草稿里**原样保留每一行**，包括整行空白的新增行：
-  // 编辑器刚点「增加一条」就会自动保存，如果服务端把空行丢掉，
-  // 刷新后那一行会凭空消失。「填了值却没写名称」这类规则推迟到发布时再判
-  // （见 validateForPublish），编辑到一半必须存得下去。
-  const specs: ProductDraftSpec[] = parsed.data.rows.map((row) => {
-    const values = {} as ProductDraftSpec['values'];
-    for (const locale of ADMIN_LOCALES) {
-      values[locale] = { name: row.name[locale].trim(), value: row.value[locale].trim() };
-    }
-    return { id: row.id ?? null, values };
-  });
+  const table = parsed.data.table as ProductDraftSpecTable;
 
   const db = getPrisma();
   if (!db) return getDbUnavailableState(t);
@@ -1507,16 +1505,36 @@ export async function saveProductSpecificationsAction(
 
     return await persistDraft(db, {
       productId: parsed.data.productId,
-      draft: { ...loaded.draft, specs },
+      draft: { ...loaded.draft, specTable: table },
       user,
       summary: t.products.specsSection,
       t,
-      detail: { count: specs.length },
+      detail: { columns: table.columns.length, rows: table.rows.length },
     });
   } catch (error) {
     console.error('[admin] save product specifications failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
+}
+
+/** 兼容旧版 rows payload，不让旧页面的 in-flight 提交把数据写坏。 */
+function specTableFromLegacyRows(rows: Array<Record<string, unknown>>): ProductDraftSpecTable {
+  const legacySpecs: ProductDraftSpec[] = rows.map((row) => {
+    const readLocalized = (value: unknown, locale: AdminLocale) => {
+      if (!value || typeof value !== 'object') return '';
+      const raw = (value as Record<string, unknown>)[locale];
+      return typeof raw === 'string' ? raw : '';
+    };
+    return {
+      id: typeof row.id === 'string' && row.id.trim() ? row.id : null,
+      values: {
+        zh: { name: readLocalized(row.name, 'zh'), value: readLocalized(row.value, 'zh') },
+        en: { name: readLocalized(row.name, 'en'), value: readLocalized(row.value, 'en') },
+        vi: { name: readLocalized(row.name, 'vi'), value: readLocalized(row.value, 'vi') },
+      },
+    };
+  });
+  return specTableFromLegacySpecs(legacySpecs);
 }
 
 // ---------------------------------------------------------------------------

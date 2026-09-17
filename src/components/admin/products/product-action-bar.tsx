@@ -94,11 +94,7 @@ export function ProductActionBar({
             : t.products.saveStatusIdle;
 
   const blocked = data.publishBlockers.length > 0;
-  const saveTargets = active === 'visual'
-    ? saveFormIds ?? []
-    : active
-      ? [`product-form-${active}`]
-      : [];
+  const saveTargets = active === 'visual' ? saveFormIds ?? [] : [];
   const saveVisualForms = () => {
     for (const formId of saveTargets) {
       const form = document.getElementById(formId);
@@ -142,14 +138,15 @@ export function ProductActionBar({
         <p className="hidden text-xs text-muted xl:block">{t.products.autosaveHint}</p>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button
-            type={saveTargets.length > 0 ? 'button' : 'submit'}
-            form={saveTargets.length > 0 ? undefined : active ? `product-form-${active}` : undefined}
-            onClick={saveTargets.length > 0 ? saveVisualForms : undefined}
-            className="inline-flex h-10 items-center rounded-full border border-navy-300 px-5 text-sm font-medium text-navy-800 transition-colors hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
-          >
-            {t.products.saveDraft}
-          </button>
+          {saveTargets.length > 0 ? (
+            <button
+              type="button"
+              onClick={saveVisualForms}
+              className="inline-flex h-10 items-center rounded-full border border-navy-300 px-5 text-sm font-medium text-navy-800 transition-colors hover:bg-navy-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+            >
+              {t.products.saveDraft}
+            </button>
+          ) : null}
 
           {/*
             发布与取消发布是**两个独立的按钮**，不是一个按钮按状态改文案。

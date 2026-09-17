@@ -173,6 +173,7 @@ export default async function AdminProductDetailPage({
     },
     translations,
     specifications,
+    specTable: draft.specTable,
     categories: (categoryRows ?? []).map((row) => ({
       id: row.id,
       name:

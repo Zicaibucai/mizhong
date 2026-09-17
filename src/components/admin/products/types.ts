@@ -1,5 +1,9 @@
 import type { AdminLocale } from '@/lib/admin/validation';
-import type { DraftSection, ProductTranslationValues } from '@/lib/product-draft';
+import type {
+  DraftSection,
+  ProductDraftSpecTable,
+  ProductTranslationValues,
+} from '@/lib/product-draft';
 import type { PickerAsset } from './asset-picker';
 import type { GalleryItemData } from './gallery-editor';
 
@@ -46,6 +50,9 @@ export interface SpecRowData {
   values: Record<AdminLocale, SpecRowValues>;
 }
 
+/** 可视化规格/颜色表，单元格按语言保存。 */
+export type SpecTableData = ProductDraftSpecTable;
+
 export interface CategoryOption {
   id: string;
   name: string;
@@ -70,6 +77,7 @@ export interface ProductEditorData {
   product: ProductBasics;
   translations: Record<AdminLocale, ProductTranslationValues>;
   specifications: SpecRowData[];
+  specTable: SpecTableData;
   categories: CategoryOption[];
   /** Enabled media-library images (cover picker). */
   coverAssets: PickerAsset[];

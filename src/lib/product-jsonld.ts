@@ -23,6 +23,20 @@ export function productJsonLd(
   const low = rawPrice(product);
   const high = rawHighPrice(product);
   const currency = normalizeCurrency(product.currency);
+  const tableProperties = product.specificationTable
+    ? product.specificationTable.rows.flatMap((row) =>
+        product.specificationTable!.columns.flatMap((column) => {
+          const value = row.cells[column.id];
+          return value ? [{ name: column.label, value }] : [];
+        }),
+      )
+    : [];
+  const additionalProperties = [
+    ...tableProperties,
+    ...product.specifications
+      .filter((spec) => spec.value)
+      .map((spec) => ({ name: spec.name, value: spec.value })),
+  ];
 
   return {
     '@context': 'https://schema.org',
@@ -32,15 +46,12 @@ export function productJsonLd(
     ...(product.shortDescription ? { description: product.shortDescription } : {}),
     ...(image.length > 0 ? { image } : {}),
     ...(product.categoryName ? { category: product.categoryName } : {}),
-    ...(product.specifications.length > 0
+    ...(additionalProperties.length > 0
       ? {
-          additionalProperty: product.specifications
-            .filter((spec) => spec.value)
-            .map((spec) => ({
-              '@type': 'PropertyValue',
-              name: spec.name,
-              value: spec.value,
-            })),
+          additionalProperty: additionalProperties.map((property) => ({
+            '@type': 'PropertyValue',
+            ...property,
+          })),
         }
       : {}),
     ...(low

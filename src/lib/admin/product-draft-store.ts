@@ -1,7 +1,13 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { ADMIN_LOCALES } from '@/lib/admin/validation';
 import { decimalToString, normalizeCurrency } from '@/lib/pricing';
-import { readDraft, type ProductDraft, type ProductMediaRoleValue } from '@/lib/product-draft';
+import {
+  readDraft,
+  readSpecTable,
+  specTableFromLegacySpecs,
+  type ProductDraft,
+  type ProductMediaRoleValue,
+} from '@/lib/product-draft';
 
 /**
  * 草稿与版本的数据访问层。
@@ -67,6 +73,15 @@ function toDraft(row: ProductWithRelations): ProductDraft {
     };
   }
 
+  const specs: ProductDraft['specs'] = row.specifications.map((spec) => {
+    const values = {} as ProductDraft['specs'][number]['values'];
+    for (const locale of ADMIN_LOCALES) {
+      const tr = spec.translations.find((item) => item.locale === locale);
+      values[locale] = { name: tr?.name ?? '', value: tr?.value ?? '' };
+    }
+    return { id: spec.id, values };
+  });
+
   return {
     basic: {
       slug: row.slug,
@@ -87,14 +102,10 @@ function toDraft(row: ProductWithRelations): ProductDraft {
       moqUnit: row.moqUnit,
     },
     translations,
-    specs: row.specifications.map((spec) => {
-      const values = {} as ProductDraft['specs'][number]['values'];
-      for (const locale of ADMIN_LOCALES) {
-        const tr = spec.translations.find((item) => item.locale === locale);
-        values[locale] = { name: tr?.name ?? '', value: tr?.value ?? '' };
-      }
-      return { id: spec.id, values };
-    }),
+    specs,
+    // 老商品还没有 JSON 表时，从既有的 ProductSpecification 关系表平移一次；
+    // 后续保存/发布都会把管理员的新表结构保留下来。
+    specTable: readSpecTable(row.specTable) ?? specTableFromLegacySpecs(specs),
     media: row.media.map((item) => ({ assetId: item.assetId, role: item.role })),
   };
 }
@@ -190,6 +201,7 @@ export async function applyDraftToLive(
       priceUnit: draft.pricing.priceUnit,
       moq: draft.pricing.moq,
       moqUnit: draft.pricing.moqUnit,
+      specTable: draft.specTable as unknown as Prisma.InputJsonValue,
     },
   });
 

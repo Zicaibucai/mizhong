@@ -5,21 +5,15 @@ import Link from 'next/link';
 import { useAdminLocale, useAdminT } from '@/components/admin/i18n-provider';
 import { ProductTabs, TabPanel, type SaveStatus, type TabDef } from './tabs';
 import { ProductActionBar } from './product-action-bar';
-import { BasicTab } from './basic-tab';
-import { PricingTab } from './pricing-tab';
-import { TranslationsTab } from './translations-tab';
-import { SpecsTab } from './specs-tab';
-import { MediaTab } from './media-tab';
-import { SeoTab } from './seo-tab';
 import { VersionsTab } from './versions-tab';
 import { VisualProductEditor } from './visual-product-editor';
 import type { ProductEditorData } from './types';
 
 /**
- * 商品编辑器：吸顶操作栏（保存状态 / 发布 / 存档 / 预览）+ 七个分页。
+ * 商品编辑器：吸顶操作栏（保存状态 / 发布 / 预览）+ 可视化编辑 / 版本控制。
  *
- * 七个分页属于**同一个商品编辑器**，共用一份 product id，切换分页不会丢正在输入的内容
- * （每个面板保持挂载，见 `ProductTabs`）。
+ * 商品内容集中在一张可视化页面中，多语言、媒体、规格表与 SEO 不再拆成重复分页；
+ * 版本历史保留为独立入口。
  *
  * 改动会在停止输入 1.5 秒后自动保存进**草稿**，所以切分页、离开页面都不再需要确认弹窗。
  * 只有**保存失败**时才重新武装离开提醒 —— 那时确实有改动没存下去，
@@ -44,12 +38,6 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
   const tabs = useMemo<TabDef[]>(
     () => [
       { id: 'visual', label: t.products.tabVisual },
-      { id: 'basic', label: t.products.tabBasic },
-      { id: 'pricing', label: t.products.tabPricing },
-      { id: 'translations', label: t.products.tabTranslations },
-      { id: 'specs', label: t.products.tabSpecs },
-      { id: 'media', label: t.products.tabMedia },
-      { id: 'seo', label: t.products.tabSeo },
       { id: 'versions', label: t.products.tabVersions },
     ],
     [t],
@@ -105,31 +93,17 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
       >
         <ProductActionBar
           data={data}
-          saveFormIds={['product-form-visual', 'product-form-visual-specs']}
+          saveFormIds={[
+            'product-form-visual',
+            'product-form-visual-specs',
+            'product-form-visual-seo',
+          ]}
         />
 
         <TabPanel id="visual">
           <VisualProductEditor data={data} />
         </TabPanel>
 
-        <TabPanel id="basic">
-          <BasicTab data={data} />
-        </TabPanel>
-        <TabPanel id="pricing">
-          <PricingTab data={data} />
-        </TabPanel>
-        <TabPanel id="translations">
-          <TranslationsTab data={data} />
-        </TabPanel>
-        <TabPanel id="specs">
-          <SpecsTab data={data} />
-        </TabPanel>
-        <TabPanel id="media">
-          <MediaTab data={data} />
-        </TabPanel>
-        <TabPanel id="seo">
-          <SeoTab data={data} />
-        </TabPanel>
         <TabPanel id="versions">
           <VersionsTab data={data} />
         </TabPanel>

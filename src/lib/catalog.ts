@@ -1,6 +1,7 @@
 import { tryDb } from '@/lib/db';
 import type { Locale } from '@/lib/i18n/config';
 import { decimalToString, normalizeCurrency, type PriceMode } from '@/lib/pricing';
+import { readSpecTable } from '@/lib/product-draft';
 
 export const PRODUCTS_PER_PAGE = 12;
 const MAX_QUERY_LENGTH = 80;
@@ -72,6 +73,12 @@ export interface ProductSpecView {
   value: string;
 }
 
+/** 可配置规格/颜色表（已按当前语言回退解析）。 */
+export interface ProductSpecTableView {
+  columns: { id: string; label: string }[];
+  rows: { id: string; cells: Record<string, string> }[];
+}
+
 export interface ProductDetailView extends ProductCardView {
   description: string | null;
   spec: string | null;
@@ -86,6 +93,7 @@ export interface ProductDetailView extends ProductCardView {
   /** 图库（详情页下方网格用）：仅 ProductMedia 行，不含自动补入的封面 */
   gallery: ProductMediaView[];
   specifications: ProductSpecView[];
+  specificationTable: ProductSpecTableView | null;
   /** 当前语言缺失、已回退英文时为 true（页面据此提示，而不是显示字段名） */
   usingFallback: boolean;
 }
@@ -389,8 +397,38 @@ export async function getProductBySlug(
     }
   }
 
-  // 结构化参数：当前语言缺失时回退英文，两边都为空的行直接隐藏（不显示空行）
-  const specifications: ProductSpecView[] = row.specifications
+  const publishedSpecTable = readSpecTable(row.specTable);
+  const specificationTable: ProductSpecTableView | null = publishedSpecTable
+    ? {
+        columns: publishedSpecTable.columns
+          .map((column) => ({
+            id: column.id,
+            label:
+              column.values[locale].trim() ||
+              column.values.en.trim() ||
+              column.values.zh.trim() ||
+              column.values.vi.trim(),
+          }))
+          .filter((column) => column.label.length > 0),
+        rows: publishedSpecTable.rows
+          .map((tableRow) => ({
+            id: tableRow.id,
+            cells: Object.fromEntries(
+              publishedSpecTable.columns.map((column) => {
+                const values = tableRow.cells[column.id];
+                const value = values
+                  ? values[locale].trim() || values.en.trim() || values.zh.trim() || values.vi.trim()
+                  : '';
+                return [column.id, value];
+              }),
+            ),
+          }))
+          .filter((tableRow) => Object.values(tableRow.cells).some((value) => value.length > 0)),
+      }
+    : null;
+
+  // 兼容尚未发布新表结构的老商品：当前语言缺失时回退英文，空行不展示。
+  const specifications: ProductSpecView[] = publishedSpecTable ? [] : row.specifications
     .map((spec) => {
       const specTr =
         spec.translations.find((item) => item.locale === locale) ??
@@ -423,6 +461,7 @@ export async function getProductBySlug(
     media,
     gallery,
     specifications,
+    specificationTable,
     usingFallback: Boolean(tr) && !exact,
     ...priceOf(row),
   };

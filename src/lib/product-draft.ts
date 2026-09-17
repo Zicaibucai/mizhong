@@ -39,6 +39,24 @@ export interface ProductDraftSpec {
   values: Record<AdminLocale, { name: string; value: string }>;
 }
 
+/** 一列可配置规格：列名也跟着当前语言切换保存。 */
+export interface ProductDraftSpecColumn {
+  id: string;
+  values: Record<AdminLocale, string>;
+}
+
+/** 一行规格/颜色组合；cells 的 key 对应列 id。 */
+export interface ProductDraftSpecTableRow {
+  id: string;
+  cells: Record<string, Record<AdminLocale, string>>;
+}
+
+/** 1688 风格的规格/颜色表，列和行都由管理员自由维护。 */
+export interface ProductDraftSpecTable {
+  columns: ProductDraftSpecColumn[];
+  rows: ProductDraftSpecTableRow[];
+}
+
 export interface ProductDraftMedia {
   assetId: string;
   role: ProductMediaRoleValue;
@@ -66,6 +84,8 @@ export interface ProductDraft {
   translations: Record<AdminLocale, ProductTranslationValues>;
   /** 数组顺序即前台展示顺序 */
   specs: ProductDraftSpec[];
+  /** 可配置的规格/颜色表；旧 specs 仅作为兼容数据保留。 */
+  specTable: ProductDraftSpecTable;
   /** 数组顺序即图库顺序 */
   media: ProductDraftMedia[];
 }
@@ -121,6 +141,34 @@ const translationShape = z.object({
   seoDescription: z.string().default(''),
 });
 
+const localizedTableTextShape = (max: number) =>
+  z.object({
+    zh: z.string().max(max).default(''),
+    en: z.string().max(max).default(''),
+    vi: z.string().max(max).default(''),
+  });
+
+const specTableShape = z.object({
+  columns: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(80),
+        values: localizedTableTextShape(120),
+      }),
+    )
+    .max(20)
+    .default([]),
+  rows: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(80),
+        cells: z.record(localizedTableTextShape(300)),
+      }),
+    )
+    .max(100)
+    .default([]),
+});
+
 const draftShape = z.object({
   basic: z.object({
     slug: z.string().default(''),
@@ -157,6 +205,7 @@ const draftShape = z.object({
       }),
     )
     .default([]),
+  specTable: specTableShape.default({ columns: [], rows: [] }),
   media: z
     .array(
       z.object({
@@ -174,7 +223,68 @@ const draftShape = z.object({
 export function readDraft(value: unknown): ProductDraft | null {
   if (value === null || value === undefined) return null;
   const parsed = draftShape.safeParse(value);
-  return parsed.success ? (parsed.data as ProductDraft) : null;
+  if (!parsed.success) return null;
+
+  // 旧版本草稿没有 specTable：把原来的两列参数平移成新表，避免升级后编辑器看起来像丢了数据。
+  const source = value as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(source, 'specTable')) {
+    parsed.data.specTable = specTableFromLegacySpecs(parsed.data.specs);
+  }
+  return parsed.data as ProductDraft;
+}
+
+/** 新商品默认提供“规格/型号 + 颜色”两列，管理员可以继续改名、增列或删列。 */
+export function emptySpecTable(): ProductDraftSpecTable {
+  return {
+    columns: [
+      {
+        id: 'specification',
+        values: { zh: '规格/型号', en: 'Specification / Model', vi: 'Quy cách / Mẫu mã' },
+      },
+      {
+        id: 'color',
+        values: { zh: '颜色', en: 'Color', vi: 'Màu sắc' },
+      },
+    ],
+    rows: [],
+  };
+}
+
+/** 将旧的名称/值参数转换成两列表格，仅在迁移旧数据时使用。 */
+export function specTableFromLegacySpecs(specs: ProductDraftSpec[]): ProductDraftSpecTable {
+  const table = emptySpecTable();
+  if (specs.length === 0) return table;
+  table.columns[0] = {
+    id: 'specification',
+    values: { zh: '参数', en: 'Parameter', vi: 'Thông số' },
+  };
+  table.columns[1] = {
+    id: 'value',
+    values: { zh: '参数值', en: 'Value', vi: 'Giá trị' },
+  };
+  table.rows = specs.map((spec, index) => ({
+    id: spec.id ?? `legacy-${index + 1}`,
+    cells: {
+      specification: {
+        zh: spec.values.zh.name,
+        en: spec.values.en.name,
+        vi: spec.values.vi.name,
+      },
+      value: {
+        zh: spec.values.zh.value,
+        en: spec.values.en.value,
+        vi: spec.values.vi.value,
+      },
+    },
+  }));
+  return table;
+}
+
+/** 读取发布后的 JSON；形状不对时由调用方回退到旧参数表。 */
+export function readSpecTable(value: unknown): ProductDraftSpecTable | null {
+  const parsed = specTableShape.safeParse(value);
+  if (!parsed.success || parsed.data.columns.length === 0) return null;
+  return parsed.data as ProductDraftSpecTable;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +302,15 @@ function sectionEqual(a: unknown, b: unknown): boolean {
  * 用它而不是「改动字段数」：管理员真正需要知道的是「我动过哪一块」。
  */
 export function changedSections(draft: ProductDraft, live: ProductDraft): DraftSection[] {
-  return DRAFT_SECTIONS.filter((section) => !sectionEqual(draft[section], live[section]));
+  return DRAFT_SECTIONS.filter((section) => {
+    if (section === 'specs') {
+      return !sectionEqual(
+        { specs: draft.specs, specTable: draft.specTable },
+        { specs: live.specs, specTable: live.specTable },
+      );
+    }
+    return !sectionEqual(draft[section], live[section]);
+  });
 }
 
 // ---------------------------------------------------------------------------

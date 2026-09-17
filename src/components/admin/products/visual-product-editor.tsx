@@ -20,6 +20,7 @@ import { useAdminT } from '@/components/admin/i18n-provider';
 import { PlayIcon } from '@/components/ui/icons';
 import { AssetThumb, type PickerAsset } from './asset-picker';
 import { ProductMediaUploader } from './product-uploader';
+import { SeoTab } from './seo-tab';
 import { SpecsTab } from './specs-tab';
 import { useAutoSaveForm } from './tabs';
 import type { GalleryItemData } from './gallery-editor';
@@ -47,12 +48,14 @@ function VisualMediaGallery({
   assets,
   coverAssetId,
   hoverVideoAssetId,
+  className,
 }: {
   productId: string;
   items: GalleryItemData[];
   assets: PickerAsset[];
   coverAssetId: string | null;
   hoverVideoAssetId: string | null;
+  className?: string;
 }) {
   const t = useAdminT();
   const router = useRouter();
@@ -139,7 +142,7 @@ function VisualMediaGallery({
   };
 
   return (
-    <section className="min-w-0 space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5">
+    <section className={cn('min-w-0 space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5', className)}>
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-navy-900">{t.products.mediaSection}</h2>
@@ -419,7 +422,7 @@ function VisualPricingFields({
   const [mode, setMode] = useState<PriceMode>(data.product.priceMode);
 
   return (
-    <section className="space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5 lg:col-start-2 lg:self-start">
+    <section className="space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5 lg:self-start">
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.14em] text-copper-700">{t.products.pricingSection}</p>
         <p className="mt-1 text-xs leading-relaxed text-muted">{t.products.pricingHint}</p>
@@ -575,25 +578,32 @@ function VisualProductForm({
   return (
     <form id="product-form-visual" {...formProps} className="contents">
       <input type="hidden" name="id" value={data.product.id} />
-      {ADMIN_LOCALES.map((locale) => (
-        <div key={locale} className={cn(locale === activeLocale ? 'contents' : 'hidden')}>
-          <VisualLocaleFields locale={locale} data={data} t={t} />
-        </div>
-      ))}
-      <VisualPricingFields data={data} t={t} />
-      {ADMIN_LOCALES.map((locale) => (
-        <div key={`details-${locale}`} className={cn(locale === activeLocale ? 'contents' : 'hidden')}>
-          <VisualDetailsFields locale={locale} data={data} t={t} />
-        </div>
-      ))}
-      <VisualBasicFields data={data} t={t} state={state} />
+      <div className="order-2 space-y-5 lg:col-start-2">
+        {ADMIN_LOCALES.map((locale) => (
+          <div key={locale} className={cn(locale === activeLocale ? 'contents' : 'hidden')}>
+            <VisualLocaleFields locale={locale} data={data} t={t} />
+          </div>
+        ))}
+        <VisualPricingFields data={data} t={t} />
+      </div>
+      <div className="order-4 lg:col-span-2">
+        {ADMIN_LOCALES.map((locale) => (
+          <div key={`details-${locale}`} className={cn(locale === activeLocale ? 'contents' : 'hidden')}>
+            <VisualDetailsFields locale={locale} data={data} t={t} />
+          </div>
+        ))}
+      </div>
+      <div className="order-5 lg:col-span-2">
+        <VisualBasicFields data={data} t={t} state={state} />
+      </div>
     </form>
   );
 }
 
 /**
- * Customer-shaped product editing surface. Advanced tabs remain below/alongside this first tab
- * so existing SEO, version history and detailed media tools are still available.
+ * Customer-shaped product editing surface. Media and the commercial summary occupy the first
+ * row; the configurable variant table comes next, followed by descriptive, operational and SEO
+ * fields. The shared language switch controls every multilingual section on the page.
  */
 export function VisualProductEditor({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
@@ -636,18 +646,38 @@ export function VisualProductEditor({ data }: { data: ProductEditorData }) {
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(380px,0.95fr)] lg:items-start">
+        <VisualProductForm data={data} activeLocale={activeLocale} t={t} />
         <VisualMediaGallery
           productId={data.product.id}
           items={data.media}
           assets={data.galleryAssets}
           coverAssetId={data.product.coverAssetId}
           hoverVideoAssetId={data.product.hoverVideoAssetId}
+          className="order-1"
         />
-        <VisualProductForm data={data} activeLocale={activeLocale} t={t} />
+        <SpecsTab
+          data={data}
+          formId="product-form-visual-specs"
+          statusTab="visual-specs"
+          activeLocale={activeLocale}
+          layout="grid"
+        />
       </div>
 
-      <SpecsTab data={data} formId="product-form-visual-specs" statusTab="visual-specs" />
+      <section className="space-y-4 rounded-2xl border border-navy-200 bg-white p-4 sm:p-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-copper-700">SEO</p>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-navy-950">{t.products.seoSection}</h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted">{t.products.seoVisualHint}</p>
+        </div>
+        <SeoTab
+          data={data}
+          formId="product-form-visual-seo"
+          statusTab="visual-seo"
+          activeLocale={activeLocale}
+        />
+      </section>
     </div>
   );
 }

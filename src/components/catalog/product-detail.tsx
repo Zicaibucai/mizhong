@@ -7,7 +7,11 @@ import { formatMoq, formatPrice, productUnitLabel } from '@/lib/product-format';
 import { cn } from '@/lib/cn';
 import { Container } from '@/components/ui/container';
 import { ArrowRightIcon, MailIcon, PhoneIcon, WhatsAppIcon } from '@/components/ui/icons';
-import { ProductMediaViewer, ProductSpecTable } from '@/components/catalog/product-media-viewer';
+import {
+  ProductMediaViewer,
+  ProductSpecTable,
+  ProductVariantTable,
+} from '@/components/catalog/product-media-viewer';
 import { ProductGrid } from '@/components/catalog/product-grid';
 import { ProductInquiry } from '@/components/catalog/product-inquiry';
 import { catalogPath, withQuery } from '@/components/catalog/urls';
@@ -268,7 +272,7 @@ export function ProductDetail({
       </Container>
 
       {/* 产品介绍 / 结构化规格 / 应用场景：全部为空时整个区块不渲染 */}
-      {overview || product.specifications.length > 0 || freeTextSpec || application ? (
+      {overview || product.specificationTable?.rows.length || product.specifications.length > 0 || freeTextSpec || application ? (
         <Container className="mt-14 lg:mt-20">
           <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-x-16 lg:gap-y-14">
             {overview ? (
@@ -282,13 +286,17 @@ export function ProductDetail({
               </section>
             ) : null}
 
-            {product.specifications.length > 0 ? (
+            {product.specificationTable?.rows.length || product.specifications.length > 0 ? (
               <section className="border-t border-navy-200 pt-5 lg:col-span-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:gap-16">
                 <h2 className="pv-mono text-[0.62rem] text-copper-700">
                   {dict.detail.specs}
                 </h2>
                 <div>
-                  <ProductSpecTable specs={product.specifications} caption={dict.detail.specs} />
+                  {product.specificationTable?.rows.length ? (
+                    <ProductVariantTable table={product.specificationTable} caption={dict.detail.specs} />
+                  ) : (
+                    <ProductSpecTable specs={product.specifications} caption={dict.detail.specs} />
+                  )}
                   {freeTextSpec ? (
                     <p className="mt-6 whitespace-pre-line text-base leading-relaxed text-navy-800">
                       {freeTextSpec}
