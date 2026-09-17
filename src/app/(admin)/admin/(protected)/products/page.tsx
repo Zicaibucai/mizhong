@@ -136,6 +136,9 @@ export default async function AdminProductsPage({
         </div>
         <Link
           href="/admin/products/new"
+          // 这个地址一打开就会建一条空草稿，因此绝不能预取 ——
+          // Next 默认在鼠标悬停时就执行目标页的渲染，那会在用户没点的情况下写出数据
+          prefetch={false}
           className="inline-flex h-10 items-center rounded-full bg-navy-900 px-5 text-sm font-medium text-ivory-50 transition-colors hover:bg-navy-800"
         >
           {t.products.new}

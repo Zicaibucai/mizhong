@@ -87,16 +87,21 @@ export function ProductTabs({
   tabs,
   dirty,
   setDirty,
+  initialTab,
   children,
 }: {
   tabs: TabDef[];
   dirty: Record<string, boolean>;
   setDirty: (tab: string, isDirty: boolean) => void;
+  /** 首次渲染时打开的分区（默认第一个）。URL 带 #hash 时以 hash 为准 */
+  initialTab?: string;
   children: ReactNode;
 }) {
   const t = useAdminT();
   const firstTab = tabs[0]?.id ?? '';
-  const [active, setActive] = useState(firstTab);
+  const [active, setActive] = useState(
+    initialTab && tabs.some((tab) => tab.id === initialTab) ? initialTab : firstTab,
+  );
 
   const anyDirty = Object.values(dirty).some(Boolean);
 

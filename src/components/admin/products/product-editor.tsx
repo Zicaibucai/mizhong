@@ -59,6 +59,16 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
     data.translations.vi.name ||
     t.products.unnamedProduct;
 
+  // 刚从「新建商品」进来、还什么都没有的草稿：给一句「先做什么」的引导，
+  // 否则一屏空分区会让人不知道从哪下手
+  const isFreshDraft =
+    !data.product.published &&
+    !data.product.coverAssetId &&
+    data.media.length === 0 &&
+    !data.translations.zh.name &&
+    !data.translations.en.name &&
+    !data.translations.vi.name;
+
   return (
     <div className="space-y-6">
       <div>
@@ -75,7 +85,19 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
         </div>
       </div>
 
-      <ProductTabs tabs={tabs} dirty={dirty} setDirty={setDirty}>
+      {isFreshDraft ? (
+        <p className="rounded-lg border border-navy-200 bg-navy-50 px-4 py-3 text-sm leading-relaxed text-navy-700">
+          {t.products.emptyDraftHint}
+        </p>
+      ) : null}
+
+      {/* 空草稿直接打开「多语言」分区：商品名称在那里，先填名称最自然 */}
+      <ProductTabs
+        tabs={tabs}
+        dirty={dirty}
+        setDirty={setDirty}
+        initialTab={isFreshDraft ? 'translations' : undefined}
+      >
         <ProductActionBar data={data} />
 
         <TabPanel id="basic">
