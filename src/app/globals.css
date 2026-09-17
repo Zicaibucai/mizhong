@@ -1,41 +1,41 @@
 @import "tailwindcss";
 
 @theme {
-  /* 深海军蓝 —— 主色 */
-  --color-navy-50: #f3f6f9;
-  --color-navy-100: #e5ebf1;
-  --color-navy-200: #c6d3e0;
-  --color-navy-300: #9db3c9;
-  --color-navy-400: #6e8ca9;
-  --color-navy-500: #4d6c8b;
-  --color-navy-600: #395372;
-  --color-navy-700: #2c4059;
-  --color-navy-800: #1d2f43;
-  --color-navy-900: #12223a;
-  --color-navy-950: #0b1626;
+  /* 品牌炭黑 / 银灰 —— 取自商标的暗面与金属面；保留 navy 名称以兼容现有组件 */
+  --color-navy-50: #f7f7f7;
+  --color-navy-100: #ececed;
+  --color-navy-200: #d7d7d9;
+  --color-navy-300: #a9aaad;
+  --color-navy-400: #868388;
+  --color-navy-500: #656064;
+  --color-navy-600: #4e4549;
+  --color-navy-700: #3a2d31;
+  --color-navy-800: #2c1e22;
+  --color-navy-900: #221418;
+  --color-navy-950: #160a0d;
 
-  /* 象牙白 —— 背景 */
-  --color-ivory-50: #fbf9f4;
-  --color-ivory-100: #f5f1e7;
-  --color-ivory-200: #ece5d4;
-  --color-ivory-300: #dfd3b8;
+  /* 暖白 —— 内容背景，避免银灰与纯白显得生硬 */
+  --color-ivory-50: #fcfbfa;
+  --color-ivory-100: #f5f3f2;
+  --color-ivory-200: #e8e5e4;
+  --color-ivory-300: #d5d0cf;
 
-  /* 铜金 —— 强调 */
-  --color-copper-50: #faf5ec;
-  --color-copper-100: #f2e7d1;
-  --color-copper-200: #e5cfa4;
-  --color-copper-300: #d5b273;
-  --color-copper-400: #c79b52;
-  --color-copper-500: #b5833e;
-  --color-copper-600: #9a6d34;
-  --color-copper-700: #7c5629;
-  --color-copper-800: #634422;
+  /* 品牌红 —— 取自商标顶面与立面；保留 copper 名称以兼容现有组件 */
+  --color-copper-50: #fff3f3;
+  --color-copper-100: #ffe3e5;
+  --color-copper-200: #ffc7cb;
+  --color-copper-300: #f48d95;
+  --color-copper-400: #df4a54;
+  --color-copper-500: #c6222d;
+  --color-copper-600: #ad1e27;
+  --color-copper-700: #8f1b22;
+  --color-copper-800: #75191f;
 
   /* 语义色 */
   --color-background: var(--color-ivory-50);
   --color-foreground: var(--color-navy-900);
-  --color-muted: #5b6673;
-  --color-muted-foreground: #6b7684;
+  --color-muted: #655f62;
+  --color-muted-foreground: #746e71;
 
   /* 字体 */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
@@ -65,8 +65,8 @@
 /* 纺织纹理（媒体占位与暗色区块使用） */
 @utility texture-weave {
   background-image:
-    repeating-linear-gradient(45deg, rgb(18 34 58 / 0.05) 0 1px, transparent 1px 9px),
-    repeating-linear-gradient(-45deg, rgb(18 34 58 / 0.04) 0 1px, transparent 1px 9px);
+    repeating-linear-gradient(45deg, rgb(143 27 34 / 0.055) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(-45deg, rgb(34 20 24 / 0.04) 0 1px, transparent 1px 9px);
 }
 
 @utility texture-weave-dark {

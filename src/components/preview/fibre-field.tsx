@@ -82,7 +82,7 @@ export function FibreField({ className }: { className?: string }) {
         ctx.moveTo(x + 0.5, 0);
         ctx.lineTo(x + 0.5, height);
       }
-      ctx.strokeStyle = 'rgba(198, 211, 224, 0.045)';
+      ctx.strokeStyle = 'rgba(215, 215, 217, 0.045)';
       ctx.stroke();
 
       /* ---- 经线：纵向丝束，构成织物的主体，随指针轻微让位 ---- */
@@ -104,8 +104,8 @@ export function FibreField({ className }: { className?: string }) {
         }
         const accent = i % 7 === 3;
         ctx.strokeStyle = accent
-          ? 'rgba(213, 178, 115, 0.40)'
-          : `rgba(198, 211, 224, ${0.17 + (i % 3) * 0.055})`;
+          ? 'rgba(223, 74, 84, 0.42)'
+          : `rgba(215, 215, 217, ${0.17 + (i % 3) * 0.055})`;
         ctx.lineWidth = accent ? 1.25 : 1.05;
         ctx.stroke();
       }
@@ -123,7 +123,7 @@ export function FibreField({ className }: { className?: string }) {
           if (x === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         }
-        ctx.strokeStyle = i % 5 === 2 ? 'rgba(213, 178, 115, 0.18)' : 'rgba(198, 211, 224, 0.085)';
+        ctx.strokeStyle = i % 5 === 2 ? 'rgba(223, 74, 84, 0.20)' : 'rgba(215, 215, 217, 0.085)';
         ctx.lineWidth = 1;
         ctx.stroke();
       }
@@ -145,7 +145,7 @@ export function FibreField({ className }: { className?: string }) {
       ctx.lineWidth = 1;
       for (const dy of [-3, 3]) anchorPath(dy);
 
-      ctx.strokeStyle = 'rgba(213, 178, 115, 0.34)';
+      ctx.strokeStyle = 'rgba(223, 74, 84, 0.38)';
       ctx.lineWidth = 1.2;
       anchorPath(0);
     }

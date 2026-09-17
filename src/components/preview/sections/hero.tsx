@@ -66,7 +66,7 @@ export function PreviewHero({
         <div
           data-parallax
           style={cssVars({ '--pv-parallax': 0.05 })}
-          className="absolute inset-0 bg-[radial-gradient(130%_100%_at_20%_15%,transparent_0%,rgba(11,22,38,0.30)_55%,rgba(11,22,38,0.80)_100%)]"
+          className="absolute inset-0 bg-[radial-gradient(130%_100%_at_20%_15%,transparent_0%,rgba(22,10,13,0.30)_55%,rgba(22,10,13,0.82)_100%)]"
         />
       </div>
 
