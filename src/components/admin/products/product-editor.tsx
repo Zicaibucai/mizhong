@@ -50,11 +50,14 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
     [t],
   );
 
+  // 名称回退顺序：后台界面语言 → 英文 → 中文 → 越南语 → 「未命名商品」。
+  // 直接把 slug（可能只是 "2"）当标题显示，会让人以为商品没有名字。
   const name =
     data.translations[locale].name ||
     data.translations.en.name ||
     data.translations.zh.name ||
-    data.product.slug;
+    data.translations.vi.name ||
+    t.products.unnamedProduct;
 
   return (
     <div className="space-y-6">

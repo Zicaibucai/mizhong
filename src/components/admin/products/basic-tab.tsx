@@ -11,12 +11,14 @@ import { initialFormState } from '@/lib/admin/action-state';
 import { Alert, Checkbox, Field, Select, SubmitButton, TextInput } from '@/components/admin/form';
 import { DeleteForm } from '@/components/admin/delete-form';
 import { useAdminT } from '@/components/admin/i18n-provider';
+import { defaultLocale } from '@/lib/i18n/config';
 import { SlugAutoFill } from './slug-auto-fill';
+import { SlugPreview } from './slug-preview';
 import { useDirtyForm } from './tabs';
 import type { ProductEditorData } from './types';
 
 /**
- * 基本资料：名称 / Slug / SKU / 分类 / 精选 / 排序。
+ * 基本资料：名称 / 网址后缀 / SKU / 分类 / 精选 / 排序。
  *
  * 封面图与悬停视频在「图片视频」页，「价格与贸易信息」在价格页，
  * 发布与预览在编辑器顶部的操作栏 —— 每一块都只有一个地方可以改，不存在两处不一致的可能。
@@ -64,6 +66,13 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t.products.slug} htmlFor="slug" hint={t.products.slugHint}>
               <TextInput id="slug" name="slug" defaultValue={product.slug} required />
+              {/* 把完整网址摊开显示：比「Slug」这个词好懂得多 */}
+              <SlugPreview
+                formId="product-form-basic"
+                slugFieldId="slug"
+                prefix={`/${defaultLocale}/products/`}
+                label={t.products.slugPreviewLabel}
+              />
             </Field>
             <Field label={t.products.sku} htmlFor="sku" hint={t.products.skuHint}>
               <TextInput id="sku" name="sku" defaultValue={product.sku} />

@@ -16,6 +16,8 @@ import {
 import { getContentLocaleLabel } from '@/lib/admin/labels';
 import { getAdminMessagesForRequest, type AdminMessages } from '@/lib/admin/i18n';
 import { CURRENCY_CODES, PRICE_MODES, normalizeCurrency } from '@/lib/pricing';
+import { slugify } from '@/lib/slugify';
+import { randomBytes } from 'node:crypto';
 import type { FormState } from '@/lib/admin/action-state';
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -66,9 +68,24 @@ function optionalIdField(max = 200) {
   );
 }
 
+/**
+ * 新建商品时的字段。
+ *
+ * slug **不是必填**：它是「网址后缀」这种技术细节，不该成为普通运营建商品的门槛。
+ * 留空时服务端会按商品名称自动生成一个（见 resolveCreateSlug），
+ * 之后在「基本信息」里随时可以改。填了就必须符合格式，免得存进一个打不开的地址。
+ */
 function makeProductCreateSchema(t: AdminMessages) {
   return z.object({
-    slug: slugField(t),
+    slug: z.preprocess(
+      (value) => (typeof value === 'string' ? value.trim() : ''),
+      z
+        .string()
+        .max(120)
+        .refine((value) => value.length === 0 || SLUG_PATTERN.test(value), {
+          message: t.validation.slugFormat,
+        }),
+    ),
     categoryId: optionalIdField(),
     sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
   });
@@ -182,6 +199,44 @@ function resolvePrice(
   }
 
   return { ok: true, priceMin: values.priceMin, priceMax: values.priceMax ?? null };
+}
+
+/**
+ * 为新建商品决定一个可用的 slug。
+ *
+ * 优先级：管理员手填 → 英文名称 → 中文名称 → 越南语名称 → `product-<n>` 顺序号。
+ * 名称里的中文/越南语经 slugify 后可能为空，所以最后一定有兜底，绝不会卡住建商品。
+ * 结果再经过唯一化（`-2`、`-3`…），保证数据库的唯一约束不会在保存时才炸出来。
+ */
+async function resolveCreateSlug(
+  db: PrismaClient,
+  requested: string,
+  names: { locale: AdminLocale; name: string }[],
+): Promise<string> {
+  const fromName =
+    slugify(names.find((item) => item.locale === 'en')?.name ?? '') ||
+    slugify(names.find((item) => item.locale === 'zh')?.name ?? '') ||
+    slugify(names.find((item) => item.locale === 'vi')?.name ?? '');
+
+  let candidate = requested || fromName;
+  if (!candidate) {
+    // 名称全是中日韩等非拉丁文字时用顺序号：可读、稳定，而且一眼能看出是自动生成的
+    const total = await db.product.count();
+    candidate = `product-${total + 1}`;
+  }
+
+  const taken = async (value: string) =>
+    Boolean(await db.product.findUnique({ where: { slug: value }, select: { id: true } }));
+
+  if (!(await taken(candidate))) return candidate;
+
+  for (let suffix = 2; suffix <= 200; suffix += 1) {
+    const next = `${candidate}-${suffix}`;
+    if (!(await taken(next))) return next;
+  }
+
+  // 兜底：极端情况下用随机后缀，宁可地址难看也不能让新建失败
+  return `${candidate}-${randomBytes(4).toString('hex')}`;
 }
 
 function makeNameSchema() {
@@ -413,11 +468,15 @@ export async function createProductAction(
 
   let createdId: string;
   try {
-    const slugOwner = await db.product.findUnique({
-      where: { slug: base.data.slug },
-      select: { id: true },
-    });
-    if (slugOwner) return { status: 'error', message: t.actions.slugTaken };
+    // 手填的 slug 已经过格式校验；留空则按下述规则自动生成，并保证唯一
+    if (base.data.slug) {
+      const slugOwner = await db.product.findUnique({
+        where: { slug: base.data.slug },
+        select: { id: true },
+      });
+      if (slugOwner) return { status: 'error', message: t.actions.slugTaken };
+    }
+    const slug = await resolveCreateSlug(db, base.data.slug, names);
 
     if (base.data.categoryId) {
       const category = await db.productCategory.findUnique({
@@ -429,7 +488,7 @@ export async function createProductAction(
 
     const product = await db.product.create({
       data: {
-        slug: base.data.slug,
+        slug,
         categoryId: base.data.categoryId ?? null,
         sortOrder: base.data.sortOrder,
         published: false,

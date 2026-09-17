@@ -257,7 +257,7 @@ export const productMessagesEn = {
   editTitle: 'Edit product',
   empty: 'No products yet.',
   emptyFiltered: 'No products match the current filters.',
-  searchPlaceholder: 'Search by name, SKU or slug…',
+  searchPlaceholder: 'Search by name, SKU or web address…',
   allCategories: 'All categories',
   allStatuses: 'All statuses',
   statusPublished: 'Published',
@@ -279,8 +279,14 @@ export const productMessagesEn = {
   tabMedia: 'Media',
   tabSeo: 'SEO',
   basicSection: 'Basic information',
-  slug: 'Slug',
-  slugHint: 'Lowercase letters, digits and hyphens. Used in the public product URL.',
+  slug: 'Web address ending',
+  slugHint:
+    'The last part of this product\u2019s web address. Lowercase letters, digits and hyphens only, for example webbing-25mm. Changing it breaks links customers have already saved.',
+  slugCreateHint:
+    'The last part of the web address customers see for this product. Leave it empty — we will build one from the product name, and you can change it later.',
+  slugPreviewLabel: 'Customers will open',
+  createNote:
+    'A product name is all you need here. Creating the product opens the full editor, where you set the price, images and video, specifications and translations.',
   sku: 'SKU',
   skuHint: 'Optional internal reference.',
   category: 'Category',
@@ -386,6 +392,7 @@ export const productMessagesEn = {
 
   translationsSection: 'Translations',
   nameLabel: 'Product name',
+  unnamedProduct: '(Untitled product)',
   shortDescriptionLabel: 'Short introduction',
   descriptionLabel: 'Full description',
   sizeSummaryLabel: 'Size summary',
@@ -414,7 +421,7 @@ export const productMessagesZh = {
   editTitle: '编辑商品',
   empty: '暂无商品。',
   emptyFiltered: '当前筛选条件下没有商品。',
-  searchPlaceholder: '按名称、SKU 或 slug 搜索…',
+  searchPlaceholder: '按名称、SKU 或网址后缀搜索…',
   allCategories: '全部分类',
   allStatuses: '全部状态',
   statusPublished: '已发布',
@@ -436,8 +443,14 @@ export const productMessagesZh = {
   tabMedia: '图片视频',
   tabSeo: 'SEO',
   basicSection: '基本信息',
-  slug: 'Slug',
-  slugHint: '仅小写字母、数字与连字符，用于前台商品地址。',
+  slug: '网址后缀',
+  slugHint:
+    '商品网址的最后一段，只能用小写英文字母、数字和连字符（例如 webbing-25mm）。改掉它，客户之前收藏的旧地址就会失效。',
+  slugCreateHint:
+    '客户打开这个商品时看到的网址的最后一段。留空即可 —— 我们会按商品名称自动生成，之后随时能改。',
+  slugPreviewLabel: '客户将打开',
+  createNote:
+    '在这里填个商品名称就能建好。建好后会直接进入完整的商品编辑页，价格、图片视频、规格参数、多语言都在那里填。',
   sku: 'SKU',
   skuHint: '可选，内部编号。',
   category: '所属分类',
@@ -543,6 +556,7 @@ export const productMessagesZh = {
 
   translationsSection: '多语言文案',
   nameLabel: '商品名称',
+  unnamedProduct: '（未命名商品）',
   shortDescriptionLabel: '一句话介绍',
   descriptionLabel: '完整介绍',
   sizeSummaryLabel: '尺寸摘要',

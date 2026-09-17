@@ -119,10 +119,13 @@ export default async function AdminProductsPage({
   const negotiable = (row: { priceMode: string; priceMin: unknown }) =>
     row.priceMode === 'NEGOTIABLE' || !decimalToString(row.priceMin);
 
-  const productName = (translations: { locale: AdminLocale; name: string }[], slug: string) =>
+  // 没有任何语言的名称时显示「未命名商品」。这里刻意**不回退到 slug**：
+  // slug 已经显示在名称下面那一行，把它同时当名称只会让人以为商品就叫 "2"。
+  const productName = (translations: { locale: AdminLocale; name: string }[]) =>
     translations.find((item) => item.locale === locale)?.name ||
     translations.find((item) => item.locale === 'en')?.name ||
-    slug;
+    translations.find((item) => item.locale === 'zh')?.name ||
+    t.products.unnamedProduct;
 
   return (
     <div className="space-y-6">
@@ -200,7 +203,7 @@ export default async function AdminProductsPage({
                     </td>
                     <td className="px-5 py-3">
                       <span className="font-medium text-navy-900">
-                        {productName(product.translations, product.slug)}
+                        {productName(product.translations)}
                       </span>
                       <span className="mt-0.5 block font-mono text-xs text-navy-500">
                         {product.slug}

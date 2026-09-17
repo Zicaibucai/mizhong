@@ -50,6 +50,8 @@ export function SlugAutoFill({
       const next = slugify(nameInput.value);
       lastSuggested = next;
       slugInput.value = next;
+      // 派发 input 事件：让「网址预览」等其它监听者也能看到自动填入的结果
+      slugInput.dispatchEvent(new Event('input', { bubbles: true }));
     };
 
     slugInput.addEventListener('input', onSlugInput);
