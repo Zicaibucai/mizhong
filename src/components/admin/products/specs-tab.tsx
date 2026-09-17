@@ -1,7 +1,6 @@
 'use client';
 
 import { useActionState, useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { saveProductSpecificationsAction } from '@/lib/admin/actions/products';
 import { initialFormState } from '@/lib/admin/action-state';
 import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
@@ -9,7 +8,7 @@ import { getContentLocaleLabel } from '@/lib/admin/labels';
 import { Alert, SubmitButton } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
 import { cn } from '@/lib/cn';
-import { useDirtyForm } from './tabs';
+import { useAutoSaveForm } from './tabs';
 import type { ProductEditorData, SpecRowData, SpecRowValues } from './types';
 
 let rowSequence = 0;
@@ -38,9 +37,8 @@ function newRow(): SpecRowData {
  */
 export function SpecsTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
-  const router = useRouter();
-  const [state, formAction] = useActionState(saveProductSpecificationsAction, initialFormState);
-  const dirty = useDirtyForm('specs', state);
+  const [state, formAction, isPending] = useActionState(saveProductSpecificationsAction, initialFormState);
+  const { scheduleSave } = useAutoSaveForm('specs', 'product-form-specs', state, isPending);
   const [rows, setRows] = useState<SpecRowData[]>(data.specifications);
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -65,20 +63,20 @@ export function SpecsTab({ data }: { data: ProductEditorData }) {
             : row,
         ),
       );
-      dirty.markDirty();
+      scheduleSave();
     },
-    [dirty],
+    [scheduleSave],
   );
 
   const addRow = () => {
     setRows((current) => [...current, newRow()]);
-    dirty.markDirty();
+    scheduleSave();
   };
 
   const removeRow = (key: string) => {
     setConfirmingKey(null);
     setRows((current) => current.filter((row) => row.key !== key));
-    dirty.markDirty();
+    scheduleSave();
   };
 
   const move = (index: number, delta: -1 | 1) => {
@@ -90,7 +88,7 @@ export function SpecsTab({ data }: { data: ProductEditorData }) {
       next.splice(target, 0, moved);
       return next;
     });
-    dirty.markDirty();
+    scheduleSave();
   };
 
   const drop = (index: number) => {
@@ -105,16 +103,11 @@ export function SpecsTab({ data }: { data: ProductEditorData }) {
       return next;
     });
     setDragIndex(null);
-    dirty.markDirty();
+    scheduleSave();
   };
 
-  // 保存成功后从服务端重新读取，避免本地顺序与数据库不一致
-  useEffect(() => {
-    if (state.status === 'success') router.refresh();
-  }, [state, router]);
-
   return (
-    <form id="product-form-specs" action={formAction} onChange={dirty.markDirty} className="space-y-5">
+    <form id="product-form-specs" action={formAction} className="space-y-5">
       <input type="hidden" name="productId" value={data.product.id} />
       {/*
         动态行整表序列化：服务端会用 Zod 重新校验每一行。

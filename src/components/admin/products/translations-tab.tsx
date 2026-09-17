@@ -14,20 +14,21 @@ import {
   TextInput,
 } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
-import { useDirtyForm } from './tabs';
+import { useAutoSaveForm } from './tabs';
 import type { ProductEditorData } from './types';
 
 /** 名称、一句话介绍、尺寸摘要、完整介绍、规格说明、应用场景 —— 每种语言一组。 */
 export function TranslationsTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
-  const [state, formAction] = useActionState(saveProductTranslationsAction, initialFormState);
-  const dirty = useDirtyForm('translations', state);
+  const [state, formAction, isPending] = useActionState(saveProductTranslationsAction, initialFormState);
+  useAutoSaveForm('translations', 'product-form-translations', state, isPending);
+  
 
   return (
     <form
       id="product-form-translations"
       action={formAction}
-      onChange={dirty.markDirty}
+      
       className="space-y-5"
     >
       <input type="hidden" name="id" value={data.product.id} />

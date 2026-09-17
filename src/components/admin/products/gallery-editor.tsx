@@ -16,10 +16,14 @@ import { useAdminT } from '@/components/admin/i18n-provider';
 import { PlayIcon } from '@/components/ui/icons';
 import { AssetThumb, type PickerAsset } from './asset-picker';
 
-/** One row of `ProductMedia`, flattened for the client. */
+/**
+ * 图库里的一项，摊平给客户端。
+ *
+ * **身份就是 `assetId`**：编辑期间图库还只是草稿里的一条数组，没有数据库行可指。
+ * 同一商品内一个素材只可能出现一次（发布时的 `@@unique([productId, assetId, role])`
+ * 也是这个语义），所以 assetId 就是稳定标识。
+ */
 export interface GalleryItemData {
-  id: string;
-  /** 素材主键：用于「设为封面 / 设为悬停视频」 */
   assetId: string;
   role: 'GALLERY' | 'VIDEO';
   type: 'IMAGE' | 'VIDEO';
@@ -199,10 +203,10 @@ export function GalleryEditor({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const signature = items.map((item) => item.id).join(',');
+  const signature = items.map((item) => item.assetId).join(',');
 
   useEffect(() => {
-    setOrder((current) => (current.map((item) => item.id).join(',') === signature ? current : items));
+    setOrder((current) => (current.map((item) => item.assetId).join(',') === signature ? current : items));
   }, [items, signature]);
 
   const run = (optimistic: GalleryItemData[], task: () => Promise<FormState>) => {
@@ -228,7 +232,7 @@ export function GalleryEditor({
     next.splice(index, 1);
     next.splice(target, 0, order[index]);
     run(next, () =>
-      moveProductMediaAction(productId, order[index].id, delta === -1 ? 'up' : 'down'),
+      moveProductMediaAction(productId, order[index].assetId, delta === -1 ? 'up' : 'down'),
     );
   };
 
@@ -241,14 +245,14 @@ export function GalleryEditor({
     const [moved] = next.splice(dragIndex, 1);
     next.splice(index, 0, moved);
     setDragIndex(null);
-    run(next, () => reorderProductMediaAction(productId, next.map((item) => item.id)));
+    run(next, () => reorderProductMediaAction(productId, next.map((item) => item.assetId)));
   };
 
-  const remove = (id: string) => {
+  const remove = (assetId: string) => {
     setConfirmingId(null);
     run(
-      order.filter((item) => item.id !== id),
-      () => removeProductMediaAction(productId, id),
+      order.filter((item) => item.assetId !== assetId),
+      () => removeProductMediaAction(productId, assetId),
     );
   };
 
@@ -276,7 +280,7 @@ export function GalleryEditor({
 
           return (
             <li
-              key={item.id}
+              key={item.assetId}
               draggable
               onDragStart={() => setDragIndex(index)}
               onDragOver={(event) => event.preventDefault()}
@@ -389,12 +393,12 @@ export function GalleryEditor({
                   {t.products.moveDown}
                 </button>
 
-                {confirmingId === item.id ? (
+                {confirmingId === item.assetId ? (
                   <span className="flex items-center gap-1">
                     <button
                       type="button"
                       disabled={pending}
-                      onClick={() => remove(item.id)}
+                      onClick={() => remove(item.assetId)}
                       className="rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-700 transition-colors hover:bg-red-50 disabled:opacity-60"
                     >
                       {t.common.confirmDelete}
@@ -410,7 +414,7 @@ export function GalleryEditor({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setConfirmingId(item.id)}
+                    onClick={() => setConfirmingId(item.assetId)}
                     className="rounded-full px-3 py-1.5 text-xs text-navy-600 transition-colors hover:bg-navy-100"
                   >
                     {t.products.removeFromGallery}

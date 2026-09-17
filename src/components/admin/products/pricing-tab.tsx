@@ -6,7 +6,7 @@ import { initialFormState } from '@/lib/admin/action-state';
 import { CURRENCY_CODES, TRADE_UNITS, type PriceMode } from '@/lib/pricing';
 import { Alert, Field, Select, SubmitButton, TextInput } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
-import { useDirtyForm } from './tabs';
+import { useAutoSaveForm } from './tabs';
 import type { ProductEditorData } from './types';
 
 /** 计价单位 / 起订单位的候选项：用 <datalist> 提供建议，同时允许自由输入 */
@@ -53,8 +53,9 @@ function UnitInput({
  */
 export function PricingTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
-  const [state, formAction] = useActionState(saveProductPricingAction, initialFormState);
-  const dirty = useDirtyForm('pricing', state);
+  const [state, formAction, isPending] = useActionState(saveProductPricingAction, initialFormState);
+  useAutoSaveForm('pricing', 'product-form-pricing', state, isPending);
+  
   const [mode, setMode] = useState<PriceMode>(data.product.priceMode);
 
   const currencyOptions = CURRENCY_CODES.map((code) => ({ value: code, label: code }));
@@ -63,7 +64,7 @@ export function PricingTab({ data }: { data: ProductEditorData }) {
     <form
       id="product-form-pricing"
       action={formAction}
-      onChange={dirty.markDirty}
+      
       className="space-y-5"
     >
       <input type="hidden" name="id" value={data.product.id} />

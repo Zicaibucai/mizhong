@@ -13,21 +13,79 @@ import {
   parseLocaleFields,
   type AdminLocale,
 } from '@/lib/admin/validation';
-import { getContentLocaleLabel } from '@/lib/admin/labels';
 import { getAdminMessagesForRequest, type AdminMessages } from '@/lib/admin/i18n';
-import { CURRENCY_CODES, PRICE_MODES, normalizeCurrency } from '@/lib/pricing';
+import { CURRENCY_CODES, PRICE_MODES, decimalToString, normalizeCurrency } from '@/lib/pricing';
+import {
+  DRAFT_TRANSACTION_OPTIONS,
+  applyDraftToLive,
+  clearDraft,
+  loadProductDraftState,
+  recordVersion,
+  saveDraft,
+} from '@/lib/admin/product-draft-store';
+import {
+  draftMediaRoleFor,
+  readDraft,
+  resolveDraftPrice,
+  validateForPublish,
+  type ProductDraft,
+  type ProductDraftSpec,
+} from '@/lib/product-draft';
 import type { FormState } from '@/lib/admin/action-state';
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * 商品保存成功的统一提示。
+ * 自动保存的提示。
  *
- * 用 `products.saved`（「已保存修改。」/「Changes saved.」）而不是通用的
- * `common.saveChanges`（那个字符串是按钮文案「保存修改」，当提示语读起来不像一句确认）。
+ * 与手动保存刻意区分开：自动保存每几秒就可能发生一次，如果每次都冒出「已保存修改。」，
+ * 页面上会不停闪提示。顶部状态条已经用「保存中… / 已保存」表达了同一件事，
+ * 所以成功时不给消息，失败时照常给（失败必须被看见）。
  */
-function savedMessage(t: AdminMessages): string {
-  return t.products.saved;
+function autosavedMessage(): FormState {
+  return { status: 'success', message: undefined };
+}
+
+/**
+ * 读出商品的**正在编辑内容**：有草稿就是草稿，没有就是线上内容本身。
+ *
+ * 所有保存动作只认这一份。于是「从没发布过」「改了还没发布」走的是同一条代码路径，
+ * 不需要在每个动作里判断「现在到底在编辑哪一份」。
+ */
+async function loadWorkingDraft(
+  db: PrismaClient,
+  productId: string,
+  t: AdminMessages,
+): Promise<{ ok: true; draft: ProductDraft; live: ProductDraft } | { ok: false; error: FormState }> {
+  const state = await loadProductDraftState(db, productId);
+  if (!state) return { ok: false, error: { status: 'error', message: t.products.notFound } };
+  return { ok: true, draft: state.draft, live: state.live };
+}
+
+/** 把草稿存回 draftData 并记一条审计。成功时不给提示文案（见 autosavedMessage）。 */
+async function persistDraft(
+  db: PrismaClient,
+  input: {
+    productId: string;
+    draft: ProductDraft;
+    user: { id: string; email: string };
+    summary: string;
+    t: AdminMessages;
+    detail?: Record<string, unknown>;
+  },
+): Promise<FormState> {
+  await saveDraft(db, input.productId, input.draft);
+  await writeAudit({
+    userId: input.user.id,
+    actorEmail: input.user.email,
+    action: 'UPDATE',
+    targetType: 'Product',
+    targetId: input.productId,
+    summary: input.summary,
+    detail: { ...input.detail, draft: true },
+  });
+  // 草稿不进前台，因此**不**调用 revalidatePublicCatalogue —— 客人看到的东西一个字节都没变
+  return autosavedMessage();
 }
 
 // ---------------------------------------------------------------------------
@@ -143,39 +201,6 @@ function makeProductPricingSchema(t: AdminMessages) {
   });
 }
 
-/**
- * 价格模式的跨字段校验（Zod 的对象级 refine 在这里用显式函数表达，
- * 便于把三种模式的差异写成一段可读的规则）。
- *
- * - NEGOTIABLE：不要求填写价格；已填的数字会被清空，避免前台展示与模式不一致
- * - FIXED：必须有 priceMin，且 priceMax 清空（固定价没有上限）
- * - RANGE：必须有 priceMin；填了 priceMax 时不得小于 priceMin
- */
-function resolvePrice(
-  values: {
-    priceMode: 'NEGOTIABLE' | 'FIXED' | 'RANGE';
-    priceMin?: Prisma.Decimal;
-    priceMax?: Prisma.Decimal;
-  },
-  t: AdminMessages,
-): { ok: true; priceMin: Prisma.Decimal | null; priceMax: Prisma.Decimal | null } | { ok: false; message: string } {
-  if (values.priceMode === 'NEGOTIABLE') {
-    return { ok: true, priceMin: null, priceMax: null };
-  }
-
-  if (!values.priceMin) return { ok: false, message: t.products.priceMinRequired };
-
-  if (values.priceMode === 'FIXED') {
-    return { ok: true, priceMin: values.priceMin, priceMax: null };
-  }
-
-  if (values.priceMax && values.priceMax.lessThan(values.priceMin)) {
-    return { ok: false, message: t.products.priceRangeInvalid };
-  }
-
-  return { ok: true, priceMin: values.priceMin, priceMax: values.priceMax ?? null };
-}
-
 function makeProductTranslationSchema() {
   return z.object({
     name: textField(200),
@@ -203,10 +228,14 @@ function makeMediaSettingsSchema(t: AdminMessages) {
 }
 
 /**
- * 价格与贸易信息保存：只写价格相关列，不触碰 slug / 分类 / 媒体。
+ * 价格与贸易信息：整片替换草稿里的 `pricing`，不碰其它分区。
  *
- * 三种价格模式的差异全部在 resolvePrice 里判定（面议不要求填价、固定价清空上限、
- * 区间校验 max >= min），金额在进入数据库前一直是 `Prisma.Decimal`，绝不经过 Number。
+ * 进入数据库前金额一直是 `Prisma.Decimal`，写进草稿时才转成字符串
+ * （客户端不做金额运算，也不会遇到浮点精度问题）。
+ *
+ * 三种价格模式的差异（面议清空价格、固定价清空上限、区间价校验上下限）
+ * **推迟到发布时**由 `resolveDraftPrice` 与 `validateForPublish` 判定 ——
+ * 编辑到一半的草稿必须存得下去。
  */
 export async function saveProductPricingAction(
   _prev: FormState,
@@ -221,61 +250,44 @@ export async function saveProductPricingAction(
   const parsed = parseForm(makeProductPricingSchema(t), formData, t);
   if (!parsed.ok) return { status: 'error', message: parsed.message };
 
-  const price = resolvePrice(parsed.data, t);
-  if (!price.ok) return { status: 'error', message: price.message };
-
   const db = getPrisma();
   if (!db) return getDbUnavailableState(t);
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: parsed.data.id },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
+    const loaded = await loadWorkingDraft(db, parsed.data.id, t);
+    if (!loaded.ok) return loaded.error;
 
-    await db.product.update({
-      where: { id: product.id },
-      data: {
+    const draft: ProductDraft = {
+      ...loaded.draft,
+      pricing: {
         priceMode: parsed.data.priceMode,
         currency: parsed.data.currency,
-        priceMin: price.priceMin,
-        priceMax: price.priceMax,
+        priceMin: decimalToString(parsed.data.priceMin),
+        priceMax: decimalToString(parsed.data.priceMax),
         priceUnit: parsed.data.priceUnit ?? null,
         moq: parsed.data.moq ?? null,
         moqUnit: parsed.data.moqUnit ?? null,
       },
-    });
+    };
 
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: product.id,
+    return await persistDraft(db, {
+      productId: parsed.data.id,
+      draft,
+      user,
       summary: t.products.pricingSection,
-      detail: {
-        slug: product.slug,
-        priceMode: parsed.data.priceMode,
-        currency: parsed.data.currency,
-        priceMin: price.priceMin?.toString() ?? null,
-        priceMax: price.priceMax?.toString() ?? null,
-      },
+      t,
     });
   } catch (error) {
     console.error('[admin] save product pricing failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
 /**
- * 媒体设置保存：只写封面与悬停视频两列，不触碰商品其它字段。
+ * 媒体设置：只改草稿里的封面与悬停视频两个字段，不触碰其它内容。
  *
- * 与「基本信息」表单共用同一套字段名，但语义独立 —— 在媒体页保存不会改动 slug / 价格。
- * 封面必须是 IMAGE、悬停视频必须是启用的 VIDEO，两个检查都在服务端重做。
+ * 封面必须是 IMAGE、悬停视频必须是启用的 VIDEO，两个检查都在服务端重做 ——
+ * 素材 id 在表单里只是一个字符串，可以被换成任意值。
  */
 export async function saveProductMediaSettingsAction(
   _prev: FormState,
@@ -297,39 +309,31 @@ export async function saveProductMediaSettingsAction(
   const hoverVideoAssetId = parsed.data.hoverVideoAssetId || null;
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: parsed.data.id },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
-
     const coverError = await checkImageAsset(db, coverAssetId ?? '', t);
     if (coverError) return coverError;
 
     const hoverError = await checkVideoAsset(db, hoverVideoAssetId ?? '', t);
     if (hoverError) return hoverError;
 
-    await db.product.update({
-      where: { id: parsed.data.id },
-      data: { coverAssetId, hoverVideoAssetId },
-    });
+    const loaded = await loadWorkingDraft(db, parsed.data.id, t);
+    if (!loaded.ok) return loaded.error;
 
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: parsed.data.id,
+    const draft: ProductDraft = {
+      ...loaded.draft,
+      basic: { ...loaded.draft.basic, coverAssetId, hoverVideoAssetId },
+    };
+
+    return await persistDraft(db, {
+      productId: parsed.data.id,
+      draft,
+      user,
       summary: t.products.mediaSection,
-      detail: { slug: product.slug, coverAssetId, hoverVideoAssetId },
+      t,
     });
   } catch (error) {
     console.error('[admin] save product media settings failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
 /** Ensures the given asset id exists and is an image; returns an error state when it is not. */
@@ -393,26 +397,21 @@ export async function saveProductBasicAction(
   const coverAssetId = base.data.coverAssetId || null;
   const hoverVideoAssetId = base.data.hoverVideoAssetId || null;
 
-  // 商品编辑器由多个独立表单组成（基本信息 / 价格 / 多语言 / 参数 / 媒体），
-  // 每个表单只提交自己那一部分字段。因此封面与悬停视频**只有在该表单真的提交了
-  // 对应字段时才更新** —— 否则在「基本信息」里点保存会把媒体页设置好的封面清空。
+  // 商品编辑器由多个独立表单组成，每个表单只提交自己那一段。
+  // 因此封面与悬停视频**只有在该表单真的提交了对应字段时才更新** ——
+  // 否则在「基本信息」里改动一下就会把媒体页设置好的封面清掉。
   const coverProvided = formData.has('coverAssetId');
   const hoverProvided = formData.has('hoverVideoAssetId');
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: base.data.id },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
+    const loaded = await loadWorkingDraft(db, base.data.id, t);
+    if (!loaded.ok) return loaded.error;
 
-    const slugOwner = await db.product.findUnique({
-      where: { slug: base.data.slug },
+    const slugOwner = await db.product.findFirst({
+      where: { slug: base.data.slug, id: { not: base.data.id } },
       select: { id: true },
     });
-    if (slugOwner && slugOwner.id !== base.data.id) {
-      return { status: 'error', message: t.actions.slugTaken };
-    }
+    if (slugOwner) return { status: 'error', message: t.actions.slugTaken };
 
     if (base.data.categoryId) {
       const category = await db.productCategory.findUnique({
@@ -432,36 +431,43 @@ export async function saveProductBasicAction(
       if (hoverError) return hoverError;
     }
 
-    const patch: Prisma.ProductUncheckedUpdateInput = {
-      slug: base.data.slug,
-      sku: base.data.sku || null,
-      categoryId: base.data.categoryId ?? null,
-      sortOrder: base.data.sortOrder,
-      featured: base.data.featured,
+    const draft: ProductDraft = {
+      ...loaded.draft,
+      basic: {
+        slug: base.data.slug,
+        sku: base.data.sku,
+        categoryId: base.data.categoryId ?? null,
+        featured: base.data.featured,
+        sortOrder: base.data.sortOrder,
+        coverAssetId: coverProvided ? coverAssetId : loaded.draft.basic.coverAssetId,
+        hoverVideoAssetId: hoverProvided
+          ? hoverVideoAssetId
+          : loaded.draft.basic.hoverVideoAssetId,
+      },
     };
-    if (coverProvided) patch.coverAssetId = coverAssetId;
-    if (hoverProvided) patch.hoverVideoAssetId = hoverVideoAssetId;
 
-    await db.product.update({ where: { id: base.data.id }, data: patch });
-
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: base.data.id,
+    return await persistDraft(db, {
+      productId: base.data.id,
+      draft,
+      user,
       summary: t.products.editTitle,
-      detail: { slug: base.data.slug, previousSlug: product.slug },
+      t,
+      detail: { slug: base.data.slug, previousSlug: loaded.live.basic.slug },
     });
   } catch (error) {
     console.error('[admin] save product failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
+/**
+ * 三语内容：整片写进草稿的 `translations`，只覆盖这六个正文字段。
+ *
+ * SEO 的两个字段与前台的名称共用同一份翻译对象，所以这里**逐个字段赋值**而不是
+ * 整体替换 —— 否则在「多语言」页保存会把「SEO」页填好的标题描述清空。
+ *
+ * 「某种语言填了内容却没有名称」这类规则**推迟到发布时**再判：编辑到一半必须存得下去。
+ */
 export async function saveProductTranslationsAction(
   _prev: FormState,
   formData: FormData,
@@ -488,95 +494,38 @@ export async function saveProductTranslationsAction(
   if (!db) return getDbUnavailableState(t);
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: base.data.id },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
+    const loaded = await loadWorkingDraft(db, base.data.id, t);
+    if (!loaded.ok) return loaded.error;
 
-    // Validate every locale before writing anything, so a rejected locale leaves no partial save.
+    const translations = { ...loaded.draft.translations };
     for (const { locale, data } of payloads) {
-      const filled = Boolean(
-        data.name ||
-          data.shortDescription ||
-          data.description ||
-          data.sizeSummary ||
-          data.spec ||
-          data.application,
-      );
-      if (filled && !data.name) {
-        // A name is what makes a locale usable; refuse to store a row without one.
-        return {
-          status: 'error',
-          message: `${getContentLocaleLabel(t, locale)}: ${t.validation.invalidInput}`,
-        };
-      }
-    }
-
-    for (const { locale, data } of payloads) {
-      const existing = await db.productTranslation.findUnique({
-        where: { productId_locale: { productId: product.id, locale } },
-      });
-
-      const filled = Boolean(
-        data.name ||
-          data.shortDescription ||
-          data.description ||
-          data.sizeSummary ||
-          data.spec ||
-          data.application,
-      );
-
-      if (!filled) {
-        // A locale with nothing to say has no translation row — unless SEO copy still lives there.
-        if (existing && !existing.seoTitle && !existing.seoDescription) {
-          await db.productTranslation.delete({ where: { id: existing.id } });
-        } else if (existing) {
-          // name 是 NOT NULL：SEO 文案还在时这一行不能删，也就不能把名称清空。
-          // 静默保留旧名称会让「编辑器里已清空、前台仍在显示」长期不一致，
-          // 所以这里明确拒绝并给出可执行的下一步。
-          return {
-            status: 'error',
-            message: `${getContentLocaleLabel(t, locale)}: ${t.products.nameCannotBeCleared}`,
-          };
-        }
-        continue;
-      }
-
-      const values = {
+      translations[locale] = {
+        // seoTitle / seoDescription 由「SEO」分区负责，这里原样保留
+        ...translations[locale],
         name: data.name,
-        shortDescription: data.shortDescription || null,
-        description: data.description || null,
-        sizeSummary: data.sizeSummary || null,
-        spec: data.spec || null,
-        application: data.application || null,
+        shortDescription: data.shortDescription,
+        description: data.description,
+        sizeSummary: data.sizeSummary,
+        spec: data.spec,
+        application: data.application,
       };
-
-      await db.productTranslation.upsert({
-        where: { productId_locale: { productId: product.id, locale } },
-        update: values,
-        create: { productId: product.id, locale, ...values },
-      });
     }
 
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: product.id,
+    return await persistDraft(db, {
+      productId: base.data.id,
+      draft: { ...loaded.draft, translations },
+      user,
       summary: t.products.translationsSection,
-      detail: { slug: product.slug, locales: payloads.map((item) => item.locale) },
+      t,
+      detail: { locales: payloads.map((item) => item.locale) },
     });
   } catch (error) {
     console.error('[admin] save product translations failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
+/** SEO 文案：同样只覆盖草稿翻译对象里的两个字段，不碰名称与正文。 */
 export async function saveProductSeoAction(
   _prev: FormState,
   formData: FormData,
@@ -603,71 +552,43 @@ export async function saveProductSeoAction(
   if (!db) return getDbUnavailableState(t);
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: base.data.id },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
+    const loaded = await loadWorkingDraft(db, base.data.id, t);
+    if (!loaded.ok) return loaded.error;
 
-    // A translation row cannot exist without a name, and the product name lives in the
-    // translations tab — validate before writing (the public catalogue would otherwise render an
-    // empty product name for that locale).
-    const existingLocales = new Set(
-      (
-        await db.productTranslation.findMany({
-          where: { productId: product.id },
-          select: { locale: true },
-        })
-      ).map((row) => row.locale),
-    );
-
+    const translations = { ...loaded.draft.translations };
     for (const { locale, data } of payloads) {
-      if (!existingLocales.has(locale) && (data.seoTitle || data.seoDescription)) {
-        return {
-          status: 'error',
-          message: `${getContentLocaleLabel(t, locale)}: ${t.products.nameLabel}`,
-        };
-      }
-    }
-
-    for (const { locale, data } of payloads) {
-      const values = {
-        seoTitle: data.seoTitle || null,
-        seoDescription: data.seoDescription || null,
+      translations[locale] = {
+        ...translations[locale],
+        seoTitle: data.seoTitle,
+        seoDescription: data.seoDescription,
       };
-      const existing = await db.productTranslation.findUnique({
-        where: { productId_locale: { productId: product.id, locale } },
-        select: { id: true },
-      });
-
-      if (!existing) continue;
-
-      await db.productTranslation.update({ where: { id: existing.id }, data: values });
     }
 
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: product.id,
+    return await persistDraft(db, {
+      productId: base.data.id,
+      draft: { ...loaded.draft, translations },
+      user,
       summary: t.products.seoSection,
-      detail: { slug: product.slug },
+      t,
     });
   } catch (error) {
     console.error('[admin] save product seo failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
 /**
- * Publishes or unpublishes a product.
+ * 发布 / 取消发布。
  *
- * Publishing is gated: a valid slug, at least one language with a product name and a cover image
- * must all be present — otherwise the admin gets a list of exactly what is missing.
+ * **发布是整个系统里唯一一处写线上内容的地方。** 编辑器平时只把改动存进草稿，
+ * 客人看到的东西一个字节都不会变；只有走到这里，草稿才被落进关系表。
+ *
+ * 因此这里的校验也是最严的一关（规则与改造前完全一致）：slug 合法且未被占用、
+ * 至少一种语言有名称、必须有封面、区间价上限不得小于下限。草稿可以是不完整的，
+ * 发布不行。发布成功后写入一条 PUBLISHED 版本并清空草稿 —— 清空之后
+ * 「有没有待发布的改动」就等价于「draftData 是不是空的」，不需要另算 diff。
+ *
+ * 取消发布只翻标志位，不动草稿：草稿是你还没发布的编辑内容，与上不上架无关。
  */
 export async function setProductPublishedAction(
   _prev: FormState,
@@ -692,32 +613,47 @@ export async function setProductPublishedAction(
   const db = getPrisma();
   if (!db) return getDbUnavailableState(t);
 
-  try {
-    const product = await db.product.findUnique({
-      where: { id: parsed.data.id },
-      select: { id: true, slug: true, coverAssetId: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
+  const publish = parsed.data.target === 'publish';
 
-    const publish = parsed.data.target === 'publish';
+  try {
+    const loaded = await loadWorkingDraft(db, parsed.data.id, t);
+    if (!loaded.ok) return loaded.error;
+    const { draft } = loaded;
 
     if (publish) {
       const reasons: string[] = [];
 
-      if (!SLUG_PATTERN.test(product.slug)) reasons.push(t.products.validationSlug);
+      const valid = validateForPublish(draft, {
+        slugRequired: t.validation.slugRequired,
+        slugFormat: t.products.validationSlug,
+        nameRequired: t.products.validationName,
+        nameRequiredForLocale: t.products.nameCannotBeCleared,
+        coverRequired: t.products.validationCover,
+        priceMinRequired: t.products.priceMinRequired,
+        priceRangeInvalid: t.products.priceRangeInvalid,
+      });
+      if (!valid.ok) reasons.push(valid.message);
 
-      const slugOwner = await db.product.findUnique({
-        where: { slug: product.slug },
+      // slug 在草稿里可以随便改，占用冲突在发布这一关才拦得住
+      const slugOwner = await db.product.findFirst({
+        where: { slug: draft.basic.slug, id: { not: parsed.data.id } },
         select: { id: true },
       });
-      if (slugOwner && slugOwner.id !== product.id) reasons.push(t.products.validationSlug);
+      if (slugOwner) reasons.push(t.products.validationSlug);
 
-      const named = await db.productTranslation.count({
-        where: { productId: product.id, name: { not: '' } },
-      });
-      if (named === 0) reasons.push(t.products.validationName);
+      if (draft.basic.categoryId) {
+        const category = await db.productCategory.findUnique({
+          where: { id: draft.basic.categoryId },
+          select: { id: true },
+        });
+        if (!category) reasons.push(t.validation.invalidInput);
+      }
 
-      if (!product.coverAssetId) reasons.push(t.products.validationCover);
+      const coverError = await checkImageAsset(db, draft.basic.coverAssetId ?? '', t);
+      if (coverError) reasons.push(coverError.message ?? t.products.validationCover);
+
+      const hoverError = await checkVideoAsset(db, draft.basic.hoverVideoAssetId ?? '', t);
+      if (hoverError) reasons.push(hoverError.message ?? t.validation.invalidInput);
 
       if (reasons.length > 0) {
         return {
@@ -727,19 +663,30 @@ export async function setProductPublishedAction(
       }
     }
 
-    await db.product.update({
-      where: { id: product.id },
-      data: { published: publish },
-    });
+    await db.$transaction(async (tx) => {
+      if (publish) {
+        await applyDraftToLive(tx, parsed.data.id, draft, resolveDraftPrice(draft));
+      }
+      await tx.product.update({ where: { id: parsed.data.id }, data: { published: publish } });
+      if (publish) {
+        await recordVersion(tx, {
+          productId: parsed.data.id,
+          kind: 'PUBLISHED',
+          snapshot: draft,
+          userId: user.id,
+        });
+        await clearDraft(tx, parsed.data.id);
+      }
+    }, DRAFT_TRANSACTION_OPTIONS);
 
     await writeAudit({
       userId: user.id,
       actorEmail: user.email,
       action: publish ? 'PUBLISH' : 'UNPUBLISH',
       targetType: 'Product',
-      targetId: product.id,
+      targetId: parsed.data.id,
       summary: publish ? t.products.publish : t.products.unpublish,
-      detail: { slug: product.slug },
+      detail: { slug: draft.basic.slug },
     });
   } catch (error) {
     console.error('[admin] set product status failed:', error);
@@ -749,8 +696,186 @@ export async function setProductPublishedAction(
   revalidatePublicCatalogue();
   return {
     status: 'success',
-    message: parsed.data.target === 'publish' ? t.products.statusPublished : t.products.statusDraft,
+    message: publish ? t.products.statusPublished : t.products.statusDraft,
   };
+}
+
+/**
+ * 手动存档：把「正在编辑的内容」留成一个版本，**不影响线上**。
+ *
+ * 自动保存不产生版本（几秒一存的话，三个名额只会是最近几秒的快照），
+ * 所以改大动作之前想留个退路，就用这个按钮。
+ */
+export async function createProductVersionAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const schema = z.object({
+    id: requiredIdField(t),
+    note: z.preprocess(
+      (value) => (typeof value === 'string' ? value.trim().slice(0, 200) : ''),
+      z.string(),
+    ),
+  });
+  const parsed = parseForm(schema, formData, t);
+  if (!parsed.ok) return { status: 'error', message: parsed.message };
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const loaded = await loadWorkingDraft(db, parsed.data.id, t);
+    if (!loaded.ok) return loaded.error;
+
+    await db.$transaction(async (tx) => {
+      await recordVersion(tx, {
+        productId: parsed.data.id,
+        kind: 'MANUAL',
+        snapshot: loaded.draft,
+        userId: user.id,
+        note: parsed.data.note,
+      });
+    }, DRAFT_TRANSACTION_OPTIONS);
+
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      action: 'UPDATE',
+      targetType: 'Product',
+      targetId: parsed.data.id,
+      summary: t.products.versionSaved,
+      detail: { kind: 'MANUAL' },
+    });
+  } catch (error) {
+    console.error('[admin] create product version failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+
+  return { status: 'success', message: t.products.versionSaved };
+}
+
+/**
+ * 恢复一个历史版本。
+ *
+ * 内容写回**草稿**而不是直接改线上：恢复之后它成为「待发布的改动」，
+ * 你在编辑器里看到的就是那一版的样子，确认无误再点发布。误点恢复也能再退回去。
+ */
+export async function restoreProductVersionAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const schema = z.object({
+    id: requiredIdField(t),
+    versionId: requiredIdField(t),
+  });
+  const parsed = parseForm(schema, formData, t);
+  if (!parsed.ok) return { status: 'error', message: parsed.message };
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const version = await db.productVersion.findUnique({
+      where: { id: parsed.data.versionId },
+      select: { id: true, productId: true, snapshot: true, kind: true, createdAt: true },
+    });
+    if (!version || version.productId !== parsed.data.id) {
+      return { status: 'error', message: t.products.versionNotFound };
+    }
+
+    const snapshot = readDraft(version.snapshot);
+    if (!snapshot) return { status: 'error', message: t.products.versionUnreadable };
+
+    // 快照里的参数行 id 属于「当时那一版」，可能已经被后来的发布删掉了。
+    // 置空让发布时按新增处理，避免把主键指到别的商品的行上。
+    const live = await loadProductDraftState(db, parsed.data.id);
+    const liveSpecIds = new Set((live?.live.specs ?? []).map((spec) => spec.id).filter(Boolean));
+    const restored = {
+      ...snapshot,
+      specs: snapshot.specs.map((spec) => ({
+        ...spec,
+        id: spec.id !== null && liveSpecIds.has(spec.id) ? spec.id : null,
+      })),
+    };
+
+    await saveDraft(db, parsed.data.id, restored);
+
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      action: 'UPDATE',
+      targetType: 'Product',
+      targetId: parsed.data.id,
+      summary: t.products.versionRestored,
+      detail: { versionId: version.id, kind: version.kind, draft: true },
+    });
+  } catch (error) {
+    console.error('[admin] restore product version failed:', error);
+    return { status: 'error', message: t.actions.saveFailed };
+  }
+
+  return { status: 'success', message: t.products.versionRestored };
+}
+
+/** 删除一个历史版本（不影响线上内容，也不影响草稿） */
+export async function deleteProductVersionAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await getAdminMessagesForRequest();
+
+  const guard = await requireAdminOrError(t);
+  if ('error' in guard) return guard.error;
+  const { user } = guard;
+
+  const schema = z.object({
+    id: requiredIdField(t),
+    versionId: requiredIdField(t),
+  });
+  const parsed = parseForm(schema, formData, t);
+  if (!parsed.ok) return { status: 'error', message: parsed.message };
+
+  const db = getPrisma();
+  if (!db) return getDbUnavailableState(t);
+
+  try {
+    const version = await db.productVersion.findUnique({
+      where: { id: parsed.data.versionId },
+      select: { id: true, productId: true },
+    });
+    if (!version || version.productId !== parsed.data.id) {
+      return { status: 'error', message: t.products.versionNotFound };
+    }
+
+    await db.productVersion.delete({ where: { id: version.id } });
+
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      action: 'DELETE',
+      targetType: 'Product',
+      targetId: parsed.data.id,
+      summary: t.products.versionDeleted,
+      detail: { versionId: version.id },
+    });
+  } catch (error) {
+    console.error('[admin] delete product version failed:', error);
+    return { status: 'error', message: t.actions.deleteFailed };
+  }
+
+  return { status: 'success', message: t.products.versionDeleted };
 }
 
 /** Copies the product, its translations, its gallery and its cover into a new draft. */
@@ -919,46 +1044,43 @@ export async function deleteProductAction(
  * 因此「重复点添加」「上传后重试」都不会产生重复行。
  * `found` 是确实存在且已启用的素材数量，供调用方区分「素材不存在」与「已经挂过」。
  */
-async function attachAssets(
+/**
+ * 把素材追加到图库末尾。素材类型决定用途（视频 → VIDEO，图片 → GALLERY），
+ * 与前台/发布时的判定完全一致，不接受客户端传 role。
+ *
+ * 纯函数：顺序语义只写在这一处，新增、上传绑定都走它。
+ */
+function appendToGallery(
+  draft: ProductDraft,
+  assets: { id: string; type: 'IMAGE' | 'VIDEO' }[],
+): { draft: ProductDraft; added: string[] } {
+  const seen = new Set(draft.media.map((item) => item.assetId));
+  const media = [...draft.media];
+  const added: string[] = [];
+
+  for (const asset of assets) {
+    if (seen.has(asset.id)) continue;
+    seen.add(asset.id);
+    media.push({ assetId: asset.id, role: draftMediaRoleFor(asset.type) });
+    added.push(asset.id);
+  }
+
+  return { draft: { ...draft, media }, added };
+}
+
+/** 经服务端校验的、可用的素材（存在且已启用） */
+async function loadUsableAssets(
   db: PrismaClient,
-  productId: string,
   assetIds: string[],
-): Promise<{
-  found: number;
-  created: { assetId: string; role: 'GALLERY' | 'VIDEO'; sortOrder: number }[];
-}> {
-  const assets = await db.asset.findMany({
+): Promise<{ id: string; type: 'IMAGE' | 'VIDEO' }[]> {
+  if (assetIds.length === 0) return [];
+  return db.asset.findMany({
     where: { id: { in: assetIds }, enabled: true },
     select: { id: true, type: true },
   });
-  if (assets.length === 0) return { found: 0, created: [] };
-
-  const existing = await db.productMedia.findMany({
-    where: { productId },
-    select: { assetId: true, role: true, sortOrder: true },
-  });
-  const seen = new Set(existing.map((row) => `${row.assetId}:${row.role}`));
-  let nextOrder = existing.reduce((max, row) => Math.max(max, row.sortOrder + 1), 0);
-
-  const creates: { productId: string; assetId: string; role: 'GALLERY' | 'VIDEO'; sortOrder: number }[] =
-    [];
-  for (const asset of assets) {
-    const role: 'GALLERY' | 'VIDEO' = asset.type === 'VIDEO' ? 'VIDEO' : 'GALLERY';
-    if (seen.has(`${asset.id}:${role}`)) continue;
-    seen.add(`${asset.id}:${role}`);
-    creates.push({ productId, assetId: asset.id, role, sortOrder: nextOrder });
-    nextOrder += 1;
-  }
-
-  if (creates.length > 0) await db.productMedia.createMany({ data: creates });
-
-  return {
-    found: assets.length,
-    created: creates.map((row) => ({ assetId: row.assetId, role: row.role, sortOrder: row.sortOrder })),
-  };
 }
 
-/** Adds the picked library assets to the gallery: images as GALLERY, videos as VIDEO. */
+/** 从图库里挑素材加进草稿图库：图片为 GALLERY，视频为 VIDEO。 */
 export async function addProductMediaAction(
   _prev: FormState,
   formData: FormData,
@@ -984,39 +1106,38 @@ export async function addProductMediaAction(
   if (!db) return getDbUnavailableState(t);
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: base.data.productId },
-      select: { id: true, slug: true },
+    const assets = await loadUsableAssets(db, assetIds);
+    if (assets.length === 0) return { status: 'error', message: t.validation.invalidInput };
+
+    const loaded = await loadWorkingDraft(db, base.data.productId, t);
+    if (!loaded.ok) return loaded.error;
+
+    const { draft, added } = appendToGallery(loaded.draft, assets);
+
+    return await persistDraft(db, {
+      productId: base.data.productId,
+      draft,
+      user,
+      summary: t.products.galleryLabel,
+      t,
+      detail: { assetIds: added },
     });
-    if (!product) return { status: 'error', message: t.products.notFound };
-
-    const { found, created } = await attachAssets(db, product.id, assetIds);
-    if (found === 0) return { status: 'error', message: t.validation.invalidInput };
-
-    if (created.length > 0) {
-      await writeAudit({
-        userId: user.id,
-        actorEmail: user.email,
-        action: 'CREATE',
-        targetType: 'Product',
-        targetId: product.id,
-        summary: t.products.galleryLabel,
-        detail: { slug: product.slug, assetIds: created.map((row) => row.assetId) },
-      });
-    }
   } catch (error) {
     console.error('[admin] add product media failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
-/** Swaps one gallery item with its neighbour and renumbers the whole list. */
+/**
+ * 与相邻的一项交换位置。
+ *
+ * 图库项的身份是 **assetId** 而不是行主键：草稿里的图库还只是数组，
+ * 没有数据库行可指。同一商品内一个素材只可能出现一次（发布时的
+ * `@@unique([productId, assetId, role])` 也是这个语义），所以 assetId 就是稳定标识。
+ */
 export async function moveProductMediaAction(
   productId: string,
-  mediaId: string,
+  assetId: string,
   direction: 'up' | 'down',
 ): Promise<FormState> {
   const { t } = await getAdminMessagesForRequest();
@@ -1031,60 +1152,45 @@ export async function moveProductMediaAction(
   const parsed = z
     .object({
       productId: z.string().min(1),
-      mediaId: z.string().min(1),
+      assetId: z.string().min(1),
       direction: z.enum(['up', 'down']),
     })
-    .safeParse({ productId, mediaId, direction });
+    .safeParse({ productId, assetId, direction });
   if (!parsed.success) return { status: 'error', message: t.validation.invalidInput };
 
   try {
-    const rows = await db.productMedia.findMany({
-      where: { productId: parsed.data.productId },
-      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-      select: { id: true },
-    });
+    const loaded = await loadWorkingDraft(db, parsed.data.productId, t);
+    if (!loaded.ok) return loaded.error;
 
-    const index = rows.findIndex((row) => row.id === parsed.data.mediaId);
+    const media = [...loaded.draft.media];
+    const index = media.findIndex((item) => item.assetId === parsed.data.assetId);
     if (index === -1) return { status: 'error', message: t.validation.invalidInput };
 
     const target = parsed.data.direction === 'up' ? index - 1 : index + 1;
-    if (target < 0 || target >= rows.length) return { status: 'success', message: savedMessage(t) };
+    // 已经在两端：不报错，当作无事发生（用户点多了不该看到红字）
+    if (target < 0 || target >= media.length) return autosavedMessage();
 
-    const next = [...rows];
-    const [moved] = next.splice(index, 1);
-    next.splice(target, 0, moved);
+    const [moved] = media.splice(index, 1);
+    media.splice(target, 0, moved);
 
-    await db.$transaction(async (tx) => {
-      for (let position = 0; position < next.length; position += 1) {
-        await tx.productMedia.update({
-          where: { id: next[position].id },
-          data: { sortOrder: position },
-        });
-      }
-    });
-
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: parsed.data.productId,
+    return await persistDraft(db, {
+      productId: parsed.data.productId,
+      draft: { ...loaded.draft, media },
+      user,
       summary: t.products.galleryLabel,
-      detail: { mediaId: parsed.data.mediaId, direction: parsed.data.direction },
+      t,
+      detail: { assetId: parsed.data.assetId, direction: parsed.data.direction },
     });
   } catch (error) {
     console.error('[admin] move product media failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
-/** Persists an explicit drag-and-drop order; the id set must match the product's gallery exactly. */
+/** 拖拽后的显式顺序；提交的集合必须与草稿图库完全一致（不能借机塞进别的素材）。 */
 export async function reorderProductMediaAction(
   productId: string,
-  mediaIds: string[],
+  assetIds: string[],
 ): Promise<FormState> {
   const { t } = await getAdminMessagesForRequest();
 
@@ -1098,58 +1204,46 @@ export async function reorderProductMediaAction(
   const parsed = z
     .object({
       productId: z.string().min(1),
-      mediaIds: z.array(z.string().min(1)).min(1).max(500),
+      assetIds: z.array(z.string().min(1)).min(1).max(500),
     })
-    .safeParse({ productId, mediaIds });
+    .safeParse({ productId, assetIds });
   if (!parsed.success) return { status: 'error', message: t.validation.invalidInput };
 
   try {
-    const rows = await db.productMedia.findMany({
-      where: { productId: parsed.data.productId },
-      select: { id: true },
-    });
+    const loaded = await loadWorkingDraft(db, parsed.data.productId, t);
+    if (!loaded.ok) return loaded.error;
 
-    const known = new Set(rows.map((row) => row.id));
-    const submitted = new Set(parsed.data.mediaIds);
+    const known = new Set(loaded.draft.media.map((item) => item.assetId));
+    const submitted = new Set(parsed.data.assetIds);
     if (
-      rows.length !== parsed.data.mediaIds.length ||
-      submitted.size !== parsed.data.mediaIds.length ||
-      !parsed.data.mediaIds.every((id) => known.has(id))
+      known.size !== parsed.data.assetIds.length ||
+      submitted.size !== parsed.data.assetIds.length ||
+      !parsed.data.assetIds.every((id) => known.has(id))
     ) {
       return { status: 'error', message: t.validation.invalidInput };
     }
 
-    await db.$transaction(async (tx) => {
-      for (let position = 0; position < parsed.data.mediaIds.length; position += 1) {
-        await tx.productMedia.update({
-          where: { id: parsed.data.mediaIds[position] },
-          data: { sortOrder: position },
-        });
-      }
-    });
+    const byAsset = new Map(loaded.draft.media.map((item) => [item.assetId, item]));
+    const media = parsed.data.assetIds.map((id) => byAsset.get(id)!);
 
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: parsed.data.productId,
+    return await persistDraft(db, {
+      productId: parsed.data.productId,
+      draft: { ...loaded.draft, media },
+      user,
       summary: t.products.galleryLabel,
-      detail: { mediaIds: parsed.data.mediaIds },
+      t,
+      detail: { assetIds: parsed.data.assetIds },
     });
   } catch (error) {
     console.error('[admin] reorder product media failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
-/** Removes one gallery row. The asset itself stays in the media library. */
+/** 从图库里移出一项。素材本身留在媒体库，没有被删除。 */
 export async function removeProductMediaAction(
   productId: string,
-  mediaId: string,
+  assetId: string,
 ): Promise<FormState> {
   const { t } = await getAdminMessagesForRequest();
 
@@ -1161,37 +1255,37 @@ export async function removeProductMediaAction(
   if (!db) return getDbUnavailableState(t);
 
   const parsed = z
-    .object({ productId: z.string().min(1), mediaId: z.string().min(1) })
-    .safeParse({ productId, mediaId });
+    .object({ productId: z.string().min(1), assetId: z.string().min(1) })
+    .safeParse({ productId, assetId });
   if (!parsed.success) return { status: 'error', message: t.validation.invalidInput };
 
   try {
-    const row = await db.productMedia.findUnique({
-      where: { id: parsed.data.mediaId },
-      select: { id: true, productId: true, assetId: true },
-    });
-    if (!row || row.productId !== parsed.data.productId) {
+    const loaded = await loadWorkingDraft(db, parsed.data.productId, t);
+    if (!loaded.ok) return loaded.error;
+
+    const media = loaded.draft.media.filter((item) => item.assetId !== parsed.data.assetId);
+    if (media.length === loaded.draft.media.length) {
       return { status: 'error', message: t.validation.invalidInput };
     }
 
-    await db.productMedia.delete({ where: { id: row.id } });
+    // 移出图库时，如果它正被当作封面或悬停视频，一并清掉 ——
+    // 否则会留下一个指向「已不在图库里」的素材的引用，媒体页上再也点不到、清不掉。
+    const basic = { ...loaded.draft.basic };
+    if (basic.coverAssetId === parsed.data.assetId) basic.coverAssetId = null;
+    if (basic.hoverVideoAssetId === parsed.data.assetId) basic.hoverVideoAssetId = null;
 
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'DELETE',
-      targetType: 'Product',
-      targetId: parsed.data.productId,
+    return await persistDraft(db, {
+      productId: parsed.data.productId,
+      draft: { ...loaded.draft, basic, media },
+      user,
       summary: t.products.removeFromGallery,
-      detail: { mediaId: row.id, assetId: row.assetId },
+      t,
+      detail: { assetId: parsed.data.assetId },
     });
   } catch (error) {
     console.error('[admin] remove product media failed:', error);
     return { status: 'error', message: t.actions.deleteFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1235,8 +1329,6 @@ const specFormSchema = (t: AdminMessages) =>
     productId: requiredIdField(t),
     payload: z.string().max(200_000, t.products.specTooMany),
   });
-
-type SpecTranslationDraft = { locale: AdminLocale; name: string; value: string | null };
 
 /**
  * 保存整个参数表（顺序即 sortOrder）。
@@ -1291,110 +1383,37 @@ export async function saveProductSpecificationsAction(
     return { status: 'error', message: issue?.message ?? t.validation.invalidInput };
   }
 
-  const normalized: { id?: string; translations: SpecTranslationDraft[] }[] = [];
-
-  for (const row of parsed.data.rows) {
-    const translations: SpecTranslationDraft[] = [];
-    let hasAnyValue = false;
-
+  // 草稿里**原样保留每一行**，包括整行空白的新增行：
+  // 编辑器刚点「增加一条」就会自动保存，如果服务端把空行丢掉，
+  // 刷新后那一行会凭空消失。「填了值却没写名称」这类规则推迟到发布时再判
+  // （见 validateForPublish），编辑到一半必须存得下去。
+  const specs: ProductDraftSpec[] = parsed.data.rows.map((row) => {
+    const values = {} as ProductDraftSpec['values'];
     for (const locale of ADMIN_LOCALES) {
-      const name = row.name[locale].trim();
-      const value = row.value[locale].trim();
-      if (value) hasAnyValue = true;
-      if (!name) continue;
-      translations.push({ locale, name, value: value || null });
+      values[locale] = { name: row.name[locale].trim(), value: row.value[locale].trim() };
     }
-
-    if (translations.length === 0) {
-      // 整行空白：当作未填写，忽略；但填了值却没名称时明确报错，不静默丢数据
-      if (hasAnyValue) return { status: 'error', message: t.products.specNameRequired };
-      continue;
-    }
-
-    normalized.push({ id: row.id, translations });
-  }
+    return { id: row.id ?? null, values };
+  });
 
   const db = getPrisma();
   if (!db) return getDbUnavailableState(t);
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: parsed.data.productId },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
+    const loaded = await loadWorkingDraft(db, parsed.data.productId, t);
+    if (!loaded.ok) return loaded.error;
 
-    await db.$transaction(async (tx) => {
-      const existing = await tx.productSpecification.findMany({
-        where: { productId: product.id },
-        select: { id: true },
-      });
-      const existingIds = new Set(existing.map((row) => row.id));
-      const kept = new Set<string>();
-
-      for (let index = 0; index < normalized.length; index += 1) {
-        const row = normalized[index];
-
-        if (row.id && existingIds.has(row.id)) {
-          kept.add(row.id);
-          await tx.productSpecification.update({
-            where: { id: row.id },
-            data: { sortOrder: index },
-          });
-          // 语言行先清后建：这样删掉某种语言的名称后不会留下孤立的旧值
-          await tx.productSpecificationTranslation.deleteMany({
-            where: { specificationId: row.id },
-          });
-          await tx.productSpecificationTranslation.createMany({
-            data: row.translations.map((tr) => ({
-              specificationId: row.id as string,
-              locale: tr.locale,
-              name: tr.name,
-              value: tr.value,
-            })),
-          });
-          continue;
-        }
-
-        const created = await tx.productSpecification.create({
-          data: {
-            productId: product.id,
-            sortOrder: index,
-            translations: {
-              create: row.translations.map((tr) => ({
-                locale: tr.locale,
-                name: tr.name,
-                value: tr.value,
-              })),
-            },
-          },
-          select: { id: true },
-        });
-        kept.add(created.id);
-      }
-
-      const stale = existing.filter((row) => !kept.has(row.id)).map((row) => row.id);
-      if (stale.length > 0) {
-        await tx.productSpecification.deleteMany({ where: { id: { in: stale } } });
-      }
-    });
-
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: product.id,
+    return await persistDraft(db, {
+      productId: parsed.data.productId,
+      draft: { ...loaded.draft, specs },
+      user,
       summary: t.products.specsSection,
-      detail: { slug: product.slug, count: normalized.length },
+      t,
+      detail: { count: specs.length },
     });
   } catch (error) {
     console.error('[admin] save product specifications failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1431,46 +1450,33 @@ export async function setProductAssetRoleAction(input: {
   if (!db) return getDbUnavailableState(t);
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: parsed.data.productId },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
-
     if (parsed.data.role === 'cover') {
       const error = await checkImageAsset(db, parsed.data.assetId, t);
       if (error) return error;
-
-      await db.product.update({
-        where: { id: product.id },
-        data: { coverAssetId: parsed.data.assetId },
-      });
     } else {
       const error = await checkVideoAsset(db, parsed.data.assetId, t);
       if (error) return error;
-
-      await db.product.update({
-        where: { id: product.id },
-        data: { hoverVideoAssetId: parsed.data.assetId },
-      });
     }
 
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'UPDATE',
-      targetType: 'Product',
-      targetId: product.id,
+    const loaded = await loadWorkingDraft(db, parsed.data.productId, t);
+    if (!loaded.ok) return loaded.error;
+
+    const basic = { ...loaded.draft.basic };
+    if (parsed.data.role === 'cover') basic.coverAssetId = parsed.data.assetId;
+    else basic.hoverVideoAssetId = parsed.data.assetId;
+
+    return await persistDraft(db, {
+      productId: parsed.data.productId,
+      draft: { ...loaded.draft, basic },
+      user,
       summary: parsed.data.role === 'cover' ? t.products.coverLabel : t.products.hoverVideoLabel,
-      detail: { slug: product.slug, assetId: parsed.data.assetId },
+      t,
+      detail: { assetId: parsed.data.assetId, role: parsed.data.role },
     });
   } catch (error) {
     console.error('[admin] set product asset role failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1506,29 +1512,25 @@ export async function attachUploadedAssetsAction(input: {
   if (!db) return getDbUnavailableState(t);
 
   try {
-    const product = await db.product.findUnique({
-      where: { id: parsed.data.productId },
-      select: { id: true, slug: true },
-    });
-    if (!product) return { status: 'error', message: t.products.notFound };
+    const assets = await loadUsableAssets(db, parsed.data.assetIds);
+    if (assets.length === 0) return { status: 'error', message: t.products.uploadBindFailed };
 
-    const { found, created } = await attachAssets(db, product.id, parsed.data.assetIds);
-    if (found === 0) return { status: 'error', message: t.products.uploadBindFailed };
+    const loaded = await loadWorkingDraft(db, parsed.data.productId, t);
+    if (!loaded.ok) return loaded.error;
 
-    await writeAudit({
-      userId: user.id,
-      actorEmail: user.email,
-      action: 'CREATE',
-      targetType: 'Product',
-      targetId: product.id,
+    const { draft, added } = appendToGallery(loaded.draft, assets);
+    if (added.length === 0) return { status: 'error', message: t.products.uploadBindFailed };
+
+    return await persistDraft(db, {
+      productId: parsed.data.productId,
+      draft,
+      user,
       summary: t.products.galleryLabel,
-      detail: { slug: product.slug, assetIds: created.map((row) => row.assetId), source: 'upload' },
+      t,
+      detail: { source: 'upload', assetIds: added },
     });
   } catch (error) {
     console.error('[admin] attach uploaded assets failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }
-
-  revalidatePublicCatalogue();
-  return { status: 'success', message: savedMessage(t) };
 }

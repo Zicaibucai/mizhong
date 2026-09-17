@@ -92,6 +92,19 @@ export function AssetPicker({
   labels: AssetPickerLabels;
 }) {
   const [selectedId, setSelectedId] = useState(initialId ?? '');
+  const hiddenInputRef = useRef<HTMLInputElement | null>(null);
+
+  /**
+   * 用户改动选择时，除了更新状态，还要**手动派发一次 change 事件**。
+   *
+   * 选中项写的是一个隐藏字段，程序化赋值不会触发浏览器的 input/change，
+   * 表单上的自动保存就永远收不到信号 —— 表现是「选了封面，但一直没保存」。
+   * 派发只需要让表单的监听器开始计时；1.5 秒后提交时 React 早就重新渲染过了。
+   */
+  const select = (id: string) => {
+    setSelectedId(id);
+    hiddenInputRef.current?.dispatchEvent(new Event('change', { bubbles: true }));
+  };
   const [open, setOpen] = useState(false);
   const lastInitial = useRef(initialId ?? '');
 
@@ -112,7 +125,7 @@ export function AssetPicker({
 
   return (
     <div className="space-y-3">
-      <input type="hidden" name={name} value={selectedId} />
+      <input ref={hiddenInputRef} type="hidden" name={name} value={selectedId} />
 
       <div className="flex flex-wrap items-center gap-4">
         <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-navy-200 bg-navy-50">
@@ -138,7 +151,7 @@ export function AssetPicker({
             <button
               type="button"
               onClick={() => {
-                setSelectedId('');
+                select('');
                 setOpen(false);
               }}
               className="inline-flex h-9 items-center rounded-full px-3 text-sm text-navy-600 transition-colors hover:bg-navy-100"
@@ -161,7 +174,7 @@ export function AssetPicker({
                     type="button"
                     aria-pressed={asset.id === selectedId}
                     onClick={() => {
-                      setSelectedId(asset.id);
+                      select(asset.id);
                       setOpen(false);
                     }}
                     className={cn(

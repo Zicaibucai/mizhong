@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useAdminLocale, useAdminT } from '@/components/admin/i18n-provider';
-import { ProductTabs, TabPanel, type TabDef } from './tabs';
+import { ProductTabs, TabPanel, type SaveStatus, type TabDef } from './tabs';
 import { ProductActionBar } from './product-action-bar';
 import { BasicTab } from './basic-tab';
 import { PricingTab } from './pricing-tab';
@@ -11,31 +11,33 @@ import { TranslationsTab } from './translations-tab';
 import { SpecsTab } from './specs-tab';
 import { MediaTab } from './media-tab';
 import { SeoTab } from './seo-tab';
+import { VersionsTab } from './versions-tab';
 import type { ProductEditorData } from './types';
 
 /**
- * 商品编辑器：吸顶操作栏（保存 / 发布 / 预览）+ 六个分页。
+ * 商品编辑器：吸顶操作栏（保存状态 / 发布 / 存档 / 预览）+ 七个分页。
  *
- * 六个分页属于**同一个商品编辑器**，共用一份 product id，切换分页不会丢未保存的输入
- * （每个面板保持挂载，见 `ProductTabs`），离开页面前有未保存提醒。
- * 「保存草稿」由操作栏按当前分页的 form id 提交，因此保存的永远是用户正在编辑的那一段。
+ * 七个分页属于**同一个商品编辑器**，共用一份 product id，切换分页不会丢正在输入的内容
+ * （每个面板保持挂载，见 `ProductTabs`）。
+ *
+ * 改动会在停止输入 1.5 秒后自动保存进**草稿**，所以切分页、离开页面都不再需要确认弹窗。
+ * 只有**保存失败**时才重新武装离开提醒 —— 那时确实有改动没存下去，
+ * 提醒才有意义（见 `ProductTabs` 里的 `hasFailed`）。
  */
 export function ProductEditor({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const locale = useAdminLocale();
-  const [dirty, setDirtyState] = useState<Record<string, boolean>>({});
+  const [statuses, setStatuses] = useState<Record<string, SaveStatus>>({});
 
-  const setDirty = useCallback((tab: string, isDirty: boolean) => {
-    setDirtyState((current) =>
-      current[tab] === isDirty ? current : { ...current, [tab]: isDirty },
-    );
+  const reportStatus = useCallback((tab: string, status: SaveStatus) => {
+    setStatuses((current) => (current[tab] === status ? current : { ...current, [tab]: status }));
   }, []);
 
-  const anyDirty = Object.values(dirty).some(Boolean);
+  const hasFailed = Object.values(statuses).some((status) => status === 'error');
 
-  /** In-app navigation guard: the beforeunload listener in ProductTabs handles full page loads. */
+  /** 应用内跳转拦截。整页离开交给 ProductTabs 里的 beforeunload。 */
   const guardNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (anyDirty && !window.confirm(t.products.unsavedWarning)) event.preventDefault();
+    if (hasFailed && !window.confirm(t.products.unsavedWarning)) event.preventDefault();
   };
 
   const tabs = useMemo<TabDef[]>(
@@ -46,6 +48,7 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
       { id: 'specs', label: t.products.tabSpecs },
       { id: 'media', label: t.products.tabMedia },
       { id: 'seo', label: t.products.tabSeo },
+      { id: 'versions', label: t.products.tabVersions },
     ],
     [t],
   );
@@ -94,8 +97,8 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
       {/* 空草稿直接打开「多语言」分区：商品名称在那里，先填名称最自然 */}
       <ProductTabs
         tabs={tabs}
-        dirty={dirty}
-        setDirty={setDirty}
+        statuses={statuses}
+        onReportStatus={reportStatus}
         initialTab={isFreshDraft ? 'translations' : undefined}
       >
         <ProductActionBar data={data} />
@@ -117,6 +120,9 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
         </TabPanel>
         <TabPanel id="seo">
           <SeoTab data={data} />
+        </TabPanel>
+        <TabPanel id="versions">
+          <VersionsTab data={data} />
         </TabPanel>
       </ProductTabs>
     </div>

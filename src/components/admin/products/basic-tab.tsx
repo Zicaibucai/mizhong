@@ -14,7 +14,7 @@ import { useAdminT } from '@/components/admin/i18n-provider';
 import { defaultLocale } from '@/lib/i18n/config';
 import { SlugAutoFill } from './slug-auto-fill';
 import { SlugPreview } from './slug-preview';
-import { useDirtyForm } from './tabs';
+import { useAutoSaveForm } from './tabs';
 import type { ProductEditorData } from './types';
 
 /**
@@ -28,8 +28,9 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const { product, categories } = data;
 
-  const [state, formAction] = useActionState(saveProductBasicAction, initialFormState);
-  const dirty = useDirtyForm('basic', state);
+  const [state, formAction, isPending] = useActionState(saveProductBasicAction, initialFormState);
+  useAutoSaveForm('basic', 'product-form-basic', state, isPending);
+  
 
   const [duplicateState, duplicateAction] = useActionState(
     duplicateProductAction,
@@ -41,7 +42,7 @@ export function BasicTab({ data }: { data: ProductEditorData }) {
       <form
         id="product-form-basic"
         action={formAction}
-        onChange={dirty.markDirty}
+        
         className="space-y-5"
       >
         <section className="space-y-4 rounded-xl border border-navy-200 bg-white p-5">

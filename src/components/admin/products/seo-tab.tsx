@@ -14,20 +14,21 @@ import {
   TextInput,
 } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
-import { useDirtyForm } from './tabs';
+import { useAutoSaveForm } from './tabs';
 import type { ProductEditorData } from './types';
 
 /** Search-engine listing copy per language. */
 export function SeoTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
-  const [state, formAction] = useActionState(saveProductSeoAction, initialFormState);
-  const dirty = useDirtyForm('seo', state);
+  const [state, formAction, isPending] = useActionState(saveProductSeoAction, initialFormState);
+  useAutoSaveForm('seo', 'product-form-seo', state, isPending);
+  
 
   return (
     <form
       id="product-form-seo"
       action={formAction}
-      onChange={dirty.markDirty}
+      
       className="space-y-5"
     >
       <input type="hidden" name="id" value={data.product.id} />

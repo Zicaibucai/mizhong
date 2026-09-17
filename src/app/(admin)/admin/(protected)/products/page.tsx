@@ -7,6 +7,7 @@ import { Alert } from '@/components/admin/form';
 import { cn } from '@/lib/cn';
 import { formatPrice } from '@/lib/product-format';
 import { decimalToString, normalizeCurrency } from '@/lib/pricing';
+import { readDraft, type ProductDraft } from '@/lib/product-draft';
 import type { Locale } from '@/lib/i18n/config';
 import { ProductFilters } from './product-filters';
 
@@ -32,6 +33,21 @@ function pageNumbers(current: number, count: number): (number | 'gap')[] {
     previous = page;
   }
   return out;
+}
+
+/**
+ * 列表里显示的商品名：优先后台界面语言，其次英文，再退回其余语言。
+ * 与编辑器里的回退顺序保持一致，否则同一件商品在两个页面会显示不同的名字。
+ */
+function draftName(draft: ProductDraft, locale: AdminLocale): string {
+  const values = draft.translations;
+  return (
+    values[locale as keyof typeof values]?.name ||
+    values.en.name ||
+    values.zh.name ||
+    values.vi.name ||
+    ''
+  );
 }
 
 export default async function AdminProductsPage({
@@ -75,6 +91,9 @@ export default async function AdminProductsPage({
           orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }],
           skip: (page - 1) * PAGE_SIZE,
           take: PAGE_SIZE,
+          // `include` 只接受关系字段；标量列（含 draftData）本来就随查询一起返回。
+          // 列表显示草稿里的名称 —— 商品改过名但还没发布时，
+          // 显示线上旧名字会让人以为「我改的没保存上」。
           include: {
             translations: true,
             category: { include: { translations: true } },
@@ -180,6 +199,7 @@ export default async function AdminProductsPage({
             <tbody className="divide-y divide-navy-100">
               {(result?.rows ?? []).map((product) => {
                 const thumbnail = product.coverAsset?.thumbnailUrl ?? product.coverAsset?.url ?? null;
+                const draft = readDraft(product.draftData);
                 const categoryTr = product.category?.translations ?? [];
                 const categoryName = product.category
                   ? categoryTr.find((item) => item.locale === locale)?.name ||
@@ -206,10 +226,12 @@ export default async function AdminProductsPage({
                     </td>
                     <td className="px-5 py-3">
                       <span className="font-medium text-navy-900">
-                        {productName(product.translations)}
+                        {draft
+                          ? draftName(draft, locale) || t.products.unnamedProduct
+                          : productName(product.translations)}
                       </span>
                       <span className="mt-0.5 block font-mono text-xs text-navy-500">
-                        {product.slug}
+                        {draft ? draft.basic.slug : product.slug}
                       </span>
                     </td>
                     <td className="px-5 py-3 font-mono text-xs text-navy-600">
@@ -226,13 +248,15 @@ export default async function AdminProductsPage({
                         )}
                       >
                         {formatPrice(
-                          {
-                            priceMode: product.priceMode,
-                            currency: normalizeCurrency(product.currency),
-                            priceMin: decimalToString(product.priceMin),
-                            priceMax: decimalToString(product.priceMax),
-                            priceUnit: product.priceUnit,
-                          },
+                          draft
+                            ? draft.pricing
+                            : {
+                                priceMode: product.priceMode,
+                                currency: normalizeCurrency(product.currency),
+                                priceMin: decimalToString(product.priceMin),
+                                priceMax: decimalToString(product.priceMax),
+                                priceUnit: product.priceUnit,
+                              },
                           priceLocale,
                         )}
                       </span>
@@ -248,6 +272,11 @@ export default async function AdminProductsPage({
                       >
                         {product.published ? t.products.statusPublished : t.products.statusDraft}
                       </span>
+                      {draft ? (
+                        <span className="ml-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs text-amber-800">
+                          {t.products.pendingBadge}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-5 py-3">
                       {product.featured ? (

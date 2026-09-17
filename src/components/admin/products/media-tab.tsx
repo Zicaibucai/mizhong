@@ -9,7 +9,7 @@ import { useAdminT } from '@/components/admin/i18n-provider';
 import { AssetPicker } from './asset-picker';
 import { AddMediaForm, GalleryEditor } from './gallery-editor';
 import { ProductMediaUploader } from './product-uploader';
-import { useDirtyForm } from './tabs';
+import { useAutoSaveForm } from './tabs';
 import type { ProductEditorData } from './types';
 
 /**
@@ -26,8 +26,9 @@ import type { ProductEditorData } from './types';
 export function MediaTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const router = useRouter();
-  const [state, formAction] = useActionState(saveProductMediaSettingsAction, initialFormState);
-  const dirty = useDirtyForm('media', state);
+  const [state, formAction, isPending] = useActionState(saveProductMediaSettingsAction, initialFormState);
+  useAutoSaveForm('media', 'product-form-media', state, isPending);
+  
 
   // 保存封面 / 悬停视频后重新读取，让图库上的「当前封面 / 悬停视频」标记同步
   useEffect(() => {
@@ -39,7 +40,7 @@ export function MediaTab({ data }: { data: ProductEditorData }) {
       <form
         id="product-form-media"
         action={formAction}
-        onChange={dirty.markDirty}
+        
         className="space-y-5"
       >
         <input type="hidden" name="id" value={data.product.id} />

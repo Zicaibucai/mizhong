@@ -56,8 +56,9 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  sessions  Session[]
-  auditLogs AuditLog[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  productVersions ProductVersion[]
 }
 
 /// 登录会话（仅存储令牌哈希，原始令牌只存在于 HttpOnly Cookie 中）
@@ -426,12 +427,24 @@ model Product {
   hoverVideoAssetId String?
   hoverVideoAsset   Asset?  @relation("ProductHoverVideo", fields: [hoverVideoAssetId], references: [id], onDelete: SetNull)
 
+  // ---- 草稿 ----
+  //
+  // 本模型上的各列、ProductTranslation、ProductSpecification、ProductMedia 一起构成
+  // **线上内容** —— 前台读的就是它们，发布是唯一写入点。
+  //
+  // 后台的编辑先写进 draftData，与线上完全隔离：客人永远看不到改到一半的样子。
+  // null 表示「没有待发布的改动」，此时编辑器直接编辑线上内容。
+  /// 编辑草稿，形状与 ProductVersion.snapshot 相同（见 src/lib/product-draft.ts）
+  draftData      Json?
+  draftUpdatedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   translations   ProductTranslation[]
   media          ProductMedia[]
   specifications ProductSpecification[]
+  versions       ProductVersion[]
 
   @@index([published])
   @@index([featured])
@@ -505,6 +518,42 @@ model ProductSpecificationTranslation {
   value           String?
 
   @@unique([specificationId, locale])
+}
+
+/// 版本来源：发布时自动留下的，还是管理员手动存档的
+enum ProductVersionKind {
+  PUBLISHED
+  MANUAL
+}
+
+/**
+ * 商品的历史版本。
+ *
+ * 每次「发布」自动留一版，管理员也可以随时手动存档一版。每个商品**最多保留 3 个**，
+ * 超出后最早的被挤掉（见 src/lib/admin/actions/products.ts 的 trimVersions）。
+ *
+ * 自动保存本身**不**产生版本 —— 否则几秒一存，三个名额只会是最近几秒的连续快照，
+ * 回滚毫无意义。
+ *
+ * 恢复一个版本时，内容写回 Product.draftData 而**不是**直接改线上：
+ * 恢复后它成为「待发布的改动」，确认无误再点发布，误点也能再退回去。
+ */
+model ProductVersion {
+  id        String             @id @default(cuid())
+  productId String
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  kind      ProductVersionKind
+  /// 该版本的完整内容快照，与 Product.draftData 同一形状
+  snapshot  Json
+  /// 手动存档时可填备注
+  note      String?
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([productId, createdAt])
+  @@index([createdById])
 }
 
 // ---------------------------------------------------------------------------

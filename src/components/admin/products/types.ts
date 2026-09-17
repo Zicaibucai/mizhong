@@ -1,18 +1,15 @@
 import type { AdminLocale } from '@/lib/admin/validation';
+import type { DraftSection, ProductTranslationValues } from '@/lib/product-draft';
 import type { PickerAsset } from './asset-picker';
 import type { GalleryItemData } from './gallery-editor';
 
-/** Values of one `ProductTranslation` row (all strings, empty when unset). */
-export interface ProductTranslationValues {
-  name: string;
-  shortDescription: string;
-  description: string;
-  sizeSummary: string;
-  spec: string;
-  application: string;
-  seoTitle: string;
-  seoDescription: string;
-}
+/**
+ * 一个语言下的全部可编辑文本字段。
+ *
+ * 定义在 `src/lib/product-draft.ts`（与草稿、版本快照共用同一份类型），这里只做转出，
+ * 免得后台各处再从别处 import 一遍、或不小心又抄一份出来。
+ */
+export type { ProductTranslationValues };
 
 export interface ProductBasics {
   id: string;
@@ -54,6 +51,20 @@ export interface CategoryOption {
   name: string;
 }
 
+/** 版本历史里的一条，已经摊平成可以直接渲染的字符串 */
+export interface ProductVersionData {
+  id: string;
+  kind: 'PUBLISHED' | 'MANUAL';
+  /** ISO 字符串：日期格式化在客户端做，服务端不猜时区 */
+  createdAt: string;
+  note: string | null;
+  /** 操作人邮箱（账号可能已被删除，此时为 null） */
+  createdBy: string | null;
+  /** 那一版的产品名与价格，用来在列表里一眼认出是哪一版 */
+  snapshotName: string;
+  snapshotPrice: string;
+}
+
 /** Everything the product editor needs, flattened to plain JSON for the client boundary. */
 export interface ProductEditorData {
   product: ProductBasics;
@@ -68,4 +79,14 @@ export interface ProductEditorData {
   galleryAssets: PickerAsset[];
   media: GalleryItemData[];
   previewHref: string;
+
+  // ---- 草稿与版本 ----
+  /** 相对线上内容改了哪几块（空数组 = 没有待发布的改动） */
+  pendingChanges: DraftSection[];
+  /** 不满足发布条件时列出原因；为空表示可以发布 */
+  publishBlockers: string[];
+  /** 最近三个历史版本，新的在前 */
+  versions: ProductVersionData[];
+  /** 草稿最后一次自动保存的时间（ISO），没有草稿时为 null */
+  draftUpdatedAt: string | null;
 }
