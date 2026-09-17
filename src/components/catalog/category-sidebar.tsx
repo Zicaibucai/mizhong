@@ -50,7 +50,7 @@ function CategoryLinks({ locale, categories, activeSlug, query, sort }: BaseProp
               <span
                 className={cn(
                   'shrink-0 font-mono text-xs',
-                  active ? 'text-navy-200' : 'text-navy-400',
+                  active ? 'text-copper-700' : 'text-navy-500',
                 )}
               >
                 {category.productCount}
@@ -117,7 +117,7 @@ export function CategoryMobilePanel(props: BaseProps & { className?: string }) {
             {currentLabel}
           </span>
         </span>
-        <span aria-hidden className="shrink-0 text-navy-400 transition-transform group-open:rotate-180">
+        <span aria-hidden className="shrink-0 text-navy-500 transition-transform group-open:rotate-180">
           ▾
         </span>
       </summary>

@@ -69,11 +69,13 @@ export function ProductInquiry({
         <ul className="mt-8 flex flex-wrap gap-3">
           {whatsapp?.href ? (
             <li>
+              {/* WhatsApp 绿 #25D366 很亮，配白字只有 1.98:1（远超常见的对比度失败）；
+                  改配深色字反而有 9.77:1，同时保留品牌绿的可辨识度。 */}
               <a
                 href={withWhatsAppText(whatsapp.href, message)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={cn(actionBase, 'border-[#25D366] bg-[#25D366] text-white hover:bg-[#1FAE55] focus-visible:outline-[#128C7E]')}
+                className={cn(actionBase, 'border-[#25D366] bg-[#25D366] text-navy-950 hover:bg-[#1FAE55] focus-visible:outline-[#128C7E]')}
               >
                 <WhatsAppIcon className="h-4 w-4 shrink-0" />
                 {dict.detail.whatsapp}

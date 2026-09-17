@@ -294,7 +294,7 @@ export default async function AdminProductsPage({
           </Link>
           {pageNumbers(page, pageCount).map((entry, index) =>
             entry === 'gap' ? (
-              <span key={`gap-${index}`} className="px-1 text-navy-400">
+              <span key={`gap-${index}`} className="px-1 text-navy-500">
                 …
               </span>
             ) : (

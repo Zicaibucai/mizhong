@@ -2,7 +2,9 @@ import type { Locale } from '@/lib/i18n';
 import type { ProductMediaView } from '@/lib/catalog';
 import { getCatalogDict } from '@/lib/i18n/catalog';
 import { cn } from '@/lib/cn';
-import { PlayIcon } from '@/components/ui/icons';
+import { ChevronLeftIcon, ChevronRightIcon, PlayIcon } from '@/components/ui/icons';
+import { ZoomableImage } from './zoomable-image';
+import { MediaThumbs, type MediaThumb } from './media-thumbs';
 
 /** 缩略图使用的地址：视频优先用封面，图片优先用缩略图 */
 function thumbSrc(item: ProductMediaView): string | null {
@@ -14,35 +16,88 @@ function slideId(index: number): string {
   return `pmedia-${index}`;
 }
 
+const arrowClass =
+  'absolute top-1/2 z-[2] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-navy-950/55 text-ivory-50 backdrop-blur-sm transition-colors hover:bg-navy-950/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500';
+
 /**
- * 产品详情页媒体查看器：主媒体 + 缩略图列表，图片与视频可切换。
+ * 产品详情页媒体查看器：主媒体 + 左右切换 + 缩略图，图片与视频可切换。
  *
- * 切换用纯 CSS 的 `:target`（样式见 globals.css 的 `.media-stage` 规则），因此
- * **没有 JavaScript 也能切换**，缩略图是真实的锚点链接，键盘可以直接 Tab 到并回车。
+ * 版面按 1688 的做法：
+ *
+ * - **视频排第一。** 商品只要配了视频（图库里的 VIDEO 素材，或只设了「悬停视频」），
+ *   它就是这个商品的第一个镜头；其余图片保持原有顺序，封面仍在原位。
+ * - **取景框固定 1:1，图片一律完整显示。** 图片用 `object-contain` 放进方框，
+ *   比例不是 1:1 的图四周留黑边，而不是裁掉两边 —— 「全部显示」优先于「填满方框」。
+ * - **左右切换 + 缩略图条。** 两者都是真实的锚点链接，切换靠 globals.css 的 `:target`
+ *   规则完成，所以**没有 JavaScript 也能切换**，键盘也能直接操作。
+ * - **悬停放大**（`ZoomableImage`）只在桌面精确指针上作为增强出现。
+ *
  * 每个媒体都带 `scroll-margin-top`，跳转时不会被吸顶的站点头遮住。
- *
- * 视频始终渲染可用的播放器（带 controls、`preload="metadata"` 与 poster），
- * 图片使用原生 <img> 并懒加载。
  */
 export function ProductMediaViewer({
   locale,
   items,
+  hoverVideo,
   fallbackAlt,
   className,
 }: {
   locale: Locale;
   items: ProductMediaView[];
+  /** 商品的「悬停视频」：图库里没有视频素材时，用它开第一帧 */
+  hoverVideo?: { url: string; posterUrl: string | null } | null;
   /** 素材缺少 alt 时使用的替代文本（产品名称） */
   fallbackAlt: string;
   className?: string;
 }) {
   const dict = getCatalogDict(locale);
-  if (items.length === 0) return null;
+
+  // 只保留有地址的素材，避免出现打不开的空幻灯片
+  const usable = items.filter((item) => Boolean(item.url));
+  const hoverVideoUrl = hoverVideo?.url ?? null;
+
+  const slides: ProductMediaView[] = (() => {
+    const videoIndex = usable.findIndex((item) => item.type === 'video');
+
+    if (videoIndex < 0) {
+      if (!hoverVideoUrl) return usable;
+      // 只设了悬停视频、图库里没有视频素材的商品，同样以视频开场
+      return [
+        {
+          id: 'hover-video',
+          assetId: 'hover-video',
+          type: 'video',
+          url: hoverVideoUrl,
+          thumbnailUrl: hoverVideo?.posterUrl ?? null,
+          posterUrl: hoverVideo?.posterUrl ?? null,
+          alt: '',
+          caption: null,
+        },
+        ...usable,
+      ];
+    }
+
+    if (videoIndex === 0) return usable;
+    // 把第一个视频提到最前，其余保持原有顺序（封面仍在自己的位置上）
+    const video = usable[videoIndex];
+    return [video, ...usable.slice(0, videoIndex), ...usable.slice(videoIndex + 1)];
+  })();
+
+  if (slides.length === 0) return null;
+
+  const thumbs: MediaThumb[] = slides.map((item, index) => ({
+    id: slideId(index),
+    src: thumbSrc(item),
+    label: `${item.type === 'video' ? dict.detail.videoLabel : dict.detail.imageLabel} ${index + 1}`,
+    isVideo: item.type === 'video',
+  }));
+
+  const step = (index: number, delta: number) =>
+    slideId((index + delta + slides.length) % slides.length);
 
   return (
     <div className={className}>
       <div className="media-stage">
-        {items.map((item, index) => {
+        {slides.map((item, index) => {
           const label = item.alt.trim() || fallbackAlt;
           const poster = item.posterUrl?.trim() || undefined;
 
@@ -50,29 +105,56 @@ export function ProductMediaViewer({
             <div
               key={item.id}
               id={slideId(index)}
-              className="media-slide scroll-mt-24"
+              className="media-slide scroll-mt-28"
               role="group"
-              aria-label={`${index + 1} / ${items.length}`}
+              aria-label={`${index + 1} / ${slides.length}`}
             >
-              {item.type === 'video' && item.url ? (
-                <video
-                  className="aspect-[4/3] w-full border border-navy-200/80 bg-navy-950 object-contain"
-                  controls
-                  preload="metadata"
-                  poster={poster}
-                  aria-label={label}
-                >
-                  <source src={item.url} />
-                </video>
-              ) : item.url ? (
-                // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换
-                <img
-                  src={item.url}
-                  alt={label}
-                  loading={index === 0 ? 'eager' : 'lazy'}
-                  className="aspect-[4/3] w-full border border-navy-200/80 bg-white object-cover"
-                />
-              ) : null}
+              {/* 外框负责描边，内框负责比例：这样取景框的矩形与图片的绘制矩形完全重合 */}
+              <div className="border border-navy-200/80">
+                <div className="relative aspect-square w-full overflow-hidden bg-navy-950">
+                  {item.type === 'video' && item.url ? (
+                    <video
+                      className="absolute inset-0 h-full w-full object-contain"
+                      controls
+                      preload="metadata"
+                      poster={poster}
+                      aria-label={label}
+                    >
+                      <source src={item.url} />
+                    </video>
+                  ) : item.url ? (
+                    <ZoomableImage
+                      src={item.url}
+                      alt={label}
+                      eager={index === 0}
+                      hint={dict.detail.zoomHint}
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center">
+                      <PlayIcon className="h-8 w-8 text-navy-500" />
+                    </span>
+                  )}
+
+                  {slides.length > 1 ? (
+                    <>
+                      <a
+                        href={`#${step(index, -1)}`}
+                        aria-label={dict.detail.mediaPrev}
+                        className={cn(arrowClass, 'left-3')}
+                      >
+                        <ChevronLeftIcon className="h-5 w-5" />
+                      </a>
+                      <a
+                        href={`#${step(index, 1)}`}
+                        aria-label={dict.detail.mediaNext}
+                        className={cn(arrowClass, 'right-3')}
+                      >
+                        <ChevronRightIcon className="h-5 w-5" />
+                      </a>
+                    </>
+                  ) : null}
+                </div>
+              </div>
 
               {item.caption ? (
                 <p className="mt-3 text-sm leading-relaxed text-muted">{item.caption}</p>
@@ -82,44 +164,7 @@ export function ProductMediaViewer({
         })}
       </div>
 
-      {items.length > 1 ? (
-        <ul
-          aria-label={dict.detail.mediaThumbnails}
-          className="mt-4 flex gap-3 overflow-x-auto pb-1"
-        >
-          {items.map((item, index) => {
-            const src = thumbSrc(item);
-            return (
-              <li key={item.id} className="shrink-0">
-                <a
-                  href={`#${slideId(index)}`}
-                  aria-label={`${item.type === 'video' ? dict.detail.videoLabel : dict.detail.imageLabel} ${index + 1}`}
-                  className="group relative block h-20 w-20 overflow-hidden border border-navy-200 bg-navy-50 transition-colors hover:border-copper-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
-                >
-                  {src ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换
-                    <img
-                      src={src}
-                      alt=""
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center">
-                      <PlayIcon className="h-5 w-5 text-navy-400" />
-                    </span>
-                  )}
-                  {item.type === 'video' ? (
-                    <span className="absolute inset-0 flex items-center justify-center bg-navy-950/35">
-                      <PlayIcon className="h-5 w-5 text-ivory-50" />
-                    </span>
-                  ) : null}
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+      <MediaThumbs thumbs={thumbs} label={dict.detail.mediaThumbnails} />
     </div>
   );
 }

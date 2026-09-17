@@ -490,11 +490,14 @@
   transform: translate3d(0, 0, 0);
 }
 
-/* 实心铜色按钮 */
+/* 实心品牌红按钮。
+   文字必须用暖白：品牌红 #c6222d 的亮度只够衬托浅色字（暖白 5.73:1），
+   换成深色字（navy-950）只有 3.39:1，读不清 —— 旧配色偏金 (#b5833e) 时深字是 5.43:1，
+   所以这是换配色时才会暴露的坑。hover 时 ::before 扫入暖白底，文字转深色，仍然清晰。 */
 [data-preview] .pv-btn-solid {
   background: var(--color-copper-500);
   border-color: var(--color-copper-500);
-  color: var(--color-navy-950);
+  color: var(--color-ivory-50);
 }
 
 [data-preview] .pv-btn-solid::before {

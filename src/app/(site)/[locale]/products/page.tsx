@@ -142,7 +142,7 @@ export default async function ProductsPage({
 
               {activeCategory ? (
                 <p className="mt-4 text-sm text-navy-600">
-                  <span className="text-navy-400">{dict.list.activeCategory}</span>{' '}
+                  <span className="text-navy-500">{dict.list.activeCategory}</span>{' '}
                   <span className="font-medium text-navy-900">{activeCategory.name}</span>
                 </p>
               ) : null}

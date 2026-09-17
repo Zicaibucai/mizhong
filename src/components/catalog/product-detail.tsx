@@ -120,7 +120,7 @@ export function ProductDetail({
                 {dict.detail.breadcrumbHome}
               </Link>
             </li>
-            <li aria-hidden className="text-navy-300">
+            <li aria-hidden className="text-navy-400">
               /
             </li>
             <li>
@@ -130,7 +130,7 @@ export function ProductDetail({
             </li>
             {product.categoryName && categoryHref ? (
               <>
-                <li aria-hidden className="text-navy-300">
+                <li aria-hidden className="text-navy-400">
                   /
                 </li>
                 <li>
@@ -140,7 +140,7 @@ export function ProductDetail({
                 </li>
               </>
             ) : null}
-            <li aria-hidden className="text-navy-300">
+            <li aria-hidden className="text-navy-400">
               /
             </li>
             <li aria-current="page" className="min-w-0 max-w-full truncate font-medium text-navy-900">
@@ -164,6 +164,11 @@ export function ProductDetail({
             <ProductMediaViewer
               locale={locale}
               items={galleryItems}
+              hoverVideo={
+                product.hoverVideoUrl
+                  ? { url: product.hoverVideoUrl, posterUrl: product.hoverVideoPosterUrl }
+                  : null
+              }
               fallbackAlt={product.name}
               className="min-w-0"
             />
@@ -339,12 +344,14 @@ export function ProductDetail({
                       <source src={item.url} />
                     </video>
                   ) : item.url ? (
+                    // 用原图而不是缩略图：这一批地址上面的主查看器已经加载过，浏览器直接命中缓存，
+                    // 不会多花一个字节，但「全部显示」时看到的是完整清晰度而不是缩小版。
                     // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS 动态域名，接入 next/image remotePatterns 后统一替换
                     <img
-                      src={item.thumbnailUrl ?? item.url}
+                      src={item.url}
                       alt={label}
                       loading="lazy"
-                      className="aspect-[4/3] w-full border border-navy-200/80 bg-white object-cover"
+                      className="aspect-[4/3] w-full border border-navy-200/80 bg-navy-950 object-contain"
                     />
                   ) : null}
                   {item.caption ? (

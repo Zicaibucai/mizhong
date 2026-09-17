@@ -102,13 +102,13 @@ export function ProductCard({
           <dl className="mt-2.5 space-y-1 text-xs leading-relaxed text-navy-600">
             {moq ? (
               <div className="flex gap-1.5">
-                <dt className="shrink-0 text-navy-400">{dict.detail.moqLabel}</dt>
+                <dt className="shrink-0 text-navy-500">{dict.detail.moqLabel}</dt>
                 <dd className="min-w-0">{moq}</dd>
               </div>
             ) : null}
             {size ? (
               <div className="flex gap-1.5">
-                <dt className="shrink-0 text-navy-400">{dict.list.sizeLabel}</dt>
+                <dt className="shrink-0 text-navy-500">{dict.list.sizeLabel}</dt>
                 <dd className="min-w-0 line-clamp-2">{size}</dd>
               </div>
             ) : null}

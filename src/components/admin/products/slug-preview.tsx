@@ -39,7 +39,7 @@ export function SlugPreview({
 
   return (
     <p className="mt-2 flex flex-wrap items-baseline gap-x-2 text-xs">
-      <span className="text-navy-400">{label}</span>
+      <span className="text-navy-500">{label}</span>
       <code className="break-all font-mono text-navy-800">
         {prefix}
         {value || <span className="text-navy-300">…</span>}

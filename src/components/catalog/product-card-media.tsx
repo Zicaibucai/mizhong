@@ -22,23 +22,24 @@ import { cn } from '@/lib/cn';
  * 指针事件会被它先接住 —— 只挂在图片容器上时 mouseenter 永远不会触发（实测确认）。
  * 因此在卡片上监听是本设计下唯一可靠的做法，且悬停整个卡片都播放视频对用户更宽容。
  */
-export function useHoverVideo(hoverVideoUrl: string | null) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [videoFailed, setVideoFailed] = useState(false);
+/**
+ * 「这台设备能不能用悬停做增强」的**唯一判定处**。
+ *
+ * 产品卡片的悬停视频与详情页的悬停放大都走这里，两者的判定规则因此不可能各自跑偏。
+ * 必须同时满足：真正支持悬停的精确指针（桌面鼠标），且用户没有要求减少动效。
+ *
+ * 服务端渲染与首帧一律返回 false —— 避免 hydration 不一致，也意味着禁用 JavaScript、
+ * 触屏、或 reduced-motion 的用户拿到的都是「不加动效但信息完整」的版本。
+ */
+export function useHoverCapable(): boolean {
   const [canHover, setCanHover] = useState(false);
 
-  // 能力探测放在 effect 里：服务端渲染与首帧始终保持封面，避免 hydration 不一致
   useEffect(() => {
-    if (!hoverVideoUrl) return;
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
 
     const hoverQuery = window.matchMedia('(hover: hover) and (pointer: fine)');
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const sync = () => {
-      const allowed = hoverQuery.matches && !motionQuery.matches;
-      setCanHover(allowed);
-      if (!allowed) videoRef.current?.pause();
-    };
+    const sync = () => setCanHover(hoverQuery.matches && !motionQuery.matches);
 
     sync();
     hoverQuery.addEventListener('change', sync);
@@ -47,7 +48,20 @@ export function useHoverVideo(hoverVideoUrl: string | null) {
       hoverQuery.removeEventListener('change', sync);
       motionQuery.removeEventListener('change', sync);
     };
-  }, [hoverVideoUrl]);
+  }, []);
+
+  return canHover;
+}
+
+export function useHoverVideo(hoverVideoUrl: string | null) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoFailed, setVideoFailed] = useState(false);
+  const canHover = useHoverCapable();
+
+  // 设备能力中途变化（插上鼠标、打开「减少动效」）时立刻停住正在播放的视频
+  useEffect(() => {
+    if (!canHover) videoRef.current?.pause();
+  }, [canHover]);
 
   const play = useCallback(() => {
     const video = videoRef.current;

@@ -191,7 +191,7 @@ export function SpecsTab({ data }: { data: ProductEditorData }) {
                   <span aria-hidden className="cursor-grab select-none text-navy-300">
                     ⠿
                   </span>
-                  <span className="font-mono text-xs text-navy-400">
+                  <span className="font-mono text-xs text-navy-500">
                     {String(index + 1).padStart(2, '0')}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm text-navy-700">

@@ -31,7 +31,7 @@ export default async function AdminLoginPage() {
         <div className="mt-7">
           <LoginForm dbReady={isDbConfigured()} />
         </div>
-        <p className="mt-6 text-xs leading-relaxed text-navy-400">
+        <p className="mt-6 text-xs leading-relaxed text-navy-500">
           {t.loginPage.restrictedBefore}
           <code className="mx-1 rounded bg-navy-100 px-1 py-0.5">npm run admin:create</code>
           {t.loginPage.restrictedAfter}

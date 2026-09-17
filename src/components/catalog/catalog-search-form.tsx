@@ -41,7 +41,7 @@ export function CatalogSearchForm({
         defaultValue={defaultQuery}
         placeholder={placeholder}
         autoComplete="off"
-        className="h-12 min-w-0 flex-1 border border-navy-200 bg-transparent px-4 text-sm text-navy-900 placeholder:text-navy-400 focus:border-copper-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+        className="h-12 min-w-0 flex-1 border border-navy-200 bg-transparent px-4 text-sm text-navy-900 placeholder:text-navy-500 focus:border-copper-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
       />
       <button
         type="submit"

@@ -33,6 +33,15 @@ export function PlayIcon(props: IconProps) {
   );
 }
 
+export function ZoomIcon(props: IconProps) {
+  return (
+    <svg {...shared} {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.6-3.6M11 8.5v5M8.5 11h5" />
+    </svg>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <svg {...shared} {...props}>
@@ -78,6 +87,22 @@ export function ChevronDownIcon(props: IconProps) {
   return (
     <svg {...shared} {...props}>
       <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <svg {...shared} {...props}>
+      <path d="m15 6-6 6 6 6" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <svg {...shared} {...props}>
+      <path d="m9 6 6 6-6 6" />
     </svg>
   );
 }
