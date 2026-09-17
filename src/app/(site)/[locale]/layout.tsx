@@ -122,7 +122,7 @@ export default async function LocaleLayout({
         <PreviewHeader
           locale={locale}
           name={content.company.name}
-          logo={<BrandLogo locale={locale} className="h-7 w-auto shrink-0" />}
+          logo={<BrandLogo locale={locale} className="h-9 w-auto shrink-0" />}
           nav={nav}
           ctaHref={`/${locale}#inquiry`}
           homeHref={`/${locale}`}
@@ -140,7 +140,7 @@ export default async function LocaleLayout({
           locale={locale}
           name={content.company.name}
           tagline={content.company.tagline}
-          logo={<BrandLogo locale={locale} className="h-8 w-auto shrink-0" />}
+          logo={<BrandLogo locale={locale} className="h-12 w-auto shrink-0" />}
           nav={nav}
           channels={channels}
           homeLanguages

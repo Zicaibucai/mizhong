@@ -76,7 +76,7 @@ export default async function PreviewLocaleLayout({
         <PreviewHeader
           locale={l}
           name={content.company.name}
-          logo={<BrandLogo locale={l} className="h-7 w-auto shrink-0" />}
+          logo={<BrandLogo locale={l} className="h-9 w-auto shrink-0" />}
           nav={nav}
           ctaHref="#inquiry"
           labels={{
@@ -95,7 +95,7 @@ export default async function PreviewLocaleLayout({
           locale={l}
           name={content.company.name}
           tagline={content.company.tagline}
-          logo={<BrandLogo locale={l} className="h-8 w-auto shrink-0" />}
+          logo={<BrandLogo locale={l} className="h-12 w-auto shrink-0" />}
           nav={nav}
           channels={channels}
           labels={{
