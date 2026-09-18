@@ -1,4 +1,4 @@
-import type { Locale } from '@/lib/i18n/config';
+import { localeCodes, type Locale } from '@/lib/i18n/config';
 
 /**
  * 价格与贸易信息的**唯一事实来源**：币种、计价单位、价格模式的取值与格式化。
@@ -41,11 +41,13 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 /** `Intl` 使用的地区代码，决定千分位与小数点符号 */
-const NUMBER_LOCALES: Record<Locale, string> = {
-  zh: 'zh-CN',
-  en: 'en-US',
-  vi: 'vi-VN',
-};
+/**
+ * 数字格式化用的 Intl 区域。
+ *
+ * 直接复用 `localeCodes`（<html lang> 与 hreflang 用的同一张表），
+ * 不再单独维护 —— 多一份清单就多一个加语言时被漏掉的地方。
+ */
+const NUMBER_LOCALES = localeCodes;
 
 export function isPriceMode(value: unknown): value is PriceMode {
   return typeof value === 'string' && (PRICE_MODES as readonly string[]).includes(value);

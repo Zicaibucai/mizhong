@@ -1,4 +1,5 @@
 import { revalidatePath } from 'next/cache';
+import { locales } from '@/lib/i18n/config';
 
 /**
  * 后台写入后的前台缓存失效入口。
@@ -21,7 +22,8 @@ import { revalidatePath } from 'next/cache';
  * 由 Server Action 调用时，失效是同步生效的 —— 后台点保存后立刻刷新前台即可看到新内容，
  * 不需要等 60 秒，也不需要重新部署。
  */
-const PUBLIC_LOCALES = ['zh', 'en', 'vi'] as const;
+/** 从统一的语言清单派生，加语言后新语言的首页会自动一起失效 */
+const PUBLIC_LOCALES = locales;
 
 export function revalidatePublicSite(): void {
   revalidatePath('/', 'layout');

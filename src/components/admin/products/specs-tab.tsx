@@ -10,6 +10,7 @@ import { useAdminT } from '@/components/admin/i18n-provider';
 import { cn } from '@/lib/cn';
 import { defaultLocale } from '@/lib/i18n/config';
 import { useAutoSaveForm } from './tabs';
+import { localizedRecord } from '@/lib/i18n/localized';
 import type { ProductEditorData, SpecTableData } from './types';
 
 let sequence = 0;
@@ -20,7 +21,7 @@ function newId(prefix: string): string {
 }
 
 function emptyLocalizedText(): Record<AdminLocale, string> {
-  return { zh: '', en: '', vi: '' };
+  return localizedRecord(() => '');
 }
 
 function newColumn(): SpecTableData['columns'][number] {

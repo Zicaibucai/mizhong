@@ -35,8 +35,8 @@ import {
   type ProductDraftVariantGroup,
 } from '@/lib/product-draft';
 import type { FormState } from '@/lib/admin/action-state';
-
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+import { localizedRecord } from '@/lib/i18n/localized';
+import { SLUG_PATTERN } from '@/lib/slug';
 
 /**
  * 自动保存的提示。
@@ -1642,11 +1642,10 @@ function specTableFromLegacyRows(rows: Array<Record<string, unknown>>): ProductD
     };
     return {
       id: typeof row.id === 'string' && row.id.trim() ? row.id : null,
-      values: {
-        zh: { name: readLocalized(row.name, 'zh'), value: readLocalized(row.value, 'zh') },
-        en: { name: readLocalized(row.name, 'en'), value: readLocalized(row.value, 'en') },
-        vi: { name: readLocalized(row.name, 'vi'), value: readLocalized(row.value, 'vi') },
-      },
+      values: localizedRecord((locale) => ({
+        name: readLocalized(row.name, locale),
+        value: readLocalized(row.value, locale),
+      })),
     };
   });
   return specTableFromLegacySpecs(legacySpecs);

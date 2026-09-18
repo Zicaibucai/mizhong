@@ -16,6 +16,7 @@ import {
 } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
 import { AssetPicker, type PickerAsset } from '@/components/admin/products/asset-picker';
+import { localizedRecord } from '@/lib/i18n/localized';
 
 export interface CategoryValues {
   id?: string;
@@ -31,11 +32,7 @@ const EMPTY: CategoryValues = {
   sortOrder: 0,
   enabled: true,
   coverAssetId: null,
-  translations: {
-    zh: { name: '', description: '' },
-    en: { name: '', description: '' },
-    vi: { name: '', description: '' },
-  },
+  translations: localizedRecord(() => ({ name: '', description: '' })),
 };
 
 /** Create / edit form for one product category, rendered inline in the list. */

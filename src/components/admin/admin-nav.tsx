@@ -14,6 +14,7 @@ const ITEMS = [
   { href: '/admin/media', key: 'media' },
   { href: '/admin/product-categories', key: 'productCategories' },
   { href: '/admin/products', key: 'products' },
+  { href: '/admin/settings/translation', key: 'translationSettings' },
   { href: '/admin/audit', key: 'audit' },
 ] as const;
 

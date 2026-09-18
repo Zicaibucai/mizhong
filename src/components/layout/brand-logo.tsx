@@ -11,13 +11,12 @@ export async function BrandLogo({ locale, className }: { locale: Locale; classNa
   const asset = await getMediaBySlot(MEDIA_SLOTS.logo, locale);
   const hasManagedLogo = asset?.type === 'image';
   const src = hasManagedLogo ? asset.url : '/mizhong-brand-mark.jpg';
+  // 兜底商标的替代文本：只有中英两种写法，其余语言沿用英文。
   const alt = hasManagedLogo
     ? asset.alt[locale]
-    : {
-        zh: '米众新材料品牌标识',
-        en: 'Mizhong New Materials brand mark',
-        vi: 'Biểu trưng thương hiệu Vật liệu mới Mizhong',
-      }[locale];
+    : locale === 'zh'
+      ? '米众新材料品牌标识'
+      : 'Mizhong New Materials brand mark';
 
   return (
     // eslint-disable-next-line @next/next/no-img-element -- 素材来自 OSS，接入后切换到 next/image + remotePatterns

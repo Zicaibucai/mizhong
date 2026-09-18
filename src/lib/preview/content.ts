@@ -124,8 +124,12 @@ const vi: PreviewCopy = {
   inquiryHint: 'Mọi kênh trên đều liên hệ trực tiếp được. Chúng tôi phản hồi trong giờ làm việc.',
 };
 
-const COPY: Record<Locale, PreviewCopy> = { zh, en, vi };
+/**
+ * 设计预览页是**独立路由**，正式首页不读这里，因此新增语言不必立刻补全。
+ * 用 Partial 明确表达「可以缺席」，未提供的语言回退英文 —— 与文件开头的设计一致。
+ */
+const COPY: Partial<Record<Locale, PreviewCopy>> = { zh, en, vi };
 
 export function getPreviewCopy(locale: Locale): PreviewCopy {
-  return COPY[locale] ?? COPY.en;
+  return COPY[locale] ?? en;
 }

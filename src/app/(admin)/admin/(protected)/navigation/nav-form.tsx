@@ -14,6 +14,7 @@ import {
   TextInput,
 } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
+import { localizedRecord } from '@/lib/i18n/localized';
 
 export interface NavValues {
   id?: string;
@@ -29,7 +30,7 @@ const EMPTY: NavValues = {
   external: false,
   sortOrder: 0,
   enabled: true,
-  translations: { zh: { label: '' }, en: { label: '' }, vi: { label: '' } },
+  translations: localizedRecord(() => ({ label: '' })),
 };
 
 export function NavForm({ item, submitLabel }: { item?: NavValues; submitLabel: string }) {

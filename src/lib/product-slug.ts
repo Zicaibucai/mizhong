@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { slugify } from '@/lib/slugify';
+import { slugify, uniqueSlug } from '@/lib/slug';
 
 /**
  * 为新建商品决定一个可用的 slug（网址后缀）。
@@ -8,7 +8,7 @@ import { slugify } from '@/lib/slugify';
  * 名称里的中文/越南语经 slugify 后可能为空，所以最后一定有兜底 —— 新建流程**永远**
  * 不会因为想不出一个英文短名而卡住。
  *
- * 结果再经过唯一化（`-2`、`-3`…），把数据库唯一约束的冲突提前解决在写入之前。
+ * 结果再经过唯一化（`_2`、`_3`…），把数据库唯一约束的冲突提前解决在写入之前。
  */
 export async function resolveUniqueProductSlug(
   db: PrismaClient,
@@ -24,21 +24,24 @@ export async function resolveUniqueProductSlug(
   if (!candidate) {
     // 名称全是中日韩等非拉丁文字时用顺序号：可读、稳定，而且一眼能看出是自动生成的
     const total = await db.product.count();
-    candidate = `product-${total + 1}`;
+    candidate = `product_${total + 1}`;
   }
 
-  const taken = async (value: string) =>
-    Boolean(await db.product.findUnique({ where: { slug: value }, select: { id: true } }));
+  // 唯一化交给共享实现：命名规则（下划线 + 递增序号）只写在一处
+  return uniqueSlug(candidate, async (value) =>
+    Boolean(await db.product.findUnique({ where: { slug: value }, select: { id: true } })),
+  );
+}
 
-  if (!(await taken(candidate))) return candidate;
-
-  for (let suffix = 2; suffix <= 200; suffix += 1) {
-    const next = `${candidate}-${suffix}`;
-    if (!(await taken(next))) return next;
-  }
-
-  // 兜底：极端情况下用随机后缀，宁可地址难看也不能让新建失败
-  return `${candidate}-${Math.random().toString(16).slice(2, 10)}`;
+/**
+ * 判断一个 slug 是不是系统自动生成的占位值（`product_4` 这种）。
+ *
+ * 新建商品时后端会先塞一个占位 slug，好让商品能立刻保存。但对「按英文名自动生成」
+ * 来说，占位值**不等于**用户填过 —— 否则新建商品后怎么打英文名都不会生成 slug，
+ * 只能手动点「重新生成」，这正是需求里要避免的。
+ */
+export function isPlaceholderSlug(slug: string): boolean {
+  return /^product_?\d+$/.test(slug.trim());
 }
 
 /** 复用空草稿的时间窗口：只回收「本次操作刚刚留下的」那一条 */

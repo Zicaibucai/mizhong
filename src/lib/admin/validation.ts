@@ -1,11 +1,19 @@
 import { z } from 'zod';
 import type { AdminMessages } from './i18n';
 import { getContentLocaleLabel } from './labels';
+import { locales, type Locale } from '@/lib/i18n/config';
+import { SLUG_PATTERN } from '@/lib/slug';
 
-export const ADMIN_LOCALES = ['zh', 'en', 'vi'] as const;
-export type AdminLocale = (typeof ADMIN_LOCALES)[number];
+/**
+ * 后台可编辑的内容语言。
+ *
+ * **从 `locales` 派生，不另外维护一份清单** —— 以前这里硬编码 zh/en/vi，
+ * 与 src/lib/i18n/config.ts 是两份彼此独立的事实，加语言时必然漏掉一处。
+ */
+export const ADMIN_LOCALES = locales;
+export type AdminLocale = Locale;
 
-export const localeSchema = z.enum(['zh', 'en', 'vi']);
+export const localeSchema = z.enum(locales);
 export const contactTypeSchema = z.enum(['EMAIL', 'WHATSAPP', 'PHONE', 'WECHAT', 'ADDRESS']);
 
 const optionalText = (max: number) => z.string().trim().max(max).default('');
@@ -106,7 +114,7 @@ export function makePageBaseSchema(t: AdminMessages) {
       .trim()
       .min(1, t.validation.slugRequired)
       .max(120)
-      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, t.validation.slugFormat),
+      .regex(SLUG_PATTERN, t.validation.slugFormat),
   });
 }
 export type PageBaseInput = z.infer<ReturnType<typeof makePageBaseSchema>>;

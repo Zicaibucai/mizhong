@@ -27,6 +27,7 @@ export const site = {
 
 /** 公司全称（纯文字身份识别；网站不展示任何图形/字母/临时 Logo） */
 export function companyName(locale: Locale): string {
-  const map: Record<Locale, string> = { zh: company.nameZh, en: company.nameEn, vi: company.nameVi };
-  return map[locale];
+  // 目前只有中文全称与英文全称两种写法，其余语言一律沿用英文全称。
+  // 需要为某个语言单独起名时，在 site-config 里加字段再在这里分支即可。
+  return locale === 'zh' ? company.nameZh : company.nameEn;
 }

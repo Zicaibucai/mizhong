@@ -3,6 +3,8 @@ export {
   defaultLocale,
   localeNames,
   localeCodes,
+  localeDirs,
+  localeEnglishNames,
   isLocale,
   type Locale,
 } from './config';

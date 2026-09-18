@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
+import { localizedRecord } from '@/lib/i18n/localized';
+import { SLUG_PATTERN } from '@/lib/slug';
+
+export { localizedRecord, pickLocalized } from '@/lib/i18n/localized';
 import { PRICE_MODES, CURRENCY_CODES } from '@/lib/pricing';
 
 /**
@@ -127,11 +131,7 @@ export function emptyTranslationValues(): ProductTranslationValues {
 }
 
 export function emptyTranslations(): Record<AdminLocale, ProductTranslationValues> {
-  return {
-    zh: emptyTranslationValues(),
-    en: emptyTranslationValues(),
-    vi: emptyTranslationValues(),
-  };
+  return localizedRecord(() => emptyTranslationValues());
 }
 
 export function draftMediaRoleFor(assetType: 'IMAGE' | 'VIDEO'): ProductMediaRoleValue {
@@ -161,11 +161,11 @@ const translationShape = z.object({
 });
 
 const localizedTableTextShape = (max: number) =>
-  z.object({
-    zh: z.string().max(max).default(''),
-    en: z.string().max(max).default(''),
-    vi: z.string().max(max).default(''),
-  });
+  z.object(
+    Object.fromEntries(
+      ADMIN_LOCALES.map((locale) => [locale, z.string().max(max).default('')]),
+    ) as Record<AdminLocale, z.ZodDefault<z.ZodString>>,
+  );
 
 const specTableShape = z.object({
   columns: z
@@ -226,20 +226,23 @@ const draftShape = z.object({
     moq: z.number().int().nullable().default(null),
     moqUnit: z.string().nullable().default(null),
   }),
-  translations: z.object({
-    zh: translationShape,
-    en: translationShape,
-    vi: translationShape,
-  }),
+  translations: z.object(
+    Object.fromEntries(
+      ADMIN_LOCALES.map((locale) => [locale, translationShape]),
+    ) as Record<AdminLocale, typeof translationShape>,
+  ),
   specs: z
     .array(
       z.object({
         id: z.string().nullable().default(null),
-        values: z.object({
-          zh: z.object({ name: z.string().default(''), value: z.string().default('') }),
-          en: z.object({ name: z.string().default(''), value: z.string().default('') }),
-          vi: z.object({ name: z.string().default(''), value: z.string().default('') }),
-        }),
+        values: z.object(
+          Object.fromEntries(
+            ADMIN_LOCALES.map((locale) => [
+              locale,
+              z.object({ name: z.string().default(''), value: z.string().default('') }),
+            ]),
+          ) as Record<AdminLocale, z.ZodObject<{ name: z.ZodDefault<z.ZodString>; value: z.ZodDefault<z.ZodString> }>>,
+        ),
       }),
     )
     .default([]),
@@ -276,14 +279,8 @@ export function readDraft(value: unknown): ProductDraft | null {
 export function emptySpecTable(): ProductDraftSpecTable {
   return {
     columns: [
-      {
-        id: 'specification',
-        values: { zh: '参数', en: 'Parameter', vi: 'Thông số' },
-      },
-      {
-        id: 'value',
-        values: { zh: '参数值', en: 'Value', vi: 'Giá trị' },
-      },
+      { id: 'specification', values: localizedRecord(() => '') },
+      { id: 'value', values: localizedRecord(() => '') },
     ],
     rows: [],
   };
@@ -293,27 +290,13 @@ export function emptySpecTable(): ProductDraftSpecTable {
 export function specTableFromLegacySpecs(specs: ProductDraftSpec[]): ProductDraftSpecTable {
   const table = emptySpecTable();
   if (specs.length === 0) return table;
-  table.columns[0] = {
-    id: 'specification',
-    values: { zh: '参数', en: 'Parameter', vi: 'Thông số' },
-  };
-  table.columns[1] = {
-    id: 'value',
-    values: { zh: '参数值', en: 'Value', vi: 'Giá trị' },
-  };
+  table.columns[0] = { id: 'specification', values: localizedRecord(() => '') };
+  table.columns[1] = { id: 'value', values: localizedRecord(() => '') };
   table.rows = specs.map((spec, index) => ({
     id: spec.id ?? `legacy-${index + 1}`,
     cells: {
-      specification: {
-        zh: spec.values.zh.name,
-        en: spec.values.en.name,
-        vi: spec.values.vi.name,
-      },
-      value: {
-        zh: spec.values.zh.value,
-        en: spec.values.en.value,
-        vi: spec.values.vi.value,
-      },
+      specification: localizedRecord((locale) => spec.values[locale]?.name ?? ''),
+      value: localizedRecord((locale) => spec.values[locale]?.value ?? ''),
     },
   }));
   return table;
@@ -385,7 +368,7 @@ export function validateForPublish(
   },
 ): { ok: true } | { ok: false; message: string } {
   if (!draft.basic.slug) return { ok: false, message: messages.slugRequired };
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(draft.basic.slug)) {
+  if (!SLUG_PATTERN.test(draft.basic.slug)) {
     return { ok: false, message: messages.slugFormat };
   }
   if (!draft.basic.coverAssetId) return { ok: false, message: messages.coverRequired };

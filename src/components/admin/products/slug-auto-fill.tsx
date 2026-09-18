@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { slugify } from '@/lib/slugify';
+import { slugify } from '@/lib/slug';
+import { isPlaceholderSlug } from '@/lib/product-slug';
 
 /**
  * 按英文名称自动建议 slug（纯增强，不接管表单状态）。
@@ -30,13 +31,14 @@ export function SlugAutoFill({
     const slugInput = form.querySelector<HTMLInputElement>(`#${CSS.escape(slugFieldId)}`);
     if (!nameInput || !slugInput) return;
 
-    // 已有 slug（编辑既有商品）时不自动改写，除非它本来就是空的
+    // 已有 slug（编辑既有商品）时不自动改写。
+    // 但「空」与「系统生成的占位值」都算还没定下来，这两种情况下应该继续给建议。
     let lastSuggested = slugInput.value;
-    let armed = slugInput.value.trim().length === 0;
+    let armed = slugInput.value.trim().length === 0 || isPlaceholderSlug(slugInput.value);
 
     const onSlugInput = () => {
       // 手动清空 → 重新武装：空 slug 本来就保存不了，此时按名称给建议是用户想要的
-      if (slugInput.value.trim().length === 0) {
+      if (slugInput.value.trim().length === 0 || isPlaceholderSlug(slugInput.value)) {
         armed = true;
         lastSuggested = '';
         return;

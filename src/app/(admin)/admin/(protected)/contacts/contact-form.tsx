@@ -15,6 +15,7 @@ import {
   TextInput,
 } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
+import { localizedRecord } from '@/lib/i18n/localized';
 
 export interface ContactValues {
   id?: string;
@@ -32,11 +33,7 @@ const EMPTY: ContactValues = {
   href: '',
   sortOrder: 0,
   enabled: true,
-  translations: {
-    zh: { label: '', value: '' },
-    en: { label: '', value: '' },
-    vi: { label: '', value: '' },
-  },
+  translations: localizedRecord(() => ({ label: '', value: '' })),
 };
 
 export function ContactForm({

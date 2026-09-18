@@ -5,6 +5,7 @@ import {
   defaultLocale,
   isLocale,
   localeCodes,
+  localeDirs,
   getDictionary,
   type Locale,
 } from '@/lib/i18n';
@@ -64,7 +65,7 @@ export default async function PreviewLocaleLayout({
   const nav = content.nav.map((item) => ({ ...item, href: withLocale(l, item.href) }));
 
   return (
-    <html lang={code} data-preview className={inter.variable}>
+    <html lang={code} dir={localeDirs[locale]} data-preview className={inter.variable}>
       <body>
         <a
           href="#main"

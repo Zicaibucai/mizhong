@@ -1,4 +1,4 @@
-import type { Locale } from '@/lib/i18n/config';
+import { locales, type Locale } from '@/lib/i18n/config';
 import { tryDb } from '@/lib/db';
 
 export type MediaType = 'image' | 'video';
@@ -94,7 +94,7 @@ function localizedText(
 ): LocalizedText {
   const pick = (target: Locale) =>
     translations.find((item) => item.locale === target)?.[field] ?? '';
-  return { zh: pick('zh'), en: pick('en'), vi: pick('vi') };
+  return Object.fromEntries(locales.map((target) => [target, pick(target)])) as LocalizedText;
 }
 
 export function toMediaAsset(asset: AssetRow, slot: MediaSlot | null): MediaAsset {

@@ -22,6 +22,10 @@ import { AssetThumb, type PickerAsset } from './asset-picker';
 import { ProductMediaUploader } from './product-uploader';
 import { SeoTab } from './seo-tab';
 import { SpecsTab } from './specs-tab';
+import { TranslateButton } from './translate-button';
+import { SlugAutoFill } from './slug-auto-fill';
+import { SlugRegenerateButton } from './slug-regenerate-button';
+import { DEFAULT_TARGET_LOCALES } from '@/lib/translation/fields';
 import { VariantOptionsEditor } from './variant-options-editor';
 import { useAutoSaveForm } from './tabs';
 import type { GalleryItemData } from './gallery-editor';
@@ -524,6 +528,18 @@ function VisualBasicFields({ data, t, state }: { data: ProductEditorData; t: Ret
           <Field label={`${t.products.slug} *`} htmlFor="visual-slug" hint={t.products.slugHint}>
             <TextInput id="visual-slug" name="slug" defaultValue={data.product.slug} required />
           </Field>
+          {/* 边打字边建议（手动改过就停手）；想重新生成时用下面的按钮 */}
+          <SlugAutoFill
+            formId="product-form-visual"
+            nameFieldId="visual-en-name"
+            slugFieldId="visual-slug"
+          />
+          <SlugRegenerateButton
+            productId={data.product.id}
+            formId="product-form-visual"
+            slugFieldId="visual-slug"
+            nameFieldId="visual-en-name"
+          />
           <div className="rounded-xl border border-navy-100 bg-navy-50/60 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium text-navy-800">{t.products.coverLabel}</span>
@@ -614,7 +630,14 @@ export function VisualProductEditor({ data }: { data: ProductEditorData }) {
             <h2 className="mt-2 text-xl font-semibold tracking-tight text-navy-950">{t.products.visualTitle}</h2>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">{t.products.visualHint}</p>
           </div>
-          <div>
+          <div className="space-y-4">
+            <TranslateButton
+              formIds={[
+                'product-form-visual',
+                'product-form-visual-seo',
+              ]}
+              targets={DEFAULT_TARGET_LOCALES}
+            />
             <p className="mb-2 text-xs font-medium text-muted">{t.products.contentLanguage}</p>
             <div role="tablist" aria-label={t.products.contentLanguage} className="inline-flex flex-wrap gap-1 rounded-xl border border-navy-200 bg-navy-50 p-1">
               {ADMIN_LOCALES.map((locale) => {
@@ -672,6 +695,7 @@ export function VisualProductEditor({ data }: { data: ProductEditorData }) {
           data={data}
           formId="product-form-visual-seo"
           statusTab="visual-seo"
+          nameSourceFormId="product-form-visual"
           activeLocale={activeLocale}
         />
       </section>

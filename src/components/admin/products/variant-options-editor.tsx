@@ -10,6 +10,7 @@ import { useAdminT } from '@/components/admin/i18n-provider';
 import { AssetThumb } from './asset-picker';
 import { useAutoSaveForm } from './tabs';
 import type { ProductEditorData, VariantGroupData } from './types';
+import { localizedRecord } from '@/lib/i18n/localized';
 
 let sequence = 0;
 
@@ -19,7 +20,7 @@ function newId(prefix: string): string {
 }
 
 function emptyLocalizedText(): Record<AdminLocale, string> {
-  return { zh: '', en: '', vi: '' };
+  return localizedRecord(() => '');
 }
 
 function newOption(): VariantGroupData['options'][number] {
@@ -29,7 +30,10 @@ function newOption(): VariantGroupData['options'][number] {
 function newGroup(): VariantGroupData {
   return {
     id: newId('group'),
-    values: { zh: '型号', en: 'Model', vi: 'Mẫu mã' },
+    // 新选项组的默认名。管理员会按语言改写，这里只给一个好认的起点。
+    values: localizedRecord((locale) =>
+      locale === 'zh' ? '型号' : locale === 'vi' ? 'Mẫu mã' : 'Model',
+    ),
     options: [newOption()],
   };
 }
