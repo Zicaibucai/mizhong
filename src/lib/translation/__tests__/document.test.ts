@@ -95,16 +95,19 @@ describe('逐字段比对', () => {
     );
   });
 
-  test('没有逐字段记录时按 fallback 判定（回滚、老数据都靠它）', () => {
+  test('已有译文但没有逐字段记录时「认下来」—— 不覆盖人工调整过的内容', () => {
     const current = { 'translations.name': 'Hook', 'translations.description': 'Body' };
+    // 本功能上线前就存在的译文、以及回滚后的快照都长这样。
+    // 需求 6.7 要求保留人工调整过的译文，所以这里只能认下来。
     assert.deepEqual(
-      diffUnits(units, current, {}, 'stale').map((item) => item.state),
-      ['stale', 'stale'],
-    );
-    assert.deepEqual(
-      diffUnits(units, current, {}, 'synced').map((item) => item.state),
+      diffUnits(units, current, {}).map((item) => item.state),
       ['synced', 'synced'],
     );
+  });
+
+  test('但目标为空时仍然是 missing —— 没内容的语言必须补上', () => {
+    const diffs = diffUnits(units, { 'translations.name': 'Hook' }, {});
+    assert.deepEqual(diffs.map((item) => item.state), ['synced', 'missing']);
   });
 
   test('目标为空时，即使有哈希记录也算 missing', () => {

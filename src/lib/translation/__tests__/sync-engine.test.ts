@@ -573,6 +573,85 @@ describe('时间预算', () => {
   });
 });
 
+describe('已有人工译文时不被覆盖', () => {
+  /** 一个已经手写过英文译文的商品（本功能上线前的状态：有内容、没有任何同步记录） */
+  function seeded() {
+    return createFakePrisma({
+      products: [
+        {
+          id: 'p1',
+          slug: 'manli',
+          translations: {
+            zh: { name: '满力', description: '正文' },
+            en: { name: 'Manli', description: 'Body' },
+          },
+        },
+      ],
+    });
+  }
+
+  test('首次同步不会覆盖已有的英文 —— 需求要求保留人工调整过的译文', async () => {
+    const fake = seeded();
+    stubDeepSeek();
+
+    const result = await syncEntity(fake.db, settings, 'product', 'p1');
+    assert.ok(result);
+
+    // 英文两个字段都已存在且没有哈希记录 → 认下来，不重翻
+    assert.equal(
+      calls.flatMap((call) => call.paths).includes('translations.name'),
+      true,
+      '中文名仍然要翻给其它语言',
+    );
+    assert.equal(fake.getProductDraft('p1')?.translations.en.name, 'Manli', '人工写的英文必须原样保留');
+
+    // 其它语言照常补齐
+    assert.equal(fake.getProductDraft('p1')?.translations.ar.name, 'ar|满力');
+    assert.equal(fake.getProductDraft('p1')?.translations.ar.description, 'ar|正文');
+  });
+
+  test('中文改了之后，那个字段的英文才会被重新生成', async () => {
+    const fake = seeded();
+    stubDeepSeek();
+    await syncEntity(fake.db, settings, 'product', 'p1');
+
+    fake.setProductTranslation('p1', 'zh', { name: '满力（改）' });
+    calls = [];
+    await syncEntity(fake.db, settings, 'product', 'p1');
+
+    assert.deepEqual(calls.flatMap((call) => call.paths), ['translations.name'], '只翻改过的那个字段');
+    assert.equal(fake.getProductDraft('p1')?.translations.en.name, 'en|满力（改）');
+    assert.equal(
+      fake.getProductDraft('p1')?.translations.en.description,
+      'Body',
+      '没改的字段仍然保留人工译文',
+    );
+  });
+
+  test('force: true 时全部重翻 —— 这是「重新翻译全部语言」按钮的落点', async () => {
+    const fake = seeded();
+    stubDeepSeek();
+
+    const result = await syncEntity(fake.db, settings, 'product', 'p1', { force: true });
+    assert.ok(result);
+    assert.equal(fake.getProductDraft('p1')?.translations.en.name, 'en|满力', '强制模式下人工译文被覆盖');
+
+    const paths = new Set(calls.flatMap((call) => call.paths));
+    assert.ok(paths.has('translations.name'));
+    assert.ok(paths.has('translations.description'));
+  });
+
+  test('force 默认关闭 —— 不显式要求时绝不重翻已同步的内容', async () => {
+    const fake = seeded();
+    stubDeepSeek();
+    await syncEntity(fake.db, settings, 'product', 'p1');
+    calls = [];
+
+    await syncEntity(fake.db, settings, 'product', 'p1', {});
+    assert.equal(calls.length, 0);
+  });
+});
+
 describe('多语言全空的中文内容', () => {
   test('中文什么都没有时不产生任何请求', async () => {
     const fake = createFakePrisma({ products: [{ id: 'empty', slug: 'empty', translations: {} }] });

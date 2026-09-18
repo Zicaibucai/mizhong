@@ -60,6 +60,13 @@ export interface SyncPlan {
   clearedByLocale: Map<Locale, string[]>;
   /** 逐语言记录的字段状态，写回时要合并 */
   fieldStatesByLocale: Map<Locale, Record<string, FieldState>>;
+  /**
+   * 逐语言「已有译文、但没有记录，于是认下来」的字段路径。
+   *
+   * 调用方**必须**为它们补上哈希（见 `adoptUntrackedTranslations`）：
+   * 不补的话，以后中文改了这些字段也永远比对不出差异。
+   */
+  adoptedByLocale: Map<Locale, string[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +134,7 @@ export async function planSync(
   const pendingByLocale = new Map<Locale, TranslationUnit[]>();
   const clearedByLocale = new Map<Locale, string[]>();
   const fieldStatesByLocale = new Map<Locale, Record<string, FieldState>>();
+  const adoptedByLocale = new Map<Locale, string[]>();
 
   // 一次把所有语言的现有译文读出来：草稿型的内容（商品、页面）只加载一次草稿，
   // 而不是每种语言各加载一遍
@@ -138,16 +146,19 @@ export async function planSync(
     const fieldStates = asFieldStates(state?.fields);
     const current = currentByLocale[locale] ?? {};
 
-    /**
-     * 有译文但没有逐字段记录的兜底判断。
-     *
-     * 只有当该语言的记录**指的就是当前这一版中文**时，才认它已经同步过。
-     * 否则（本功能上线前的老译文、刚回滚过、记录被清理过）一律按脏数据处理 ——
-     * 宁可多翻一次，也不要让某几种语言停在旧内容上，而界面还显示「已同步」。
-     */
-    const fallback = state && state.sourceRevision === revision ? 'synced' : 'stale';
-    const diffs = diffUnits(document.units, current, fieldStates, fallback);
+    const diffs = diffUnits(document.units, current, fieldStates);
     const pending = pendingUnits(diffs, document.units);
+
+    /**
+     * 「认下来」的字段：有译文、但没有逐字段记录。
+     *
+     * 这些字段不重翻（需求 6.7 要求保留人工调整过的译文），但**必须补上哈希记录** ——
+     * 不补的话，以后中文改了它们也永远比对不出差异，会一直停在旧译文上，
+     * 而界面显示「已是最新」。这是采纳规则唯一不显然的地方，漏了就是最难查的那类 bug。
+     */
+    const adopted = document.units
+      .filter((unit) => (current[unit.path] ?? '').trim() && !fieldStates[unit.path])
+      .map((unit) => unit.path);
 
     // 中文删掉的字段：我们翻译过、但现在文档里没有了 → 译文要一并清掉
     const live = new Set(document.units.map((unit) => unit.path));
@@ -175,6 +186,7 @@ export async function planSync(
     pendingByLocale.set(locale, pending);
     clearedByLocale.set(locale, cleared);
     fieldStatesByLocale.set(locale, fieldStates);
+    adoptedByLocale.set(locale, adopted);
   }
 
   return {
@@ -187,6 +199,7 @@ export async function planSync(
     pendingByLocale,
     clearedByLocale,
     fieldStatesByLocale,
+    adoptedByLocale,
   };
 }
 
@@ -340,6 +353,52 @@ export async function recordCleared(
     },
     update: { fields: merged as unknown as Prisma.InputJsonValue },
   });
+}
+
+/**
+ * 给「认下来」的字段补上哈希记录。
+ *
+ * 这一步**不产生任何 API 调用**，但它是采纳规则能长期成立的前提：没有它，
+ * 被认下来的字段永远比对不出「中文改过了」，会一直停在旧译文上而界面显示已同步。
+ *
+ * 记录的 model 写成 `adopted` 而不是真实的模型名，是因为这些字段确实**没有**被这台
+ * 机器翻译过 —— 把来源写清楚，日后查「这段译文哪来的」时不会误导人。
+ */
+export async function adoptUntrackedTranslations(
+  db: PrismaClient,
+  entityType: string,
+  entityId: string,
+  plan: SyncPlan,
+): Promise<number> {
+  const at = new Date().toISOString();
+  const sourceHash = new Map(plan.document.units.map((unit) => [unit.path, hashText(unit.text)]));
+  let adopted = 0;
+
+  for (const [locale, paths] of plan.adoptedByLocale) {
+    if (paths.length === 0) continue;
+
+    const merged: Record<string, FieldState> = { ...(plan.fieldStatesByLocale.get(locale) ?? {}) };
+    for (const path of paths) {
+      const hash = sourceHash.get(path);
+      if (hash) merged[path] = { hash, at, model: 'adopted' };
+    }
+
+    await db.translationState.upsert({
+      where: { entityType_entityId_locale: { entityType, entityId, locale } },
+      create: {
+        entityType,
+        entityId,
+        locale,
+        fields: merged as unknown as Prisma.InputJsonValue,
+        status: 'SYNCED',
+      },
+      // 只并字段状态：这两个字段确实是「有内容且最新」的，翻译时间与模型保持不变
+      update: { fields: merged as unknown as Prisma.InputJsonValue },
+    });
+    adopted += paths.length;
+  }
+
+  return adopted;
 }
 
 /** 记录一次失败。`reason` 是已归类的错误类别，不含 Key、原文或译文。 */

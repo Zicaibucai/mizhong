@@ -496,6 +496,9 @@ const en = {
 
     syncOne: 'Sync',
     syncAll: 'Sync all published content',
+    forceAll: 'Re-translate every language',
+    forceHint:
+      'Regenerates every field, including translations that are already up to date. Existing wording written by hand will be overwritten. Only use it when you believe the translations are wrong.',
     retryFailed: 'Retry failed only',
     viewErrors: 'View errors',
     hideErrors: 'Hide errors',
@@ -972,6 +975,9 @@ const zh: AdminMessages = {
 
     syncOne: '同步',
     syncAll: '同步全部已发布中文内容',
+    forceAll: '重新翻译全部语言',
+    forceHint:
+      '把所有字段重新生成一遍，包括已经是最新的译文。人工写过的措辞会被覆盖。只在你确信译文有问题时使用。',
     retryFailed: '只重试失败内容',
     viewErrors: '查看错误',
     hideErrors: '收起错误',

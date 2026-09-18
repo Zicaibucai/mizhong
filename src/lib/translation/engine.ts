@@ -9,6 +9,7 @@ import {
   type TranslationUnit,
 } from './document';
 import {
+  adoptUntrackedTranslations,
   commitRevision,
   markTranslating,
   planSync,
@@ -78,6 +79,16 @@ export interface SyncEntityOptions {
   budgetMs?: number;
   /** 已经钉住的版本号。重试同一次发布时传进来，保证各批次来源一致。 */
   pinnedRevision?: number;
+  /**
+   * 强制重翻：忽略「已同步」的判断，把所有字段重新生成一遍。
+   *
+   * 对应的界面入口是同步中心的「重新翻译全部语言」。存在的理由是那条被有意采用的
+   * 宽松规则：**本功能上线前就存在的译文、以及回滚后的快照，一律认下来不覆盖**
+   * （见 document.ts 的 diffUnits）。那是对的选择 —— 但它会漏掉一种情况：
+   * 中文在本功能上线之前改过、旧译文却没跟着改。这时机器判断不出来，
+   * 得由人来决定重翻。默认关闭，所以「中文没变就不调用」这条性质不受影响。
+   */
+  force?: boolean;
 }
 
 const DEFAULT_BUDGET_MS = 25_000;
@@ -114,6 +125,22 @@ export async function syncEntity(
   const plan = await planSync(db, entityType, entityId, requested);
   if (!plan) return null;
 
+  /**
+   * 强制重翻：把「已同步」的判断全部推翻，本语言的全部字段都当作待翻。
+   * 只在显式要求时发生 —— 默认路径仍然一个字段都不多翻。
+   */
+  if (options.force) {
+    for (const locale of requested) {
+      if (locale === 'zh') continue;
+      plan.pendingByLocale.set(locale, [...plan.document.units]);
+      const summary = plan.locales.find((item) => item.locale === locale);
+      if (summary) {
+        summary.pendingCount = plan.document.units.length;
+        summary.state = 'stale';
+      }
+    }
+  }
+
   const result: EntitySyncResult = {
     ok: true,
     entityType,
@@ -126,6 +153,18 @@ export async function syncEntity(
     hasMore: false,
     nothingToDo: true,
   };
+
+  /**
+   * 第零步：把「已有译文但没有逐字段记录」的字段认下来。
+   *
+   * 纯写库，零 API 调用。放在最前面是因为它必须**无条件**发生：不补哈希的话，
+   * 这些字段以后中文改了也检测不出差异，会一直停在旧译文上而界面显示已同步。
+   * 强制重翻模式下跳过 —— 那种情况下这些字段本来就要重新生成，哈希由
+   * recordSuccess 负责写。
+   */
+  if (!options.force) {
+    await adoptUntrackedTranslations(db, entityType, entityId, plan);
+  }
 
   const targets = localesWithPending(plan, options.onlyFailed === true, requested);
 

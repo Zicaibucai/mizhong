@@ -148,6 +148,23 @@ export function SyncControls({
           {pending ? t.sync.running : t.sync.syncAll}
         </button>
 
+        {/*
+          「重新翻译全部语言」是一个单独按钮，不藏在选项里。
+          它会把人工写过的措辞一起覆盖掉，所以要人明确点一次、并且先看到后果说明。
+        */}
+        <button
+          type="button"
+          disabled={pending}
+          title={t.sync.forceHint}
+          onClick={() => {
+            if (!window.confirm(`${t.sync.forceAll}\n\n${t.sync.forceHint}`)) return;
+            run(() => syncAllContentAction({ force: true }));
+          }}
+          className="inline-flex h-10 items-center rounded-full border border-navy-300 px-5 text-sm font-medium text-navy-800 transition-colors hover:bg-navy-50 disabled:opacity-60"
+        >
+          {t.sync.forceAll}
+        </button>
+
         {job ? (
           <button
             type="button"

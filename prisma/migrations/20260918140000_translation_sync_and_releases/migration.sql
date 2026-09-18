@@ -85,6 +85,7 @@ CREATE TABLE "TranslationJob" (
     "kind" "TranslationJobKind" NOT NULL,
     "status" "TranslationJobStatus" NOT NULL DEFAULT 'PENDING',
     "idempotencyKey" TEXT,
+    "force" BOOLEAN NOT NULL DEFAULT false,
     "totalItems" INTEGER NOT NULL DEFAULT 0,
     "completedItems" INTEGER NOT NULL DEFAULT 0,
     "failedItems" INTEGER NOT NULL DEFAULT 0,

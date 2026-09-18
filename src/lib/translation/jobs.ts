@@ -2,7 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { locales, type Locale } from '@/lib/i18n/config';
 import { ADAPTERS, getAdapter, targetLocales, type ContentType } from './adapters';
 import { syncEntity, type EntitySyncResult } from './engine';
-import { planSync } from './state';
+import { adoptUntrackedTranslations, planSync } from './state';
 import type { TranslationSettings } from './settings';
 
 /**
@@ -95,6 +95,8 @@ export interface CreateJobInput {
    */
   idempotencyKey?: string | null;
   userId?: string | null;
+  /** 强制重翻：忽略「已同步」的判断，全部字段重新生成。默认 false。 */
+  force?: boolean;
 }
 
 export interface CreateJobResult {
@@ -117,9 +119,11 @@ export async function createJob(db: PrismaClient, input: CreateJobInput): Promis
   if (input.idempotencyKey) {
     const existing = await db.translationJob.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
-      select: { id: true, totalItems: true, status: true },
+      select: { id: true, totalItems: true, status: true, force: true },
     });
-    if (existing) {
+    // 重翻意图不一致时不复用：点「重新翻译全部」却命中一个只补差量的旧任务，
+    // 表现就是「点了没反应」
+    if (existing && existing.force === (input.force === true)) {
       // 上次是部分失败 / 失败的话，把失败的工作项放回队列再跑一次。
       // 这一步是「重复点发布」与「只重试失败内容」的交汇点：同一个键既不会翻两遍
       // 已经成功的语言，也不会因为「任务已结束」而把失败的部分永远晾在那里。
@@ -132,7 +136,7 @@ export async function createJob(db: PrismaClient, input: CreateJobInput): Promis
 
   // 已经有同类任务在跑 → 复用它，不新开
   const running = await db.translationJob.findFirst({
-    where: { kind: input.kind, status: { in: [...OPEN_STATUSES] } },
+    where: { kind: input.kind, status: { in: [...OPEN_STATUSES] }, force: input.force === true },
     orderBy: { createdAt: 'desc' },
     select: { id: true, totalItems: true },
   });
@@ -143,6 +147,7 @@ export async function createJob(db: PrismaClient, input: CreateJobInput): Promis
       kind: input.kind,
       status: 'PENDING',
       idempotencyKey: input.idempotencyKey ?? null,
+      force: input.force === true,
       createdById: input.userId ?? null,
       totalItems: targets.length * targetLocalesToUse.length,
     },
@@ -187,7 +192,8 @@ async function reopenJob(db: PrismaClient, jobId: string): Promise<void> {
   });
 }
 
-function dedupeTargets(targets: readonly ScopeTarget[]): ScopeTarget[] {  const seen = new Set<string>();
+function dedupeTargets(targets: readonly ScopeTarget[]): ScopeTarget[] {
+  const seen = new Set<string>();
   const out: ScopeTarget[] = [];
   for (const target of targets) {
     const key = `${target.entityType}:${target.entityId}`;
@@ -267,6 +273,7 @@ export async function advanceJob(
   options: AdvanceOptions = {},
 ): Promise<AdvanceResult | null> {
   const job = await db.translationJob.findUnique({ where: { id: jobId } });
+  // job.force 决定这一轮是不是要把已知的译文也重翻一遍
   if (!job) return null;
 
   if (!OPEN_STATUSES.includes(job.status as (typeof OPEN_STATUSES)[number])) {
@@ -292,6 +299,7 @@ export async function advanceJob(
 
     let processed = 0;
     let lastError: string | null = null;
+    const jobForce = job.force === true;
 
     while (Date.now() < deadline && processed < maxEntities) {
       const pending = await db.translationJobItem.findFirst({
@@ -315,6 +323,8 @@ export async function advanceJob(
       const result = await syncEntity(db, settings, pending.entityType, pending.entityId, {
         locales: entityLocales,
         budgetMs: Math.max(1_000, deadline - Date.now()),
+        // 「强制重翻」跟着任务走，中途续跑也不会丢掉这个意图
+        force: jobForce,
       });
 
       if (!result) {
@@ -564,6 +574,11 @@ export async function syncForPublish(
   if (!plan) {
     return { status: 'failed', jobId: null, progress: null, changed: false, revision: 0 };
   }
+
+  // 先把「有译文但没有记录」的字段认下来（纯写库，零调用）。必须在下面那个
+  // 提前返回**之前**做：否则「本来就不需要翻译」这条路径永远不会补哈希，
+  // 那些字段以后中文改了也检测不出差异。
+  await adoptUntrackedTranslations(db, entityType, entityId, plan);
 
   const needsWork = plan.locales.some((item) => item.state !== 'synced' && item.state !== 'empty');
 

@@ -130,6 +130,8 @@ export async function advanceJobAction(input: { jobId: string }): Promise<SyncAc
 export async function syncContentAction(input: {
   entityType: string;
   entityId: string;
+  /** 强制重翻：已有的译文也重新生成 */
+  force?: boolean;
 }): Promise<SyncActionResult> {
   const { t } = await getAdminMessagesForRequest();
   const guard = await requireAdminOrError(t);
@@ -162,6 +164,7 @@ export async function syncContentAction(input: {
         { entityType: parsed.data.entityType, entityId: parsed.data.entityId, label: parsed.data.entityId },
       ],
       userId: user.id,
+      force: input.force === true,
     });
 
     const advanced = await advanceJob(db, settings, jobId);
@@ -203,7 +206,17 @@ export async function syncContentAction(input: {
  * 断点就是每个工作项自己的状态，因此中途关掉页面、重新打开、再点一次，
  * 都是接着做而不是从头来。
  */
-export async function syncAllContentAction(): Promise<SyncActionResult> {
+export async function syncAllContentAction(options: {
+  /**
+   * 强制重翻：忽略「已同步」的判断，把所有字段重新生成一遍。
+   *
+   * 默认关闭，所以「中文没变就不调用模型」这条性质不受影响。存在的理由是那条
+   * 被有意采用的宽松规则：本功能上线前的旧译文、回滚后的快照，一律认下来不覆盖
+   * （见 document.ts 的 diffUnits）。那是对的选择，但它漏掉一种情况 ——
+   * 中文在上线之前改过、旧译文没跟着改。机器判断不出来，只能由人决定重翻。
+   */
+  force?: boolean;
+} = {}): Promise<SyncActionResult> {
   const { t } = await getAdminMessagesForRequest();
   const guard = await requireAdminOrError(t);
   if ('error' in guard) return { ok: false, message: guard.error.message ?? t.validation.invalidInput };
@@ -229,6 +242,7 @@ export async function syncAllContentAction(): Promise<SyncActionResult> {
       kind: 'SYNC_ALL',
       targets,
       userId: user.id,
+      force: options.force === true,
     });
 
     const advanced = await advanceJob(db, settings, jobId);
@@ -240,7 +254,7 @@ export async function syncAllContentAction(): Promise<SyncActionResult> {
       action: 'UPDATE',
       targetType: 'TranslationJob',
       targetId: jobId,
-      summary: t.sync.syncAll,
+      summary: options.force ? t.sync.forceAll : t.sync.syncAll,
       detail: {
         entities: targets.length,
         items: totalItems,
