@@ -1,6 +1,7 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { localesWithContent, strictLocaleFallbackEnabled } from '@/lib/catalog';
+import { resolveFallbackSeo } from '@/lib/product-metadata';
 import { locales, localeCodes } from '@/lib/i18n/config';
 
 /**
@@ -139,5 +140,115 @@ describe('hreflang 的构造', () => {
     assert.equal(new Set(codes).size, locales.length, 'hreflang 代码不能重复');
     assert.ok(codes.includes('zh-CN'));
     assert.ok(codes.includes('ar'));
+  });
+});
+
+
+describe('英文兜底页面的 SEO 状态切换', () => {
+  /**
+   * 问题：`/ar/products/x` 显示的是英文内容。放任它被索引，搜索引擎会把它当成
+   * 「阿拉伯语版本的 x」收进去 —— 同一个英文页面在索引里出现十次，每次挂一个
+   * 不同的语言标签。这是标准的重复内容问题，代价是**每一个**都排不上去。
+   *
+   * 三条处理：noindex、canonical 指向英文本体、不进 hreflang 与 sitemap。
+   * 等该语言自己的译文补齐，三条一起撤销 —— 下面测的就是这个切换。
+   */
+  const PATH = '/products/manli';
+
+  test('正在显示英文兜底时：noindex + canonical 指向英文地址', () => {
+    const seo = resolveFallbackSeo({
+      locale: 'ar',
+      fallbackLocale: 'en',
+      path: PATH,
+      strict: true,
+    });
+
+    assert.equal(seo.noindex, true, '没有阿拉伯语内容，就不该被当成阿拉伯语页面收录');
+    assert.equal(seo.canonicalPath, `/en${PATH}`, '权重与收录归到真正承载这份内容的那个地址');
+  });
+
+  test('正在显示英文兜底时：阿拉伯语不进 hreflang（因此也不进 sitemap）', () => {
+    process.env.STRICT_LOCALE_FALLBACK = 'true';
+    const translations = rows(['zh', '满力'], ['en', 'Manli']);
+
+    const available = localesWithContent(translations, locales);
+    assert.equal(available.includes('ar'), false);
+    assert.deepEqual(available, ['zh', 'en'], '只有这两种语言真的有内容');
+
+    // sitemap 用的是同一个函数，所以「不进 hreflang」与「不进 sitemap」是同一件事
+    assert.equal(available.includes('ar'), false);
+  });
+
+  test('该语言自己的译文到位后：noindex 撤销、canonical 回到自己', () => {
+    const seo = resolveFallbackSeo({
+      locale: 'ar',
+      fallbackLocale: null,
+      path: PATH,
+      strict: true,
+    });
+
+    assert.equal(seo.noindex, false);
+    assert.equal(seo.canonicalPath, `/ar${PATH}`);
+  });
+
+  test('该语言自己的译文到位后：加回 hreflang 与 sitemap', () => {
+    process.env.STRICT_LOCALE_FALLBACK = 'true';
+    const translations = rows(['zh', '满力'], ['en', 'Manli'], ['ar', 'مانلي']);
+
+    const available = localesWithContent(translations, locales);
+    assert.equal(available.includes('ar'), true);
+    assert.deepEqual(available, ['zh', 'en', 'ar']);
+  });
+
+  test('一次切换的完整过程：兜底 → 补齐 → 恢复索引', () => {
+    process.env.STRICT_LOCALE_FALLBACK = 'true';
+
+    // 阶段一：只有中英，阿拉伯语页面显示英文
+    const before = rows(['zh', '满力'], ['en', 'Manli']);
+    const beforeSeo = resolveFallbackSeo({
+      locale: 'ar',
+      fallbackLocale: 'en',
+      path: PATH,
+      strict: true,
+    });
+    assert.equal(beforeSeo.noindex, true);
+    assert.equal(localesWithContent(before, locales).includes('ar'), false);
+
+    // 阶段二：阿拉伯语译文补齐
+    const after = rows(['zh', '满力'], ['en', 'Manli'], ['ar', 'مانلي']);
+    const afterSeo = resolveFallbackSeo({
+      locale: 'ar',
+      fallbackLocale: null,
+      path: PATH,
+      strict: true,
+    });
+    assert.equal(afterSeo.noindex, false);
+    assert.equal(afterSeo.canonicalPath, `/ar${PATH}`);
+    assert.equal(localesWithContent(after, locales).includes('ar'), true);
+  });
+
+  test('严格模式关闭时保持第一阶段行为：可索引、canonical 指向自己', () => {
+    // 第一阶段部署要求「hreflang 与线上行为保持兼容状态」。
+    // 此时兜底可能落到中文而不是英文，noindex 反而会把一批原本正常的地址摘出索引。
+    const seo = resolveFallbackSeo({
+      locale: 'ar',
+      fallbackLocale: 'zh',
+      path: PATH,
+      strict: false,
+    });
+
+    assert.equal(seo.noindex, false);
+    assert.equal(seo.canonicalPath, `/ar${PATH}`);
+  });
+
+  test('中文页面缺中文内容时也不因为兜底而 noindex（除非确实在显示别的语言）', () => {
+    const seo = resolveFallbackSeo({
+      locale: 'zh',
+      fallbackLocale: null,
+      path: PATH,
+      strict: true,
+    });
+    assert.equal(seo.noindex, false);
+    assert.equal(seo.canonicalPath, `/zh${PATH}`);
   });
 });

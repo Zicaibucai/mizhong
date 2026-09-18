@@ -7,7 +7,7 @@ import { advanceJobAction } from '@/lib/admin/actions/sync';
 import { initialFormState } from '@/lib/admin/action-state';
 import { Alert, Field, TextArea, SubmitButton } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
-import { describeBlockedReason, describeFailureKind } from '@/lib/admin/emergency-publish';
+import { describeBlockedReason, describeFailureKind } from '@/lib/admin/emergency-labels';
 import type { EmergencyOffer } from '@/lib/admin/action-state';
 
 /**

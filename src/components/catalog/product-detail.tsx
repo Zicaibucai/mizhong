@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { Locale } from '@/lib/i18n';
+import { localeNames, type Locale } from '@/lib/i18n';
 import { format, getCatalogDict } from '@/lib/i18n/catalog';
 import type { ProductDetailView, ProductCardView } from '@/lib/catalog';
 import type { ContactView } from '@/lib/content';
@@ -265,9 +265,13 @@ export function ProductDetail({
             {/* 概要区直接给出 WhatsApp / Email / 电话，客户不必先滚到页尾 */}
             <SummaryInquiry locale={locale} contacts={contacts} />
 
-            {product.usingFallback ? (
+            {product.fallbackLocale ? (
               <p className="mt-6 border border-copper-200 bg-copper-50 px-4 py-3 text-sm leading-relaxed text-copper-800">
-                {dict.detail.fallbackNotice}
+                {/* 说清**正在显示哪一种语言**，而不是写死「英文」——
+                    回退目标将来可能变，写死会让提示开始说谎 */}
+                {format(dict.detail.fallbackNotice, {
+                  language: localeNames[product.fallbackLocale],
+                })}
               </p>
             ) : null}
           </div>

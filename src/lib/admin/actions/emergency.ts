@@ -7,16 +7,15 @@ import { writeAudit } from '@/lib/audit';
 import { getDbUnavailableState, requireAdminOrError } from '@/lib/admin/guard';
 import { formatMessage, getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import { acquireTranslationSlot } from '@/lib/translation/rate-limit';
-import { createJob } from '@/lib/translation/jobs';
-import { markExplicitlyStale, planSync } from '@/lib/translation/state';
+import { planSync } from '@/lib/translation/state';
 import {
   buildEmergencyAuditDetail,
   classifyPublishFailure,
   confirmEmergencyNeed,
-  describeBlockedReason,
   localeCoverage,
+  performEmergencyPublish,
 } from '@/lib/admin/emergency-publish';
-import { finishPagePublish, finishProductPublish } from '@/lib/admin/finish-publish';
+import { describeBlockedReason } from '@/lib/admin/emergency-labels';
 import { loadProductDraftState } from '@/lib/admin/product-draft-store';
 import { loadPageDraftState } from '@/lib/admin/page-draft-store';
 import { validateForPublish } from '@/lib/product-draft';
@@ -34,35 +33,12 @@ import type { FormState } from '@/lib/admin/action-state';
  *      （超时 / 网络 / 429 / 5xx）才放行。客户端说可以不算数；
  *   2. **校验照跑**。slug、封面、标题、区块 key 这些通不过时一律拒绝 ——
  *      应急发布绕过的是翻译，不是内容规范；
- *   3. **不伪造任何同步状态**。既不写 TranslationState，也不改 ContentRevision，
- *      更没有「假装已翻译」的路径。没译文就是没译文，后台会一直显示待同步；
+ *   3. **不伪造任何同步状态**。中文自身的版本号照常推进（中文内容确实变了），
+ *      但**各语言的**来源哈希与 sourceRevision 一律不动 —— 它们没有重新翻译过。
+ *      没译文就是没译文，后台会一直显示待同步；
  *   4. **不动其它语言的内容**。线上已有的外语原样保留（沿用上一版），
  *      没有的仍然没有 —— 不会生成假的翻译行。
  */
-
-
-/**
- * 把一个商品/页面的目标语言**明确标记为 stale**。
- *
- * 应急发布之后我们知道这些语言的译文是旧的（中文刚改过、翻译服务又挂了），
- * 这件事必须写进状态里 —— 否则「认领已有译文」的规则会把它们算成已同步，
- * 后台显示「已是最新」而内容其实是上一版中文的翻译。
- *
- * 只写 status，**不写任何哈希、不动 sourceRevision**：没有翻译发生，
- * 就不该留下「这些译文来自当前中文」的痕迹。
- */
-async function markStaleAfterEmergency(
-  db: NonNullable<ReturnType<typeof getPrisma>>,
-  entityType: string,
-  entityId: string,
-  coverage: { staleLocales: readonly string[]; missingLocales: readonly string[] },
-): Promise<void> {
-  await markExplicitlyStale(db, {
-    entityType,
-    entityId,
-    locales: [...coverage.staleLocales, ...coverage.missingLocales] as never,
-  });
-}
 
 const inputSchema = z.object({
   entityType: z.enum(['product', 'page']),
@@ -157,19 +133,16 @@ export async function emergencyPublishAction(_prev: FormState, formData: FormDat
       const coverage = await localeCoverage(db, entityType, id);
       const revision = needs.plan.revision;
 
-      const releaseId = await finishProductPublish(db, id, state.draft, {
-        userId: user.id,
-        revision,
-        jobId: null,
-        kind: 'EMERGENCY',
+      const { releaseId } = await performEmergencyPublish(db, {
+        entityType,
+        entityId: id,
         reason,
         failureKind: offer.failureKind,
-        staleLocales: coverage.staleLocales,
-        missingLocales: coverage.missingLocales,
+        revision,
+        sourceHash: needs.plan.hash,
+        coverage,
+        userId: user.id,
       });
-
-      await markStaleAfterEmergency(db, entityType, id, coverage);
-      await queueCatchUp(db, entityType, id, needs.plan.hash, user.id);
 
       await writeAudit({
         userId: user.id,
@@ -203,19 +176,16 @@ export async function emergencyPublishAction(_prev: FormState, formData: FormDat
       const coverage = await localeCoverage(db, entityType, id);
       const revision = needs.plan.revision;
 
-      const releaseId = await finishPagePublish(db, id, state.draft, {
-        userId: user.id,
-        revision,
-        jobId: null,
-        kind: 'EMERGENCY',
+      const { releaseId } = await performEmergencyPublish(db, {
+        entityType,
+        entityId: id,
         reason,
         failureKind: offer.failureKind,
-        staleLocales: coverage.staleLocales,
-        missingLocales: coverage.missingLocales,
+        revision,
+        sourceHash: needs.plan.hash,
+        coverage,
+        userId: user.id,
       });
-
-      await markStaleAfterEmergency(db, entityType, id, coverage);
-      await queueCatchUp(db, entityType, id, needs.plan.hash, user.id);
 
       await writeAudit({
         userId: user.id,
@@ -258,34 +228,6 @@ export async function emergencyPublishAction(_prev: FormState, formData: FormDat
   };
 }
 
-/**
- * 应急发布之后立刻排一个补齐任务。
- *
- * `sourceHash` 把任务钉在**刚刚发布的那一版中文**上：任务跑之前会拿当前中文再比一次，
- * 对不上就整批作废。因此「中文在故障期间又改了，旧任务把旧译文写回来」不会发生 ——
- * 那是最难查的一类内容错乱。
- *
- * 任务类型是 EMERGENCY_SYNC：它跑完之后会自动把内容正式发布一次（语言补齐版本），
- * 不需要人工逐语言审核。
- */
-async function queueCatchUp(
-  db: NonNullable<ReturnType<typeof getPrisma>>,
-  entityType: 'product' | 'page',
-  entityId: string,
-  sourceHash: string,
-  userId: string,
-): Promise<void> {
-  await createJob(db, {
-    kind: 'EMERGENCY_SYNC',
-    targets: [{ entityType, entityId, label: entityId }],
-    // 目标语言传全部非中文语言：真正要翻哪些由引擎按哈希自己判断，
-    // 这里多列出来的代价只是几次比对，而漏列一个语言就是永久缺一个语言
-    sourceHash,
-    userId,
-    // 幂等键把这批任务钉在同一版中文上，重复点击不会排出第二个补齐任务
-    idempotencyKey: `emergency:${entityType}:${entityId}:${sourceHash}`,
-  });
-}
 
 /**
  * 手动「立即重试」。

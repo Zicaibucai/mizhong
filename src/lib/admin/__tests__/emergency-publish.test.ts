@@ -7,12 +7,14 @@ import { localesWithContent, strictLocaleFallbackEnabled } from '@/lib/catalog';
 import type { TranslationSettings } from '@/lib/translation/settings';
 import { planSync, markExplicitlyStale, type LocaleSyncSummary } from '@/lib/translation/state';
 import { advanceJob, createJob, getJobProgress, type JobProgress } from '@/lib/translation/jobs';
-import { loadProductDraftState } from '@/lib/admin/product-draft-store';
+import { loadProductDraftState, saveDraft } from '@/lib/admin/product-draft-store';
+import { syncEntity } from '@/lib/translation/engine';
 import { finishProductPublish } from '@/lib/admin/finish-publish';
 import {
   buildEmergencyAuditDetail,
   classifyPublishFailure,
   localeCoverage,
+  performEmergencyPublish,
 } from '@/lib/admin/emergency-publish';
 import { createFakePrisma } from '@/lib/translation/__tests__/fake-db';
 
@@ -540,5 +542,188 @@ describe('11. 审计日志不含 API Key，也不含完整译文', () => {
     // 服务端内部使用；审计与返回值里都不该出现它
     const source = readFileSync(join(process.cwd(), 'src/lib/admin/actions/emergency.ts'), 'utf8');
     assert.equal(/apiKey/.test(source), false, '应急动作不该直接碰 apiKey');
+  });
+});
+
+
+describe('12. 版本语义：中文推进、外语不推进', () => {
+  /**
+   * 这一组是整件事的语义核心，值得把两个方向说清楚：
+   *
+   *   - 中文自己的 `ContentRevision` → **推进**（内容确实变了）；
+   *   - 各语言的 `sourceRevision` 与来源哈希 → **不推进**（它们没有重新翻译过）。
+   *
+   * 只推进一半、或者两个都推进，都无法表达「这些译文落后于新版中文」。
+   */
+  async function editChinese(fake: ReturnType<typeof createFakePrisma>, name: string) {
+    const state = await loadProductDraftState(fake.db, 'p1');
+    assert.ok(state);
+    const draft = state.draft;
+    draft.translations.zh.name = name;
+    await saveDraft(fake.db, 'p1', draft);
+  }
+
+  /** 一个只有中文的商品 —— 先正常同步一轮，让各语言都有一份「来自第 N 版中文」的记录 */
+  function chineseOnly() {
+    return createFakePrisma({
+      products: [{ id: 'p1', slug: 'manli', translations: { zh: { name: '满力', description: '中文正文' } } }],
+    });
+  }
+
+  test('应急发布前后，中文发布版本不同；外语的 translatedFromRevision 保持旧值', async () => {
+    const fake = chineseOnly();
+
+    // 先正常同步一次，让英文有一份「来自第 N 版中文」的记录
+    const first = await syncEntity(fake.db, settings, 'product', 'p1');
+    assert.ok(first);
+    const revisionAfterSync = fake.getRevision('product', 'p1')?.revision ?? 0;
+    const englishAfterSync = fake.getState('product', 'p1', 'en');
+    assert.equal(englishAfterSync?.sourceRevision, revisionAfterSync, '英文此刻是最新的');
+
+    // 管理员改中文，然后翻译服务挂了 → 应急发布
+    await editChinese(fake, '满力（应急）');
+    const plan = await planSync(fake.db, 'product', 'p1');
+    assert.ok(plan);
+    assert.equal(plan.changed, true);
+    assert.equal(plan.revision, revisionAfterSync + 1, '中文产生了新版本');
+
+    const coverage = await localeCoverage(fake.db, 'product', 'p1');
+    await performEmergencyPublish(fake.db, {
+      entityType: 'product',
+      entityId: 'p1',
+      reason: 'DeepSeek 超时',
+      failureKind: 'timeout',
+      revision: plan.revision,
+      sourceHash: plan.hash,
+      coverage,
+      userId: 'u1',
+    });
+
+    // 1) 中文自己的版本号推进了
+    const afterEmergency = fake.getRevision('product', 'p1')?.revision ?? 0;
+    assert.equal(afterEmergency, revisionAfterSync + 1, '中文自身的 sourceRevision 必须推进');
+
+    // 2) 发布记录记的就是这个新版本 —— 两者不能各说各话
+    const [release] = fake.getReleases('product', 'p1');
+    assert.equal(release.kind, 'EMERGENCY');
+    assert.equal(release.revision, afterEmergency, 'release 与 ContentRevision 必须一致');
+
+    // 3) 外语的版本号**没有**跟着动
+    const englishAfterEmergency = fake.getState('product', 'p1', 'en');
+    assert.equal(
+      englishAfterEmergency?.sourceRevision,
+      revisionAfterSync,
+      '外语没有重新翻译过，它的 translatedFromRevision 不该动',
+    );
+
+    // 4) 外语的字段哈希也没有被改 —— 不声称「这份译文来自新版中文」。
+    //    它保留着上一次正常同步时记下的哈希（那时中文还是上一版）
+    const staleFields = Object.entries(englishAfterEmergency?.fields ?? {});
+    assert.ok(staleFields.length > 0, '上一次同步的哈希记录应当还在');
+    for (const [, entry] of staleFields) {
+      assert.equal(entry.model, settings.model, '哈希仍是上一次真实翻译留下的，没有被覆盖');
+    }
+  });
+
+  test('系统能准确判断外语落后：记录里的版本号 < 中文版本号', async () => {
+    const fake = chineseOnly();
+    await syncEntity(fake.db, settings, 'product', 'p1');
+
+    await editChinese(fake, '满力（应急）');
+    const plan = await planSync(fake.db, 'product', 'p1');
+    assert.ok(plan);
+
+    const coverage = await localeCoverage(fake.db, 'product', 'p1');
+    await performEmergencyPublish(fake.db, {
+      entityType: 'product',
+      entityId: 'p1',
+      reason: 'DeepSeek 超时',
+      failureKind: 'timeout',
+      revision: plan.revision,
+      sourceHash: plan.hash,
+      coverage,
+      userId: 'u1',
+    });
+
+    const chineseRevision = fake.getRevision('product', 'p1')?.revision ?? 0;
+    const englishRevision = fake.getState('product', 'p1', 'en')?.sourceRevision ?? 0;
+    assert.ok(
+      englishRevision < chineseRevision,
+      `英文记录在 ${englishRevision} 版、中文已经到 ${chineseRevision} 版 —— 落后必须是算得出来的`,
+    );
+
+    // 并且在同步计划里也体现为待同步
+    const after = await planSync(fake.db, 'product', 'p1');
+    assert.ok(after);
+    assert.equal(after.locales.find((item) => item.locale === 'en')?.state, 'stale');
+  });
+
+  test('自动补齐之后，外语才推进到应急发布对应的中文版本', async () => {
+    const fake = chineseOnly();
+    await syncEntity(fake.db, settings, 'product', 'p1');
+
+    await editChinese(fake, '满力（应急）');
+    const plan = await planSync(fake.db, 'product', 'p1');
+    assert.ok(plan);
+
+    const coverage = await localeCoverage(fake.db, 'product', 'p1');
+    await performEmergencyPublish(fake.db, {
+      entityType: 'product',
+      entityId: 'p1',
+      reason: 'DeepSeek 超时',
+      failureKind: 'timeout',
+      revision: plan.revision,
+      sourceHash: plan.hash,
+      coverage,
+      userId: 'u1',
+    });
+
+    const emergencyRevision = fake.getRevision('product', 'p1')?.revision ?? 0;
+    assert.ok((fake.getState('product', 'p1', 'en')?.sourceRevision ?? 0) < emergencyRevision);
+
+    // 复制任务在应急发布里已经排好；推它到跑完
+    const job = fake.getReleases('product', 'p1'); // 触发一次读，确认状态
+    assert.equal(job.length, 1);
+
+    const pending = await fake.db.translationJob.findFirst({
+      where: { kind: 'EMERGENCY_SYNC' },
+      select: { id: true },
+    });
+    assert.ok(pending, '应急发布必须排一个补齐任务');
+    const advanced = await advanceJob(fake.db, settings, pending!.id, { budgetMs: 120_000 });
+    assert.ok(advanced);
+    assert.equal(advanced.progress.status, 'SUCCEEDED');
+
+    const englishFinally = fake.getState('product', 'p1', 'en');
+    assert.equal(
+      englishFinally?.sourceRevision,
+      emergencyRevision,
+      '补齐之后外语才推进到应急发布对应的那一版中文',
+    );
+    assert.equal(englishFinally?.status, 'SYNCED');
+  });
+
+  test('补齐任务的幂等键里带着中文哈希，重复应急发布不会排出第二个任务', async () => {
+    const fake = chineseOnly();
+    await editChinese(fake, '满力（应急）');
+    const plan = await planSync(fake.db, 'product', 'p1');
+    assert.ok(plan);
+    const coverage = await localeCoverage(fake.db, 'product', 'p1');
+
+    const input = {
+      entityType: 'product' as const,
+      entityId: 'p1',
+      reason: 'DeepSeek 超时',
+      failureKind: 'timeout' as const,
+      revision: plan.revision,
+      sourceHash: plan.hash,
+      coverage,
+      userId: 'u1',
+    };
+    await performEmergencyPublish(fake.db, input);
+    await performEmergencyPublish(fake.db, input);
+
+    const jobs = await fake.db.translationJob.findMany({ where: { kind: 'EMERGENCY_SYNC' } });
+    assert.equal(jobs.length, 1, '同一版中文只该有一个补齐任务');
   });
 });

@@ -102,8 +102,16 @@ export interface ProductDetailView extends ProductCardView {
   specifications: ProductSpecView[];
   specificationTable: ProductSpecTableView | null;
   variantGroups: ProductVariantGroupView[];
-  /** 当前语言缺失、已回退英文时为 true（页面据此提示，而不是显示字段名） */
+  /** 渲染出来的内容不是当前语言 —— 页面据此显示提示，而不是显示字段名 */
   usingFallback: boolean;
+  /**
+   * 实际渲染的是哪一种语言的内容；渲染的正是当前语言时为 null。
+   *
+   * 与 `usingFallback` 是同一个事实的两种表达，但 SEO 需要这一份更具体的信息：
+   * 页面要 noindex、canonical 要指向**真正承载这份内容**的那个语言地址。
+   * 只知道「回退了」而不回退到哪种语言，canonical 就只能瞎指。
+   */
+  fallbackLocale: Locale | null;
   /**
    * 这个商品**真正有内容**的语言列表，用于生成 hreflang。
    * 不含「会回退到英文」的语言 —— hreflang 声明的是内容语言，不是可访问的地址。
@@ -662,6 +670,7 @@ export async function getProductBySlug(
     // 真正在展示的语言与请求的语言不一致 —— 也就是「英文回退」。
     // 页面据此显示「该商品暂无您所选语言的内容，当前显示英文」。
     usingFallback: tr.locale !== locale,
+    fallbackLocale: tr.locale !== locale ? tr.locale : null,
     contentLocales: localesWithContent(translations, locales),
     ...priceOf(row),
   };

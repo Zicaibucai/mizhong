@@ -787,7 +787,21 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
           Object.assign(existing, update, { updatedAt: new Date() });
           return existing;
         }
-        const row = { id: nextId('ts'), ...create, createdAt: new Date(), updatedAt: new Date() };
+        // 列默认值要在这里补上：真实数据库有 DEFAULT，假库不补的话
+        // 「sourceRevision 应当是 0 而不是 undefined」这类断言会失真
+        const row = {
+          sourceRevision: 0,
+          fields: {},
+          status: 'STALE',
+          translatedAt: null,
+          translationModel: null,
+          lastError: null,
+          failureCount: 0,
+          id: nextId('ts'),
+          ...create,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
         stateRows.set(key, row);
         return row;
       },
@@ -986,11 +1000,12 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
     },
 
     /** 某个「内容 × 语言」的同步状态，用于断言「这次到底翻了没有」 */
-    getState(entityType: string, entityId: string, locale: Locale) {
-      return stateRows.get(`${entityType}:${entityId}:${locale}`) ?? null;
+    getState(entityType: string, entityId: string, locale: Locale): FakeTranslationState | null {
+      const row = stateRows.get(`${entityType}:${entityId}:${locale}`);
+      return row ? (row as unknown as FakeTranslationState) : null;
     },
 
-    getRevision(entityType: string, entityId: string) {
+    getRevision(entityType: string, entityId: string): FakeContentRevision | null {
       return revisionRows.get(`${entityType}:${entityId}`) ?? null;
     },
   };
@@ -999,6 +1014,30 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
 }
 
 export type FakeDb = ReturnType<typeof createFakePrisma>;
+
+/**
+ * 「内容 × 语言」的同步记录，测试真正会看的那几个字段。
+ *
+ * `sourceRevision` 是这一组用例的主角之一 —— 给它一个明确的类型，
+ * 免得断言里到处是 `unknown` 的强制转换，读起来也看不出在比什么。
+ */
+export interface FakeTranslationState {
+  locale: Locale;
+  /** 这份译文来自哪一版中文 */
+  sourceRevision: number;
+  /** 逐字段明细：路径 → { hash, at, model } */
+  fields: Record<string, { hash?: string; at?: string; model?: string }>;
+  status: string;
+  lastError: string | null;
+}
+
+/** 中文自身的版本记录 */
+export interface FakeContentRevision {
+  entityType: string;
+  entityId: string;
+  revision: number;
+  sourceHash: string;
+}
 
 /** 发布记录里测试真正会看的那几个字段 */
 export interface FakeRelease {

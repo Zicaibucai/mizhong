@@ -375,10 +375,15 @@ export async function recordCleared(
  * 应急发布专用。它做两件刻意的选择：
  *   - **不碰 fields**。不写哈希就等于不声称「这些译文是从当前中文来的」——
  *     那正是需求里禁止伪造的 sourceHash；
- *   - **不改 sourceRevision**。这里没有翻译发生，版本号不该往前走。
+ *   - **不改这一行的 sourceRevision**。这里是**各语言**的记录，它们没有重新翻译过
+ *     就不该说「来自新版中文」。
+ *
+ * 注意与**中文自己的**版本号区分开：中文的 `ContentRevision` 在应急发布时
+ * 照常推进（内容确实变了），于是各语言记录里的旧版本号与它之间就有了明确的大小
+ * 关系 —— 「落后」是算出来的，不是靠一个标记去断言。两者缺一不可。
  *
  * 效果：下一次同步会把整条内容重翻一遍（planSync 认这个标记），
- * 成功之后标记自然消失。
+ * 成功之后标记与版本号一起被 recordSuccess 更新。
  */
 export async function markExplicitlyStale(
   db: PrismaClient,

@@ -2,9 +2,16 @@ import type { PrismaClient } from '@prisma/client';
 import type { Locale } from '@/lib/i18n/config';
 import { locales } from '@/lib/i18n/config';
 import { getAdapter } from '@/lib/translation/adapters';
-import { planSync } from '@/lib/translation/state';
-import type { JobProgress } from '@/lib/translation/jobs';
-import type { AdminMessages } from '@/lib/admin/i18n';
+import { commitRevision, markExplicitlyStale, planSync } from '@/lib/translation/state';
+import { createJob, type JobProgress } from '@/lib/translation/jobs';
+import { finishPagePublish, finishProductPublish } from '@/lib/admin/finish-publish';
+import { loadProductDraftState } from '@/lib/admin/product-draft-store';
+import { loadPageDraftState } from '@/lib/admin/page-draft-store';
+
+/**
+ * 界面文案在 `emergency-labels.ts` —— 那个模块不引任何服务端依赖。
+ * 这里的判定与执行会一路引到 `next/headers`，客户端组件不能直接引用本模块。
+ */
 
 /**
  * 应急发布的判定与文案。
@@ -183,32 +190,101 @@ export function buildEmergencyAuditDetail(input: {
   };
 }
 
-/** 把失败类型翻成一句人话，供确认框与后台提示使用 */
-export function describeFailureKind(kind: string | null | undefined, t: AdminMessages): string {
-  switch (kind) {
-    case 'timeout':
-      return t.emergency.failureTimeout;
-    case 'network':
-      return t.emergency.failureNetwork;
-    case 'rate-limit':
-      return t.emergency.failureRateLimit;
-    case 'server':
-      return t.emergency.failureServer;
-    default:
-      return t.emergency.failureUnknown;
-  }
+
+// ---------------------------------------------------------------------------
+// 应急发布的执行序列
+//
+// 抽成普通函数（而不是留在 `'use server'` 模块里）有两个理由：
+//   - Server Action 需要请求上下文，测试调不动，于是「应急发布到底做了什么」
+//     只能靠人读代码相信 —— 而这恰恰是最需要被测试锁住的一段；
+//   - 这一段有严格的先后顺序，写在同一个地方才看得清。
+// ---------------------------------------------------------------------------
+
+export interface EmergencyPublishInput {
+  entityType: 'product' | 'page';
+  entityId: string;
+  /** 管理员填写的简短原因 */
+  reason: string;
+  /** 判定到的翻译失败类型 */
+  failureKind: string | null;
+  /** 本次钉住的中文版本号（来自应急判定时的 planSync） */
+  revision: number;
+  /** 本次发布的中文内容哈希 */
+  sourceHash: string;
+  /** 各语言的覆盖情况 */
+  coverage: LocaleCoverage;
+  userId: string | null;
 }
 
-/** 不可应急时，告诉管理员该去做什么 */
-export function describeBlockedReason(reason: EmergencyEligibility['reason'], t: AdminMessages): string {
-  switch (reason) {
-    case 'config':
-      return t.emergency.blockedConfig;
-    case 'content':
-      return t.emergency.blockedContent;
-    case 'none-needed':
-      return t.emergency.blockedNoneNeeded;
-    default:
-      return t.emergency.blockedUnknown;
+export interface EmergencyPublishOutcome {
+  releaseId: string;
+  /** 中文推进到的版本号 */
+  revision: number;
+}
+
+/**
+ * 执行一次应急发布。顺序不能换：
+ *
+ *   1. **先把中文写上线**（`kind = EMERGENCY`）—— 它同时写下新的中文发布版本
+ *      与那条 release；
+ *   2. **推进中文自己的 sourceRevision**。中文内容确实变了，版本号就该往前走。
+ *      这一步是「各语言落后于新版中文」可以被**算出来**的前提；
+ *   3. **把各语言标记为 stale** —— 只写状态，不写哈希、不动它们的 sourceRevision
+ *      （它们没有重新翻译过，声称「来自新版中文」就是伪造）；
+ *   4. **排补齐任务**，钉在刚发布的这一版中文上。
+ *
+ * 第 2 步与第 3 步的方向**相反且都不能省**：一个推进、一个不推进，缺了哪一个
+ * 「哪些语言落后」都表达不出来 —— 要么数字上看不出差距，要么变成伪造。
+ */
+export async function performEmergencyPublish(
+  db: PrismaClient,
+  input: EmergencyPublishInput,
+): Promise<EmergencyPublishOutcome> {
+  const draft =
+    input.entityType === 'product'
+      ? (await loadProductDraftState(db, input.entityId))?.draft
+      : (await loadPageDraftState(db, input.entityId))?.draft;
+  if (!draft) throw new Error(`emergency publish: ${input.entityType} ${input.entityId} not found`);
+
+  const finish = input.entityType === 'product' ? finishProductPublish : finishPagePublish;
+  const releaseId = await (finish as typeof finishProductPublish)(db, input.entityId, draft as never, {
+    userId: input.userId,
+    revision: input.revision,
+    jobId: null,
+    kind: 'EMERGENCY',
+    reason: input.reason,
+    failureKind: input.failureKind,
+    staleLocales: input.coverage.staleLocales,
+    missingLocales: input.coverage.missingLocales,
+  });
+
+  // 2. 中文自身的版本号往前走。外语的**不动**（下一步只写状态）。
+  const actualRevision = await commitRevision(db, input.entityType, input.entityId, input.sourceHash);
+  if (actualRevision !== input.revision) {
+    // 正常情况下两者相等（plan.revision 就是 stored + 1）。不相等说明并发改动过，
+    // 记一条日志便于排查 —— 不抛错，这次发布本身是成功的。
+    console.warn(
+      '[admin] emergency publish: revision drifted',
+      `expected=${input.revision}`,
+      `actual=${actualRevision}`,
+    );
   }
+
+  // 3. 各语言：只标状态，不写哈希、不动 sourceRevision
+  await markExplicitlyStale(db, {
+    entityType: input.entityType,
+    entityId: input.entityId,
+    locales: [...input.coverage.staleLocales, ...input.coverage.missingLocales],
+  });
+
+  // 4. 补齐任务钉在这一版中文上；中文再改就整批作废
+  await createJob(db, {
+    kind: 'EMERGENCY_SYNC',
+    targets: [{ entityType: input.entityType, entityId: input.entityId, label: input.entityId }],
+    sourceHash: input.sourceHash,
+    userId: input.userId,
+    idempotencyKey: `emergency:${input.entityType}:${input.entityId}:${input.sourceHash}`,
+  });
+
+  return { releaseId, revision: actualRevision };
 }

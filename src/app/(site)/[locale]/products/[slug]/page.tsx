@@ -7,13 +7,13 @@ import {
   type Locale,
 } from '@/lib/i18n';
 import { getCatalogDict } from '@/lib/i18n/catalog';
-import { getProductBySlug, listRelatedProducts } from '@/lib/catalog';
+import { getProductBySlug, listRelatedProducts, strictLocaleFallbackEnabled } from '@/lib/catalog';
 import { tryDb } from '@/lib/db';
 import { findSlugRedirect } from '@/lib/slug-history';
 import { getSiteContent } from '@/lib/content';
 import { site } from '@/lib/site-config';
 import { productJsonLd } from '@/lib/product-jsonld';
-import { resolveProductMetadata } from '@/lib/product-metadata';
+import { resolveFallbackSeo, resolveProductMetadata } from '@/lib/product-metadata';
 import { ProductDetail } from '@/components/catalog/product-detail';
 
 export const revalidate = 60;
@@ -61,18 +61,35 @@ export async function generateMetadata({
   const description = meta.description;
   const image = meta.image;
 
+  /**
+   * 这个地址现在显示的是不是**别的语言**的内容。
+   *
+   * 是的话：noindex、canonical 指向真正承载这份内容的语言地址、
+   * 并且（由上面的 contentLocales 保证）不进 hreflang —— 否则同一个英文页面
+   * 会在索引里出现十次，每次挂一个不同的语言标签。
+   */
+  const fallbackSeo = resolveFallbackSeo({
+    locale: l,
+    fallbackLocale: product.fallbackLocale,
+    path,
+    strict: strictLocaleFallbackEnabled(),
+  });
+  const canonicalUrl = `${base}${fallbackSeo.canonicalPath}`;
+
   return {
     metadataBase: new URL(base),
     title,
     description,
+    // 只有真的在显示别的语言内容时才 noindex；第二阶段翻译到位后自动消失
+    ...(fallbackSeo.noindex ? { robots: { index: false, follow: true } } : {}),
     alternates: {
-      canonical: `${base}/${l}${path}`,
+      canonical: canonicalUrl,
       languages,
     },
     openGraph: {
       type: 'website',
       locale: localeCodes[l],
-      url: `${base}/${l}${path}`,
+      url: canonicalUrl,
       siteName: site.name,
       title,
       ...(description ? { description } : {}),
