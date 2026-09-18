@@ -41,3 +41,10 @@ next-env.d.ts
 # 本地开发用上传目录（生产环境的上传目录在仓库之外，由 Nginx 提供 /media）
 /public/media/
 .local-uploads/
+
+# 排查/设计时的临时产物（2026-09-18 补：这几项曾误入版本库）
+/playwright-cli/
+.playwright-cli/
+/output/
+/k.html
+/sg.html
