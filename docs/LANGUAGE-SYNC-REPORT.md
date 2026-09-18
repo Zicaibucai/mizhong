@@ -212,19 +212,19 @@ d57dad3 feat: add the schema for site-wide translation sync, releases and jobs
 页面草稿 `src/lib/page-draft.ts`、页面草稿存储 `src/lib/admin/page-draft-store.ts`、
 slug 重定向 `src/lib/slug-history.ts`、同步中心 `src/app/(admin)/admin/(protected)/sync/*`、
 命令行 `scripts/translation-sync.ts`、迁移 `prisma/migrations/20260918140000_*/migration.sql`、
-测试 6 个文件、文档 `docs/LANGUAGE-SYNC.md`。
+测试 8 个文件、文档 `docs/LANGUAGE-SYNC.md` 与 `docs/LANGUAGE-SYNC-REPORT.md`。
 
 **修改 21 个文件**（节选）：`catalog.ts`（严格回退加开关）、`sitemap.ts`（列真实内容 + 超时）、
 `admin/actions/{products,pages,sync,translation}.ts`、`product-action-bar.tsx`、
 页面编辑器 4 个组件、`deepseek.ts`（抽出公共内核）、`fields.ts`（提示词合并成一份）。
 
-合计 63 files changed（含上述被移除的调试产物），+14521 / −209。
+合计  60 files changed, 12216 insertions(+), 235 deletions(-)（相对 origin/main）。
 
 ---
 
 ## 8. TypeScript / lint / 测试 / build 结果
 
-全部在最终提交 `ff1aeef` 上重跑：
+全部在最终提交 `c0502de`（报告本身的那次提交除外）上重跑：
 
 | 检查 | 结果 |
 | --- | --- |
