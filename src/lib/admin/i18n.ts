@@ -305,6 +305,8 @@ const en = {
     dbUnavailable:
       'The database is unavailable, so the change was not applied. Please check DATABASE_URL and the database service.',
     saveFailed: 'Save failed. Please try again later.',
+    networkFailed:
+      'The request did not reach the server. Check your connection and try again — nothing was changed.',
     deleteFailed: 'Delete failed. The record may no longer exist.',
     operationFailed: 'Operation failed. Please try again later.',
     // Sign in
@@ -661,6 +663,7 @@ const zh: AdminMessages = {
     sessionExpired: '登录状态已过期，请重新登录后再试。',
     dbUnavailable: '数据库不可用，本次修改未生效。请检查 DATABASE_URL 与数据库服务。',
     saveFailed: '保存失败，请稍后重试。',
+    networkFailed: '请求没有送到服务器。请检查网络后重试 —— 当前内容没有被改动。',
     deleteFailed: '删除失败，记录可能已不存在。',
     operationFailed: '操作失败，请稍后重试。',
     dbNotConfiguredLogin: '数据库尚未配置，暂时无法登录。请联系系统管理员。',

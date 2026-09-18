@@ -106,6 +106,35 @@ export interface ProductDetailView extends ProductCardView {
   usingFallback: boolean;
 }
 
+/**
+ * 草稿预览用取数：正式 slug 找不到时，再按**草稿里的 slug** 找一次。
+ *
+ * 为什么需要：后台的「预览产品」链接用的是编辑器里**当前**的 slug（草稿里的那个），
+ * 而 `getProductBySlug` 查的是线上行 `Product.slug`。于是一旦在草稿里改了网址后缀，
+ * 预览按钮就会 404 —— 恰恰是最需要预览的时候。
+ *
+ * 只在预览路由使用：正式详情页绝不能按草稿 slug 命中商品，
+ * 否则一个还没发布的地址就会暴露线上内容。
+ */
+export async function getProductForPreview(
+  slug: string,
+  locale: Locale,
+): Promise<ProductDetailView | null> {
+  const direct = await getProductBySlug(slug, locale, { includeUnpublished: true });
+  if (direct) return direct;
+
+  const match = await tryDb((db) =>
+    db.product.findFirst({
+      // PostgreSQL 的 JSON 路径查询：draftData.basic.slug
+      where: { draftData: { path: ['basic', 'slug'], equals: slug } },
+      select: { slug: true },
+    }),
+  );
+  if (!match) return null;
+
+  return getProductBySlug(match.slug, locale, { includeUnpublished: true });
+}
+
 export interface ProductListResult {
   items: ProductCardView[];
   total: number;

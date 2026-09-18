@@ -61,16 +61,30 @@ export function AssetFileTools({
       return;
     }
 
-    const outcome = await uploadMediaFile(file, (percent) => patch({ percent })).promise;
+    // 上传与随后的绑定都可能因为网络中断而抛异常；不接住的话 busy 状态会一直转下去，
+    // 既没有错误提示也没有办法重试（这个函数由 onClick 直接调用，没有 transition 兜底）。
+    let outcome: Awaited<ReturnType<typeof uploadMediaFile>['promise']>;
+    try {
+      outcome = await uploadMediaFile(file, (percent) => patch({ percent })).promise;
+    } catch {
+      patch({ busy: null, error: t.actions.networkFailed });
+      return;
+    }
     if (!outcome.ok) {
       patch({ busy: null, error: describeUploadError(outcome.code, t) });
       return;
     }
 
-    const result =
-      kind === 'replace'
-        ? await replaceAssetFileAction({ assetId: id, sourceAssetId: outcome.asset.id })
-        : await setAssetPosterAction({ assetId: id, posterAssetId: outcome.asset.id });
+    let result: { status: string; message?: string };
+    try {
+      result =
+        kind === 'replace'
+          ? await replaceAssetFileAction({ assetId: id, sourceAssetId: outcome.asset.id })
+          : await setAssetPosterAction({ assetId: id, posterAssetId: outcome.asset.id });
+    } catch {
+      patch({ busy: null, error: t.actions.networkFailed });
+      return;
+    }
 
     if (result.status === 'error') {
       patch({ busy: null, error: result.message ?? t.actions.saveFailed });
@@ -83,7 +97,13 @@ export function AssetFileTools({
 
   async function removePoster() {
     setTask({ busy: 'poster', percent: 0, error: null, success: null });
-    const result = await setAssetPosterAction({ assetId: id, posterAssetId: null });
+    let result: { status: string; message?: string };
+    try {
+      result = await setAssetPosterAction({ assetId: id, posterAssetId: null });
+    } catch {
+      patch({ busy: null, error: t.actions.networkFailed });
+      return;
+    }
     if (result.status === 'error') {
       patch({ busy: null, error: result.message ?? t.actions.saveFailed });
       return;

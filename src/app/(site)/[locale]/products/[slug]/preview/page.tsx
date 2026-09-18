@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { defaultLocale, isLocale, type Locale } from '@/lib/i18n';
-import { getProductBySlug, listRelatedProducts } from '@/lib/catalog';
+import { getProductForPreview, listRelatedProducts } from '@/lib/catalog';
 import { getSiteContent } from '@/lib/content';
 import { getCurrentUser } from '@/lib/auth/session';
 import { ProductDetail } from '@/components/catalog/product-detail';
@@ -15,7 +15,8 @@ import { ProductDetail } from '@/components/catalog/product-detail';
  * 因此这里单开一条路由：
  *   - 只对已登录管理员可见，其余人一律 notFound()（与不存在无法区分，不泄露草稿存在性）；
  *   - 与正式详情页**共用同一个 ProductDetail 组件**，版面完全一致；
- *   - `force-dynamic` + noindex：草稿不参与索引，也不会被 ISR 缓存。
+ *   - `force-dynamic` + noindex：草稿不参与索引，也不会被 ISR 缓存；
+ *   - 网址后缀改过时按草稿里的 slug 也能找到（见 `getProductForPreview`）。
  */
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,8 @@ export default async function ProductPreviewPage({
   if (!user) notFound();
 
   const l: Locale = isLocale(locale) ? locale : defaultLocale;
-  const product = await getProductBySlug(slug, l, { includeUnpublished: true });
+  // 用「正式 slug → 草稿 slug」两级查找：编辑器里改过网址后缀后，预览链接依然有效
+  const product = await getProductForPreview(slug, l);
   if (!product) notFound();
 
   const [content, related] = await Promise.all([

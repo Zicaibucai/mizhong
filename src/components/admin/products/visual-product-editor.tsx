@@ -99,7 +99,14 @@ function VisualMediaGallery({
     setError(null);
     setOrder(optimistic);
     startTransition(async () => {
-      const result = await task();
+      let result: { status: string; message?: string };
+      try {
+        result = await task();
+      } catch {
+        setError(t.actions.networkFailed);
+        setOrder(items);
+        return;
+      }
       if (result.status === 'error') {
         setError(result.message ?? t.actions.saveFailed);
         setOrder(items);
@@ -132,7 +139,13 @@ function VisualMediaGallery({
     if (!current) return;
     setError(null);
     startTransition(async () => {
-      const result = await setProductAssetRoleAction({ productId, assetId: current.assetId, role });
+      let result: { status: string; message?: string };
+      try {
+        result = await setProductAssetRoleAction({ productId, assetId: current.assetId, role });
+      } catch {
+        setError(t.actions.networkFailed);
+        return;
+      }
       if (result.status === 'error') setError(result.message ?? t.actions.saveFailed);
       else router.refresh();
     });

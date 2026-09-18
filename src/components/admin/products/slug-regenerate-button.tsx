@@ -50,11 +50,20 @@ export function SlugRegenerateButton({
     if (!slugInput) return;
 
     startTransition(async () => {
-      const result = await generateSlugAction({
-        productId,
-        englishName: nameInput?.value ?? '',
-        chineseName: zhNameInput?.value ?? '',
-      });
+      // 同 TranslateButton：Server Action 调用会因网络问题抛异常，
+      // 不接住就会把整个编辑器炸成白屏。
+      let result: Awaited<ReturnType<typeof generateSlugAction>>;
+      try {
+        result = await generateSlugAction({
+          productId,
+          englishName: nameInput?.value ?? '',
+          chineseName: zhNameInput?.value ?? '',
+        });
+      } catch {
+        setFailed(true);
+        setMessage(t.actions.networkFailed);
+        return;
+      }
 
       if (result.status === 'error') {
         setFailed(true);

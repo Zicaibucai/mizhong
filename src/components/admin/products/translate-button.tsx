@@ -98,12 +98,21 @@ export function TranslateButton({
     }
 
     startTransition(async () => {
-      const result = await translateProductContentAction({
-        source,
-        targets,
-        existing,
-        overwrite,
-      });
+      /**
+       * 必须包 try/catch。
+       *
+       * Server Action 的调用是一次 fetch：网络中断、服务器重启、代理超时都会让它**抛异常**。
+       * 抛在 transition 里就是未处理的 Promise 拒绝，React 会把它升级成渲染错误，
+       * 整个编辑器被替换成 Next 的「Application error」白屏 —— 用户当前没保存的输入一起没了。
+       * 翻译失败可以重来，白屏不行。
+       */
+      let result: Awaited<ReturnType<typeof translateProductContentAction>>;
+      try {
+        result = await translateProductContentAction({ source, targets, existing, overwrite });
+      } catch {
+        setNotice({ kind: 'error', text: t.actions.networkFailed });
+        return;
+      }
 
       if (result.status === 'error') {
         // 失败时**什么都不改** —— 表单保持原样，用户可以继续手工编辑

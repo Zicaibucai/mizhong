@@ -214,7 +214,15 @@ export function GalleryEditor({
     setNotice(null);
     setOrder(optimistic);
     startTransition(async () => {
-      const result = await task();
+      // 网络中断会让 action 抛异常；不接住就是整个编辑器白屏。
+      let result: FormState;
+      try {
+        result = await task();
+      } catch {
+        setError(t.actions.networkFailed);
+        setOrder(items);
+        return;
+      }
       if (result.status === 'error') {
         setError(result.message ?? null);
         setOrder(items);
