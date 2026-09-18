@@ -118,7 +118,7 @@ export function ProductCard({
         <div className="mt-auto flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-navy-100 pt-4 text-sm font-medium">
           <span className="inline-flex items-center gap-1.5 text-copper-700">
             {dict.list.viewDetails}
-            <ArrowRightIcon className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            <ArrowRightIcon className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:-scale-x-100 rtl:group-hover:-translate-x-0.5" />
           </span>
           <Link
             href={`${href}#inquiry`}

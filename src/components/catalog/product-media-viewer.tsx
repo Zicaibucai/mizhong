@@ -137,19 +137,26 @@ export function ProductMediaViewer({
 
                   {slides.length > 1 ? (
                     <>
+                      {/*
+                        用**逻辑方向**（start/end）而不是 left/right：
+                        Tailwind 会把 start-* 编译成 inset-inline-start，
+                        于是阿拉伯语（dir=rtl）下「上一张」自动跑到右侧、「下一张」到左侧，
+                        与阅读方向一致。图标本身也用 rtl: 镜像一下，
+                        否则箭头指向会与它的实际作用相反。
+                      */}
                       <a
                         href={`#${step(index, -1)}`}
                         aria-label={dict.detail.mediaPrev}
-                        className={cn(arrowClass, 'left-3')}
+                        className={cn(arrowClass, 'start-3')}
                       >
-                        <ChevronLeftIcon className="h-5 w-5" />
+                        <ChevronLeftIcon className="h-5 w-5 rtl:-scale-x-100" />
                       </a>
                       <a
                         href={`#${step(index, 1)}`}
                         aria-label={dict.detail.mediaNext}
-                        className={cn(arrowClass, 'right-3')}
+                        className={cn(arrowClass, 'end-3')}
                       >
-                        <ChevronRightIcon className="h-5 w-5" />
+                        <ChevronRightIcon className="h-5 w-5 rtl:-scale-x-100" />
                       </a>
                     </>
                   ) : null}

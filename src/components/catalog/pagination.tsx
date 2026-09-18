@@ -60,12 +60,12 @@ export function Pagination({
             href={withQuery(basePath, { q: query, category, sort, page: prevPage })}
             className={cn(base, enabled)}
           >
-            <ArrowRightIcon className="h-4 w-4 rotate-180" />
+            <ArrowRightIcon className="h-4 w-4 rotate-180 rtl:rotate-0" />
             {dict.list.prev}
           </Link>
         ) : (
           <span className={cn(base, disabled)} aria-hidden="true">
-            <ArrowRightIcon className="h-4 w-4 rotate-180" />
+            <ArrowRightIcon className="h-4 w-4 rotate-180 rtl:rotate-0" />
             {dict.list.prev}
           </span>
         )}
@@ -76,12 +76,12 @@ export function Pagination({
             className={cn(base, enabled)}
           >
             {dict.list.next}
-            <ArrowRightIcon className="h-4 w-4" />
+            <ArrowRightIcon className="h-4 w-4 rtl:rotate-180" />
           </Link>
         ) : (
           <span className={cn(base, disabled)} aria-hidden="true">
             {dict.list.next}
-            <ArrowRightIcon className="h-4 w-4" />
+            <ArrowRightIcon className="h-4 w-4 rtl:rotate-180" />
           </span>
         )}
       </div>

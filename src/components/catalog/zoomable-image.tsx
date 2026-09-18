@@ -148,7 +148,7 @@ export function ZoomableImage({
       {canHover ? (
         <span
           ref={badgeRef}
-          className="pointer-events-none absolute bottom-3 left-3 z-[2] inline-flex items-center gap-1.5 bg-navy-950/70 px-2.5 py-1.5 text-[0.68rem] font-medium text-ivory-50 transition-opacity duration-200"
+          className="pointer-events-none absolute bottom-3 start-3 z-[2] inline-flex items-center gap-1.5 bg-navy-950/70 px-2.5 py-1.5 text-[0.68rem] font-medium text-ivory-50 transition-opacity duration-200"
         >
           <ZoomIcon className="h-3.5 w-3.5" />
           {hint}

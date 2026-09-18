@@ -258,7 +258,7 @@ export function ProductDetail({
                 className="pv-btn pv-btn-solid h-12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
               >
                 {dict.detail.sendInquiry}
-                <ArrowRightIcon className="ml-2 h-4 w-4" />
+                <ArrowRightIcon className="ms-2 h-4 w-4 rtl:-scale-x-100" />
               </Link>
             </div>
 
