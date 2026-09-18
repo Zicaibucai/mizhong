@@ -47,6 +47,211 @@ enum PublishStatus {
 }
 
 // ---------------------------------------------------------------------------
+// 译文同步（全站统一）
+//
+// 中文是唯一母版。每个「内容 × 语言」有一条 TranslationState，记录该语言的译文
+// 是从**哪一版中文**翻出来的、以及**逐个字段**的同步明细。
+//
+// 这一层刻意做成通用的：商品、页面、首页区块、公司资料、联系方式、导航、
+// 类目、素材 alt 文字……全部共用同一张表、同一套状态机、同一个后台页面。
+// 每加一种内容类型就加一张表，会让「全站同步」变成 N 份彼此不同步的实现。
+// ---------------------------------------------------------------------------
+
+/// 一个「内容 × 语言」的译文同步状态
+enum TranslationStatus {
+  /// 译文与当前中文一致
+  SYNCED
+  /// 中文改过了，译文待重新生成
+  STALE
+  /// 正在翻译（用于并发互斥与进度展示）
+  TRANSLATING
+  /// 上次翻译失败，等待重试
+  FAILED
+}
+
+/// 中文内容的版本号。
+///
+/// 只用于「这批译文是从哪一版中文翻出来的」这一件事：中文内容一变，版本号 +1，
+/// 所有语言的译文随即变成 STALE。整数而非哈希，是为了在后台能直接写「中文版本 3」，
+/// 也为了发布时能一眼看出「所有批次是不是同一个 sourceRevision」。
+model ContentRevision {
+  entityType String
+  entityId   String
+  /// 从 1 开始，每次中文内容真正变化时 +1
+  revision   Int      @default(1)
+  /// 当前中文内容的哈希，用来判断「到底变没变」——没变就不该 +1
+  sourceHash String
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@id([entityType, entityId])
+}
+
+/// 一条「内容 × 语言」的同步记录。字段级明细存在 `fields` JSON 里。
+///
+/// `fields` 的形状：`{ [字段路径]: { hash, status, at, model } }`。
+/// 路径是**稳定的字符串**（`translations.name`、
+/// `specTable.rows.<行id>.cells.<列id>`），不是数组下标 ——
+/// 增删一行不会让整份状态错位（需求 8.4）。
+model TranslationState {
+  id         String @id @default(cuid())
+  entityType String
+  entityId   String
+  locale     Locale
+
+  /// 本语言译文对应的中文版本
+  sourceRevision Int  @default(0)
+  /// 逐字段明细
+  fields         Json @default("{}")
+
+  /// 汇总状态（只要有一个字段不是 SYNCED，这里就不是 SYNCED）
+  status           TranslationStatus @default(STALE)
+  translatedAt     DateTime?
+  translationModel String?
+  /// 最近一次失败的原因（已归类，不含 Key、原文或译文）
+  lastError        String?
+  /// 连续失败次数，用于退避与「只重试失败内容」
+  failureCount     Int               @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([entityType, entityId, locale])
+  @@index([entityType, status])
+  @@index([entityType, entityId])
+}
+
+/// 一次成功发布的记录。
+///
+/// 存在的意义是回答「这一版线上内容里，中文和各语言是不是同一次发布出去的」。
+/// 商品与页面各自的版本快照都带上 `releaseId`，因此回滚时能整组还原。
+enum ReleaseStatus {
+  PUBLISHED
+  FAILED
+}
+
+model ContentRelease {
+  id         String @id @default(cuid())
+  entityType String
+  entityId   String
+  /// 本次发布钉住的中文版本（所有批次必须来自这一版，需求 8.5）
+  revision   Int
+
+  /// 实际参与本次发布的语言（含中文）
+  locales Locale[]
+  /// 发布摘要：每种语言翻了多少字段、用的哪个模型、耗时
+  result  Json?
+
+  status        ReleaseStatus @default(PUBLISHED)
+  model         String?
+  publishedById String?
+  publishedBy   User?         @relation(fields: [publishedById], references: [id], onDelete: SetNull)
+  publishedAt   DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+
+  @@index([entityType, entityId, publishedAt])
+  @@index([publishedById])
+}
+
+enum TranslationJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  /// 部分成功：成功的已保留，失败的可以只重试那一部分
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum TranslationJobKind {
+  /// 发布时自带的同步：中文变了也要一起上线
+  PUBLISH
+  /// 后台对单条内容点「同步」
+  SYNC_ONE
+  /// 后台「同步全部已发布中文内容」
+  SYNC_ALL
+  /// 只重试失败项
+  RETRY_FAILED
+}
+
+enum TranslationItemStatus {
+  PENDING
+  RUNNING
+  SYNCED
+  FAILED
+  /// 不需要处理（中文源为空、或该语言无需写入）
+  SKIPPED
+}
+
+/// 长任务。
+///
+/// 首页与全站内容的翻译可能超过单个 Server Action 的时限，因此**不**把它塞进
+/// 一个长时间挂着的请求里：任务与进度落在数据库，每次推进只处理一小批（远低于 60 秒），
+/// 关掉浏览器不会损坏任何东西，重新打开继续看到进度（需求 8）。
+model TranslationJob {
+  id     String               @id @default(cuid())
+  kind   TranslationJobKind
+  status TranslationJobStatus @default(PENDING)
+
+  /// 幂等键：同一个键只创建一个任务，重复点击不会重复翻译（需求 7.9）
+  idempotencyKey String? @unique
+  /// 全站同步时的当前游标（已处理到第几条内容）
+  scopeCursor    Int     @default(0)
+
+  totalItems     Int @default(0)
+  completedItems Int @default(0)
+  failedItems    Int @default(0)
+  requestCount   Int @default(0)
+  /// token 估算：把原文与译文的字符数按经验系数折算，用于后台对账
+  tokenEstimate  Int @default(0)
+
+  /// 断点：下一个待处理的项在 items 里的序号
+  cursor    Int     @default(0)
+  lastError String?
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+  updatedAt  DateTime  @updatedAt
+
+  items TranslationJobItem[]
+
+  @@index([status, createdAt])
+  @@index([kind, createdAt])
+  @@index([createdById])
+}
+
+/// 任务里的一个「内容 × 语言」工作项。逐个语言独立记录成功/失败，
+/// 因此部分失败时成功的部分**在数据库里已经落定**，重试只处理 FAILED 的那些。
+model TranslationJobItem {
+  id    String         @id @default(cuid())
+  jobId String
+  job   TranslationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  entityType String
+  entityId   String
+  locale     Locale
+  /// 该工作项对应的中文版本；与 job 一起保证「同一批次的来源一致」
+  revision   Int
+
+  status        TranslationItemStatus @default(PENDING)
+  attempts      Int                   @default(0)
+  lastError     String?
+  requestCount  Int                   @default(0)
+  tokenEstimate Int                   @default(0)
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@unique([jobId, entityType, entityId, locale])
+  @@index([jobId, status])
+  @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
 // 管理员与登录会话
 // ---------------------------------------------------------------------------
 
@@ -69,6 +274,9 @@ model User {
   sessions        Session[]
   auditLogs       AuditLog[]
   productVersions ProductVersion[]
+  pageVersions    PageVersion[]
+  releases        ContentRelease[]
+  translationJobs TranslationJob[]
 }
 
 /// 登录会话（仅存储令牌哈希，原始令牌只存在于 HttpOnly Cookie 中）
@@ -235,10 +443,39 @@ model Page {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
+  /// 编辑草稿，形状与 PageVersion.snapshot 相同（见 src/lib/page-draft.ts）。
+  /// 与商品同一套做法：null 表示没有待发布的改动，此时编辑器直接编辑线上内容。
+  draftData      Json?
+  draftUpdatedAt DateTime?
+
   translations PageTranslation[]
   blocks       PageBlock[]
+  versions     PageVersion[]
 
   @@index([status])
+}
+
+/// 一个页面的历史版本（含首页）。
+///
+/// 与 ProductVersion 同一形状、同一套「发布留一版、回滚产生新版本」的规则，
+/// 只是快照的内容是页面 + 它的全部区块（见 src/lib/page-draft.ts）。
+/// `releaseId` 把这一版与同一次发布的中文、各语言串在一起，回滚时整组还原。
+model PageVersion {
+  id        String             @id @default(cuid())
+  pageId    String
+  page      Page               @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  kind      ProductVersionKind
+  /// 该版本的完整内容快照（页面信息 + 全部区块，含全部语言）
+  snapshot  Json
+  releaseId String?
+  note      String?
+
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([pageId, createdAt])
+  @@index([createdById])
 }
 
 model PageTranslation {
@@ -449,10 +686,10 @@ model Product {
   draftUpdatedAt DateTime?
 
   /// 发布后的可配置规格/颜色表，列和单元格内容按三种语言保存
-  specTable      Json?
+  specTable Json?
 
   /// 发布后的型号/颜色选项组；每个选项可绑定一张缩略图
-  variantGroups  Json?
+  variantGroups Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -536,7 +773,8 @@ model ProductSpecificationTranslation {
   @@unique([specificationId, locale])
 }
 
-/// 版本来源：发布时自动留下的，还是管理员手动存档的
+/// 版本来源：发布时自动留下的，还是管理员手动存档的。
+/// 商品（ProductVersion）与页面（PageVersion）共用这一对取值。
 enum ProductVersionKind {
   PUBLISHED
   MANUAL
@@ -544,13 +782,10 @@ enum ProductVersionKind {
 
 /**
  * 商品的历史版本。
- *
  * 每次「发布」自动留一版，管理员也可以随时手动存档一版。每个商品**最多保留 3 个**，
  * 超出后最早的被挤掉（见 src/lib/admin/actions/products.ts 的 trimVersions）。
- *
  * 自动保存本身**不**产生版本 —— 否则几秒一存，三个名额只会是最近几秒的连续快照，
  * 回滚毫无意义。
- *
  * 恢复一个版本时，内容写回 Product.draftData 而**不是**直接改线上：
  * 恢复后它成为「待发布的改动」，确认无误再点发布，误点也能再退回去。
  */
@@ -563,9 +798,12 @@ model ProductVersion {
   snapshot  Json
   /// 手动存档时可填备注
   note      String?
+  /// 这次发布对应的 ContentRelease.id。同一版线上内容的中文与各语言共用它，
+  /// 因此「这一版是不是同一次发布出去的」可以直接查证。
+  releaseId String?
 
   createdById String?
-  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 
   @@index([productId, createdAt])
