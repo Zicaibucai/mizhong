@@ -8,6 +8,7 @@ import { getAdminMessagesForRequest, type AdminMessages } from '@/lib/admin/i18n
 import { translateWithDeepSeek, type TranslationErrorKind } from '@/lib/translation/deepseek';
 import {
   parseTranslationRequest,
+  planTranslation,
   translatableFieldSchema,
   type TranslatableField,
   type TranslationRequest,
@@ -59,6 +60,8 @@ export type TranslateActionResult =
       fieldCount: number;
       attempts: number;
     }
+  /** 这次没有任何可写位置：没有调用 DeepSeek、没有占用并发额度、没有消耗 token */
+  | { status: 'empty'; skippedCount: number; message: string }
   | { status: 'error'; reason: TranslateErrorReason; message: string };
 
 export type TranslateErrorReason =
@@ -122,6 +125,37 @@ export async function translateProductContentAction(
     return { status: 'error', reason, message: describeError(reason, t) };
   }
 
+  const existing = normalizeExisting(input.existing);
+  const overwrite = input.overwrite === true;
+
+  /**
+   * **花钱之前**先算清楚这次能写什么。
+   *
+   * 典型场景：刚翻完一遍、又点了一次、没勾覆盖 —— 之前的实现照样会打通 DeepSeek，
+   * 拿到译文再一条条丢掉，白花一次调用的时间和 token。现在在这里就返回。
+   *
+   * 这段判断必须留在服务端：前端可以据此提前提示，但前端不可信。
+   * 因此它排在「取数据库 / 占并发额度 / 调 API」之前 —— 一个可写位置都没有时，
+   * 这三件事一件都不发生。
+   */
+  const plan = planTranslation(parsed.data.source, existing, parsed.data.targets, { overwrite });
+  if (plan.writableCount === 0) {
+    return {
+      status: 'empty',
+      skippedCount: plan.skippedCount,
+      message: t.translation.nothingToTranslate,
+    };
+  }
+
+  // 只把「确实需要翻译的字段」与「确实有可写位置的语言」送出去，
+  // 既减少请求体积，也避免为用不上的译文付钱。
+  const request: TranslationRequest = {
+    source: Object.fromEntries(
+      plan.fields.map((field) => [field, parsed.data.source[field] as string]),
+    ),
+    targets: plan.targets,
+  };
+
   const db = getPrisma();
   if (!db) return { status: 'error', reason: 'invalid', message: getDbUnavailableState(t).message ?? '' };
 
@@ -137,11 +171,27 @@ export async function translateProductContentAction(
 
   const startedAt = Date.now();
   try {
-    return await runTranslation(db, parsed.data, input, t, user, startedAt);
+    return await runTranslation(db, request, existing, overwrite, t, user, startedAt);
   } finally {
     // 必须释放，否则并发计数只增不减，最终把翻译彻底锁死
     slot.release();
   }
+}
+
+/** 把前端传来的「目标语言已有内容」按字段白名单过滤一遍 */
+function normalizeExisting(
+  raw: Record<string, Record<string, string>> | undefined,
+): Record<string, Partial<Record<TranslatableField, string>>> {
+  const clean: Record<string, Partial<Record<TranslatableField, string>>> = {};
+  for (const [locale, fields] of Object.entries(raw ?? {})) {
+    const kept: Partial<Record<TranslatableField, string>> = {};
+    for (const [field, value] of Object.entries(fields)) {
+      const parsedField = translatableFieldSchema.safeParse(field);
+      if (parsedField.success && typeof value === 'string') kept[parsedField.data] = value;
+    }
+    clean[locale] = kept;
+  }
+  return clean;
 }
 
 /**
@@ -151,7 +201,8 @@ export async function translateProductContentAction(
 async function runTranslation(
   db: NonNullDb,
   request: TranslationRequest,
-  input: TranslateFieldInput,
+  existing: Record<string, Partial<Record<TranslatableField, string>>>,
+  overwrite: boolean,
   t: AdminMessages,
   user: { id: string; email: string },
   startedAt: number,
@@ -185,20 +236,8 @@ async function runTranslation(
   }
 
   // 合并规则见 mergeTranslations 的注释；这里只需要它来算「哪些被跳过」
-  const existing: Record<string, Partial<Record<TranslatableField, string>>> = {};
-  for (const [locale, fields] of Object.entries(input.existing ?? {})) {
-    const clean: Partial<Record<TranslatableField, string>> = {};
-    for (const [field, value] of Object.entries(fields)) {
-      const parsedField = translatableFieldSchema.safeParse(field);
-      if (parsedField.success && typeof value === 'string') clean[parsedField.data] = value;
-    }
-    existing[locale] = clean;
-  }
-
   const skipped: { locale: string; field: TranslatableField }[] = [];
   const applied: Record<string, Partial<Record<TranslatableField, string>>> = {};
-  const overwrite = input.overwrite === true;
-
   for (const [locale, fields] of Object.entries(result.values)) {
     for (const [field, value] of Object.entries(fields) as [TranslatableField, string][]) {
       // 原文为空的位置不接受译文（模型有时会自行补全）

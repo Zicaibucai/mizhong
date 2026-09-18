@@ -6,6 +6,7 @@ import {
   mergeTranslations,
   parseTranslationRequest,
   parseTranslationResponse,
+  planTranslation,
 } from '@/lib/translation/fields';
 import { translateWithDeepSeek } from '@/lib/translation/deepseek';
 import { maskApiKey } from '@/lib/translation/settings';
@@ -319,5 +320,84 @@ describe('API Key 脱敏', () => {
 
   test('空 Key 返回空串', () => {
     assert.equal(maskApiKey(''), '');
+  });
+});
+
+describe('翻译前置判断（决定要不要花钱）', () => {
+  const source = { name: '挂钩', description: '说明' };
+  const targets = ['en', 'ja'] as const;
+
+  test('所有目标位置都为空 → 全部字段都需要翻译', () => {
+    const plan = planTranslation(source, {}, [...targets], { overwrite: false });
+    assert.deepEqual(plan.fields.sort(), ['description', 'name']);
+    assert.deepEqual(plan.targets.sort(), ['en', 'ja']);
+    assert.equal(plan.writableCount, 4);
+    assert.equal(plan.skippedCount, 0);
+  });
+
+  test('所有目标位置都有内容且未勾选覆盖 → 可写位置为 0（不会调 DeepSeek）', () => {
+    const existing = {
+      en: { name: 'Hook', description: 'Desc' },
+      ja: { name: 'フック', description: '説明' },
+    };
+    const plan = planTranslation(source, existing, [...targets], { overwrite: false });
+    assert.deepEqual(plan.fields, []);
+    assert.deepEqual(plan.targets, []);
+    assert.equal(plan.writableCount, 0);
+    assert.equal(plan.skippedCount, 4);
+  });
+
+  test('勾选覆盖后，已有内容的位置重新变为可写', () => {
+    const existing = {
+      en: { name: 'Hook', description: 'Desc' },
+      ja: { name: 'フック', description: '説明' },
+    };
+    const plan = planTranslation(source, existing, [...targets], { overwrite: true });
+    assert.equal(plan.writableCount, 4);
+    assert.equal(plan.skippedCount, 0);
+  });
+
+  test('只有部分字段可写 → 只送这些字段出去', () => {
+    const existing = { en: { name: 'Hook' }, ja: { name: 'フック' } };
+    const plan = planTranslation(source, existing, [...targets], { overwrite: false });
+    assert.deepEqual(plan.fields, ['description']);   // name 两个语言都有内容
+    assert.deepEqual(plan.targets.sort(), ['en', 'ja']);
+    assert.equal(plan.writableCount, 2);
+    assert.equal(plan.skippedCount, 2);
+  });
+
+  test('只有部分语言可写 → 只送这些语言出去', () => {
+    const existing = { en: { name: 'Hook', description: 'Desc' } };
+    const plan = planTranslation(source, existing, [...targets], { overwrite: false });
+    assert.deepEqual(plan.targets, ['ja']);
+    assert.equal(plan.writableCount, 2);
+    assert.equal(plan.skippedCount, 2);
+  });
+
+  test('中文源字段整体为空 → 没有任何可写位置（不会调 DeepSeek）', () => {
+    const plan = planTranslation({}, {}, [...targets], { overwrite: false });
+    assert.equal(plan.writableCount, 0);
+    assert.deepEqual(plan.fields, []);
+  });
+
+  test('空白字符串不算「有原文」——调用方已在 parseTranslationRequest 里剔除，这里同样不产生可写位置', () => {
+    const plan = planTranslation({ name: '   ' }, {}, [...targets], { overwrite: true });
+    // planTranslation 只认 key 是否存在；纯空白由 parseTranslationRequest 过滤。
+    // 这条测试记录这个分工，避免以后有人在两处都改一半。
+    assert.equal(plan.writableCount, 2);
+  });
+
+  test('目标位置是纯空白 → 视为空白，可以写入', () => {
+    const plan = planTranslation(source, { en: { name: '   ' } }, ['en'], { overwrite: false });
+    assert.equal(plan.writableCount, 2);
+    assert.deepEqual(plan.fields.sort(), ['description', 'name']);
+  });
+
+  test('11 种语言全都有内容时，可写位置为 0', () => {
+    const all: Record<string, Record<string, string>> = {};
+    for (const l of DEFAULT_TARGET_LOCALES) all[l] = { name: 'x', description: 'y' };
+    const plan = planTranslation(source, all, DEFAULT_TARGET_LOCALES, { overwrite: false });
+    assert.equal(plan.writableCount, 0);
+    assert.equal(plan.skippedCount, DEFAULT_TARGET_LOCALES.length * 2);
   });
 });

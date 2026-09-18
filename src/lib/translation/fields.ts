@@ -266,3 +266,66 @@ export function mergeTranslations(
 
   return { applied, skipped, unexpected };
 }
+
+// ---------------------------------------------------------------------------
+// 翻译前置判断：先算清楚「这次到底能写什么」，再决定要不要花钱
+// ---------------------------------------------------------------------------
+
+export interface TranslationPlan {
+  /** 真正需要翻译的字段：至少存在一个可写入的目标位置 */
+  fields: TranslatableField[];
+  /** 至少有一个可写字段的目标语言 */
+  targets: Locale[];
+  /** 会被写入的位置总数，用于日志与提示 */
+  writableCount: number;
+  /** 因为目标位置已有内容而被跳过的位置数 */
+  skippedCount: number;
+}
+
+/**
+ * 计算这次翻译实际能写入哪些位置。
+ *
+ * 规则与 `mergeTranslations` 完全一致，只是**提前到调用之前**：
+ *   - 中文原文为空的字段不参与（目标必须保持为空）；
+ *   - 目标位置已有内容且未勾选覆盖时跳过。
+ *
+ * 有了它，就能够在**花钱之前**回答一个很实际的问题：这次点了按钮，究竟有没有东西可翻？
+ * 若一个可写位置都没有（典型场景：刚翻过一遍，又没勾覆盖），
+ * 那就没必要调 DeepSeek、没必要占用并发额度、更没必要消耗 token。
+ */
+export function planTranslation(
+  source: Partial<Record<TranslatableField, string>>,
+  existing: Record<string, Partial<Record<TranslatableField, string>>>,
+  targets: readonly Locale[],
+  options: { overwrite: boolean },
+): TranslationPlan {
+  const fields: TranslatableField[] = [];
+  const writableTargets = new Set<Locale>();
+  let writableCount = 0;
+  let skippedCount = 0;
+
+  for (const field of Object.keys(source) as TranslatableField[]) {
+    let fieldWritable = false;
+
+    for (const locale of targets) {
+      const current = existing[locale]?.[field]?.trim() ?? '';
+      if (current && !options.overwrite) {
+        skippedCount += 1;
+        continue;
+      }
+      writableCount += 1;
+      writableTargets.add(locale);
+      fieldWritable = true;
+    }
+
+    // 一个字段在所有目标语言里都写不进去，就根本不必送出去翻译
+    if (fieldWritable) fields.push(field);
+  }
+
+  return {
+    fields,
+    targets: targets.filter((locale) => writableTargets.has(locale)),
+    writableCount,
+    skippedCount,
+  };
+}

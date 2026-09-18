@@ -114,6 +114,13 @@ export function TranslateButton({
         return;
       }
 
+      // 服务端判断「这次没有可写的空白字段」：它没有调用 DeepSeek，也没有消耗 token。
+      // 表单原样不动，只把原因说清楚。
+      if (result.status === 'empty') {
+        setNotice({ kind: 'info', text: result.message });
+        return;
+      }
+
       if (result.status === 'error') {
         // 失败时**什么都不改** —— 表单保持原样，用户可以继续手工编辑
         setNotice({ kind: 'error', text: result.message });
