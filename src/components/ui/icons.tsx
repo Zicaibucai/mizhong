@@ -124,6 +124,21 @@ export function PhoneIcon(props: IconProps) {
   );
 }
 
+/**
+ * 微信图标。
+ *
+ * 画的是抽象的双气泡，不是官方商标 —— 用官方标识涉及商标使用规范，
+ * 而这里只需要一个「这是微信」的视觉提示。
+ */
+export function WeChatIcon(props: IconProps) {
+  return (
+    <svg {...shared} {...props}>
+      <path d="M9 4c-3.6 0-6.5 2.3-6.5 5.2 0 1.7 1 3.2 2.5 4.2l-.7 2.1 2.4-1.2c.7.2 1.5.3 2.3.3" />
+      <path d="M15 9.5c-3.3 0-6 2.1-6 4.8s2.7 4.8 6 4.8c.7 0 1.4-.1 2-.3l2.2 1.1-.6-1.9c1.4-.9 2.4-2.2 2.4-3.7 0-2.7-2.7-4.8-6-4.8Z" />
+    </svg>
+  );
+}
+
 export function PinIcon(props: IconProps) {
   return (
     <svg {...shared} {...props}>

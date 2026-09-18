@@ -1,4 +1,5 @@
 import { ArrowRightIcon } from '@/components/ui/icons';
+import { ChannelLink } from '@/components/preview/channel-link';
 import { cn } from '@/lib/cn';
 import { ordinal } from '@/lib/preview/util';
 import type { PreviewChannel } from '@/lib/preview/util';
@@ -84,10 +85,8 @@ export function PreviewInquiry({
             <ul>
               {channels.map((channel, i) => (
                 <li key={channel.key}>
-                  <a
-                    href={channel.href}
-                    {...(channel.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                    aria-label={`${channel.label}: ${channel.value}`}
+                  <ChannelLink
+                    channel={channel}
                     className={cn(
                       'pv-channel flex items-center justify-between gap-5 border-t border-[var(--pv-rule-dark)] py-4 text-ivory-50 sm:gap-8',
                     )}
@@ -105,9 +104,12 @@ export function PreviewInquiry({
                       <span className="pv-channel-value pv-display truncate text-[clamp(0.95rem,1.9vw,1.5rem)] text-current">
                         {channel.value}
                       </span>
-                      <ArrowRightIcon className="pv-arrow h-4 w-4 shrink-0 text-current opacity-60" />
+                      {/* 箭头只在真的能点时才显示 —— 微信号点了不会有任何反应 */}
+                      {channel.href ? (
+                        <ArrowRightIcon className="pv-arrow h-4 w-4 shrink-0 text-current opacity-60" />
+                      ) : null}
                     </span>
-                  </a>
+                  </ChannelLink>
                 </li>
               ))}
             </ul>

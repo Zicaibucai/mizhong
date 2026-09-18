@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { locales, localeNames, type Locale } from '@/lib/i18n';
 import type { NavView } from '@/lib/content';
+import { ChannelLink } from './channel-link';
 import type { PreviewChannel } from '@/lib/preview/util';
 import { PreviewContainer } from './shell';
 
@@ -82,17 +83,15 @@ export function PreviewFooter({
             <ul className="mt-5 space-y-2.5">
               {channels.map((channel) => (
                 <li key={channel.key}>
-                  <a
-                    href={channel.href}
-                    {...(channel.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                    aria-label={`${channel.label}: ${channel.value}`}
+                  <ChannelLink
+                    channel={channel}
                     className="flex items-baseline gap-3 text-[0.85rem] text-navy-200 transition-colors hover:text-ivory-50"
                   >
                     <span className="pv-mono min-w-[4.5rem] shrink-0 text-[0.55rem] text-navy-400">
                       {channel.label}
                     </span>
                     <span>{channel.value}</span>
-                  </a>
+                  </ChannelLink>
                 </li>
               ))}
             </ul>
