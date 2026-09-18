@@ -25,7 +25,7 @@ export default async function TranslationSettingsPage() {
   const db = getPrisma();
   const settings = db
     ? await loadTranslationSettings(db)
-    : { apiKey: '', baseUrl: DEFAULT_DEEPSEEK_BASE_URL, model: DEFAULT_DEEPSEEK_MODEL, source: 'none' as const };
+    : { apiKey: '', baseUrl: DEFAULT_DEEPSEEK_BASE_URL, model: DEFAULT_DEEPSEEK_MODEL, source: 'none' as const, keyStorage: null };
 
   return (
     <div className="space-y-6">
@@ -40,12 +40,23 @@ export default async function TranslationSettingsPage() {
 
       {!db ? <Alert kind="error">{t.products.dbUnavailable}</Alert> : null}
 
+      {/*
+        配置错误要**显式说出来**。
+        「库里存了密钥但服务器解不开」（环境变量缺失或被换掉）与「压根没配过」是两回事：
+        前者如果只显示「还没配置」，管理员会以为要重新申请一把 Key，而真正要做的是恢复那个变量。
+        这种情况下翻译会直接返回未配置，不会反复发起注定失败的 DeepSeek 调用。
+      */}
+      {settings.keyStorage === 'unreadable' ? (
+        <Alert kind="error">{t.translation.keyUnreadable}</Alert>
+      ) : null}
+
       <TranslationSettingsForm
         maskedKey={maskApiKey(settings.apiKey)}
         hasKey={Boolean(settings.apiKey)}
         baseUrl={settings.baseUrl}
         model={settings.model}
         source={settings.source}
+        keyStorage={settings.keyStorage}
       />
     </div>
   );

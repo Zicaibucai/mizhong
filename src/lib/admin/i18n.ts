@@ -370,6 +370,8 @@ const en = {
     apiKeyCurrent: 'Current key: {masked}',
     apiKeyFromEnv: 'The key currently comes from the DEEPSEEK_API_KEY environment variable.',
     apiKeyMissing: 'No API key configured yet, so translation is unavailable.',
+    keyUnreadable:
+      'A key is stored, but the server cannot decrypt it — TRANSLATION_ENCRYPTION_KEY is missing or has changed. Translation is disabled so no failing calls are made. Restore the original key, or enter the API key again below.',
     baseUrl: 'API base URL',
     baseUrlHint:
       'Defaults to https://api.deepseek.com/v1. Change it only when going through a proxy or a compatible gateway.',
@@ -387,6 +389,8 @@ const en = {
     partial: 'These languages could not be translated: {locales}',
     skipped: '{count} fields already had content and were left unchanged.',
     nothingApplied: 'Nothing was written — every target field already had content.',
+    nothingToTranslate:
+      'No empty fields need translating. Tick “Overwrite existing translations” if you want to translate them again.',
     highlightHint: 'Highlighted fields were filled by this translation. Review them, then publish when ready.',
 
     emptySource: 'Please fill in the Chinese content first.',
@@ -721,6 +725,8 @@ const zh: AdminMessages = {
     apiKeyCurrent: '当前密钥：{masked}',
     apiKeyFromEnv: '当前密钥来自环境变量 DEEPSEEK_API_KEY。',
     apiKeyMissing: '还没有配置 API Key，翻译功能暂时不可用。',
+    keyUnreadable:
+      '库里存了密钥，但服务器解不开 —— TRANSLATION_ENCRYPTION_KEY 缺失或已被更换。翻译已停用，不会反复发起无效调用。请恢复原密钥，或在下方重新填入 API Key。',
     baseUrl: 'API 地址',
     baseUrlHint: '默认 https://api.deepseek.com/v1。只有走代理或兼容网关时才需要改。',
     model: '模型',
@@ -737,6 +743,7 @@ const zh: AdminMessages = {
     partial: '以下语言没有翻译成功：{locales}',
     skipped: '有 {count} 个字段已有内容，已跳过。',
     nothingApplied: '没有写入任何内容 —— 所有目标字段都已经有内容了。',
+    nothingToTranslate: '没有需要翻译的空白字段；如需重新翻译，请勾选「覆盖已有翻译」。',
     highlightHint: '带高亮的字段是本次翻译填入的。请先检查，确认后点「发布」才会对外生效。',
 
     emptySource: '请先填写需要翻译的中文内容。',

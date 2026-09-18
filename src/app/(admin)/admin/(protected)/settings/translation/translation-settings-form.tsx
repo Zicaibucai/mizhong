@@ -21,12 +21,14 @@ export function TranslationSettingsForm({
   baseUrl,
   model,
   source,
+  keyStorage,
 }: {
   maskedKey: string;
   hasKey: boolean;
   baseUrl: string;
   model: string;
   source: 'database' | 'environment' | 'none';
+  keyStorage: 'encrypted' | 'plaintext' | 'unreadable' | null;
 }) {
   const t = useAdminT();
   const router = useRouter();
@@ -47,7 +49,10 @@ export function TranslationSettingsForm({
         <Alert kind="success">{state.message}</Alert>
       ) : null}
 
-      {!hasKey ? <Alert kind="info">{t.translation.apiKeyMissing}</Alert> : null}
+      {/* 「解不开」已经在页面上方用红色提示过了，这里只在「确实没配」时才提示去配置 */}
+      {!hasKey && keyStorage !== 'unreadable' ? (
+        <Alert kind="info">{t.translation.apiKeyMissing}</Alert>
+      ) : null}
 
       <section className="space-y-4 rounded-xl border border-navy-200 bg-white p-5">
         <Field label={t.translation.apiKey} htmlFor="apiKey" hint={t.translation.apiKeyHint}>
