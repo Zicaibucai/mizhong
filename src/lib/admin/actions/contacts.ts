@@ -59,12 +59,14 @@ export async function saveContactAction(_prev: FormState, formData: FormData): P
     for (const item of translations) {
       await db.contactMethodTranslation.upsert({
         where: { contactMethodId_locale: { contactMethodId: record.id, locale: item.locale } },
-        update: { label: item.label, value: item.value },
+        // 空串写成 NULL，不写成空串：前台用「这一语言填了没有」来决定是否
+        // 下沉到共享值，空串会被当成「填了空」而遮蔽共享值（见 content.ts 的说明）
+        update: { label: item.label || null, value: item.value || null },
         create: {
           contactMethodId: record.id,
           locale: item.locale,
-          label: item.label,
-          value: item.value,
+          label: item.label || null,
+          value: item.value || null,
         },
       });
     }

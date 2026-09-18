@@ -92,6 +92,49 @@ function defaultNav(t: Dict): NavView[] {
   ];
 }
 
+/**
+ * 数据库里的联系方式行。只列出真正用到的字段，便于单测直接构造。
+ */
+export interface ContactRow {
+  id: string;
+  type: ContactTypeName;
+  value: string | null;
+  href: string | null;
+  translations: { locale: Locale; label: string | null; value: string | null }[];
+}
+
+/**
+ * 把联系方式行摊平成前台要的形状。**纯函数**，可以单独测。
+ *
+ * 这里有一个踩过的坑，值得写清楚：后台保存联系方式时，会给**每一种语言**都写一行
+ * 翻译，没填的字段存成**空串**而不是 NULL。所以判断「这个语言填了没有」不能用 `??` ——
+ * `??` 只在 null / undefined 时下沉，`''` 会被当成一个值，于是：
+ *
+ *   - `(tr?.value ?? row.value)` 得到空串 → 这一条被下面那层 filter 丢掉；
+ *   - 后台明明填了「共享值」，前台却什么都不显示。
+ *
+ * 更糟的是它不会报错：页脚对每种类型各取一条，取不到就用内置的兜底联系方式，
+ * 于是页面上出现的是**过时的**邮箱和电话 —— 看起来像缓存，其实是这条逻辑。
+ *
+ * 所以这里一律用 `||`：空串与 null 同等对待，都会下沉到共享值。
+ */
+export function resolveContactViews(
+  rows: readonly ContactRow[],
+  locale: Locale,
+  labels: Record<ContactTypeName, string>,
+): ContactView[] {
+  return rows
+    .map((row) => {
+      const tr = row.translations.find((item) => item.locale === locale);
+      // 空串必须当作「这一语言没填」，否则会遮蔽共享值
+      const value = (tr?.value ?? '').trim() || (row.value ?? '').trim();
+      const label = (tr?.label ?? '').trim() || labels[row.type];
+      const safeHref = sanitizeHref(row.href) ?? deriveContactHref(row.type, value);
+      return { id: row.id, type: row.type, label, value, href: safeHref };
+    })
+    .filter((item) => item.value.length > 0);
+}
+
 /** 数据库不可用时的联系方式回退：使用已确认的公开真实联系方式（非占位假数据） */
 function fallbackContacts(t: Dict): ContactView[] {
   const labels: Partial<Record<ContactTypeName, string>> = {
@@ -178,22 +221,13 @@ export const getSiteContent = cache(async (locale: Locale): Promise<SiteContent>
   };
 
   // ---- 联系方式：仅展示已启用且填写了值的项，绝不用占位数据兜底 ----
-  const contactLabels: Record<ContactTypeName, string> = {
+  const contacts = resolveContactViews(data.contacts, locale, {
     EMAIL: t.contact.email,
     WHATSAPP: t.contact.whatsapp,
     PHONE: t.contact.phone,
     WECHAT: t.contact.wechat,
     ADDRESS: t.contact.address,
-  };
-  const contacts: ContactView[] = data.contacts
-    .map((row) => {
-      const tr = row.translations.find((item) => item.locale === locale);
-      const value = (tr?.value ?? row.value ?? '').trim();
-      const label = (tr?.label ?? '').trim() || contactLabels[row.type];
-      const safeHref = sanitizeHref(row.href) ?? deriveContactHref(row.type, value);
-      return { id: row.id, type: row.type, label, value, href: safeHref };
-    })
-    .filter((item) => item.value.length > 0);
+  });
 
   // ---- 导航 ----
   const nav: NavView[] = data.navItems
