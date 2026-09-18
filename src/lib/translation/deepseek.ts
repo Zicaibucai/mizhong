@@ -1,10 +1,13 @@
 import {
-  buildTranslationUserPrompt,
   parseTranslationResponse,
   TRANSLATION_SYSTEM_PROMPT,
+  FIELD_LABELS_ZH,
   type TranslatableField,
   type TranslationRequest,
 } from './fields';
+import { buildUnitPrompt, parseUnitResponse, type BatchUnit } from './batch';
+import { detectFormat } from './document';
+import type { Locale } from '@/lib/i18n/config';
 import type { TranslationSettings } from './settings';
 
 /**
@@ -74,24 +77,34 @@ function extractContent(payload: unknown): string | null {
   return typeof content === 'string' ? content : null;
 }
 
+
+/** 单次请求的结果：成功时带解析后的值，失败时带归类过的错误类别 */
+type CallOutcome<T> =
+  | { ok: true; value: T; attempts: number }
+  | { ok: false; error: TranslationErrorKind; attempts: number; detail?: string };
+
 /**
- * 调用 DeepSeek 翻译一批字段。
+ * 调用 DeepSeek 的公共内核：超时、重试、错误归类、响应体提取。
  *
- * 一次请求翻译**所有字段 × 所有目标语言** —— 需求要求尽量少的调用次数，
- * 而且批量翻译还能让模型在语言之间保持一致的语气。
+ * 抽出来是因为现在有两个入口 —— 管理员在编辑器里点的「一键翻译」，和后台长任务
+ * 的分批同步。两者对**失败的处理**必须完全一致（哪些该重试、哪些立刻返回、
+ * 日志里能出现什么），否则会出现「手动点能成、后台同步老是失败」这种解释不清的差异。
  */
-export async function translateWithDeepSeek(
+async function callDeepSeek<T>(
   settings: TranslationSettings,
-  request: TranslationRequest,
-): Promise<TranslationResult> {
+  userPrompt: string,
+  parse: (decoded: unknown) => T | null,
+  options: { timeoutMs?: number } = {},
+): Promise<CallOutcome<T>> {
   if (!settings.apiKey) return { ok: false, error: 'not-configured', attempts: 0 };
 
+  const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const url = `${settings.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const body = {
     model: settings.model,
     messages: [
       { role: 'system', content: TRANSLATION_SYSTEM_PROMPT },
-      { role: 'user', content: buildTranslationUserPrompt(request) },
+      { role: 'user', content: userPrompt },
     ],
     // 结构化输出：让模型直接给 JSON，省掉解析 Markdown 代码块那一步
     response_format: { type: 'json_object' },
@@ -105,7 +118,7 @@ export async function translateWithDeepSeek(
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(url, {
@@ -137,10 +150,10 @@ export async function translateWithDeepSeek(
           return { ok: false, error: 'bad-response', attempts: attempt };
         }
 
-        const parsed = parseTranslationResponse(decoded, request);
-        if (!parsed) return { ok: false, error: 'bad-response', attempts: attempt };
+        const parsed = parse(decoded);
+        if (parsed === null) return { ok: false, error: 'bad-response', attempts: attempt };
 
-        return { ok: true, values: parsed.values, attempts: attempt };
+        return { ok: true, value: parsed, attempts: attempt };
       }
     } catch (error) {
       const aborted = error instanceof Error && error.name === 'AbortError';
@@ -156,4 +169,76 @@ export async function translateWithDeepSeek(
   }
 
   return { ok: false, error: lastError, attempts: MAX_ATTEMPTS, detail: lastDetail };
+}
+
+/**
+ * 调用 DeepSeek 翻译一批**商品字段**。
+ *
+ * 一次请求翻译「所有字段 × 所有目标语言」—— 需求要求尽量少的调用次数，
+ * 而且批量翻译还能让模型在语言之间保持一致的语气。
+ */
+export async function translateWithDeepSeek(
+  settings: TranslationSettings,
+  request: TranslationRequest,
+): Promise<TranslationResult> {
+  const units: BatchUnit[] = Object.entries(request.source).map(([field, text]) => ({
+    path: field,
+    label: FIELD_LABELS_ZH[field as TranslatableField],
+    text: text as string,
+    format: detectFormat(text as string),
+  }));
+
+  const outcome = await callDeepSeek(settings, buildUnitPrompt(units, request.targets), (decoded) =>
+    parseTranslationResponse(decoded, request),
+  );
+  if (!outcome.ok) return outcome;
+
+  return {
+    ok: true,
+    values: outcome.value.values as Record<string, Partial<Record<TranslatableField, string>>>,
+    attempts: outcome.attempts,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 通用批次（后台长任务用）
+// ---------------------------------------------------------------------------
+
+export interface UnitBatchResult {
+  ok: true;
+  /** 语言 → 路径 → 译文 */
+  values: Record<string, Record<string, string>>;
+  attempts: number;
+}
+
+/** 长任务里每一批的超时。刻意比手动翻译更短：批次本身小，久等只会拖长整条任务。 */
+const BATCH_TIMEOUT_MS = 45_000;
+
+/**
+ * 翻译一批任意路径的字段。
+ *
+ * 与 `translateWithDeepSeek` 走同一个内核（同样的重试与错误归类），区别只在
+ * 键名由适配器生成、而不是八个固定的商品字段。**不接受来自浏览器的键名** ——
+ * 调用方是服务端的长任务引擎，键名全部来自 `adapters.ts` 生成的白名单路径。
+ */
+export async function translateUnitBatch(
+  settings: TranslationSettings,
+  units: readonly BatchUnit[],
+  targets: readonly Locale[],
+  options: { timeoutMs?: number } = {},
+): Promise<UnitBatchResult | { ok: false; error: TranslationErrorKind; attempts: number; detail?: string }> {
+  if (units.length === 0 || targets.length === 0) {
+    return { ok: true, values: {}, attempts: 0 };
+  }
+
+  const keys = units.map((unit) => unit.path);
+  const outcome = await callDeepSeek(
+    settings,
+    buildUnitPrompt(units, targets),
+    (decoded) => parseUnitResponse(decoded, keys, targets),
+    { timeoutMs: options.timeoutMs ?? BATCH_TIMEOUT_MS },
+  );
+  if (!outcome.ok) return outcome;
+
+  return { ok: true, values: outcome.value, attempts: outcome.attempts };
 }

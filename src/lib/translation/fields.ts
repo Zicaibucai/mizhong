@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import { ADMIN_LOCALES } from '@/lib/admin/validation';
-import { localeEnglishNames, locales, type Locale } from '@/lib/i18n/config';
+import { locales, type Locale } from '@/lib/i18n/config';
+import { buildUnitPrompt } from './batch';
+import {
+  detectFormat,
+  MAX_FIELD_LENGTH,
+  MAX_TARGET_LOCALES,
+  MAX_TOTAL_SOURCE_LENGTH,
+} from './document';
+
+export { MAX_FIELD_LENGTH, MAX_TARGET_LOCALES, MAX_TOTAL_SOURCE_LENGTH };
 
 /**
  * 可翻译字段的**白名单**。
@@ -55,16 +64,9 @@ export const DEFAULT_TARGET_LOCALES: Locale[] = locales.filter((locale) => local
 
 // ---------------------------------------------------------------------------
 // 请求体的大小限制
+//
+// 常量本身在 `document.ts` —— 后台长任务的分批切分用的是同一档上限。
 // ---------------------------------------------------------------------------
-
-/** 单个字段的最大字符数（与后台表单的 Zod 上限一致，取最大的一档） */
-const MAX_FIELD_LENGTH = 10_000;
-
-/** 一次请求里所有字段加起来的最大字符数 —— 防止有人把整本书塞进来 */
-export const MAX_TOTAL_SOURCE_LENGTH = 40_000;
-
-/** 一次请求最多翻译多少种语言 */
-export const MAX_TARGET_LOCALES = locales.length;
 
 /** 中文原文 + 已有译文，按目标语言组织 */
 export interface TranslationRequest {
@@ -120,55 +122,33 @@ export function parseTranslationRequest(input: unknown): ParseResult {
 // ---------------------------------------------------------------------------
 
 /**
- * 系统提示词。
- *
- * 逐字采用需求里指定的那段话 —— 它已经把最重要的几条约束（不得增加原文没有的信息、
- * 保持品牌名/型号/数字/单位/HTML/Markdown/变量占位符、只输出 JSON）写全了。
- * **前端不能传提示词进来**，这个常量只存在于服务端。
+ * 系统提示词。常量本身在 `prompt.ts` —— 后台长任务的分批同步引用的是同一个，
+ * 两份提示词意味着改了一份、另一条路径的翻译质量会悄悄变差。
  */
-export const TRANSLATION_SYSTEM_PROMPT =
-  '你是一名专业的电商/企业网站本地化翻译。请将中文内容翻译为指定语言。译文要自然、专业，符合目标国家用户的表达习惯。不得添加原文不存在的信息。品牌名、产品型号、数字、单位、HTML 标签、Markdown 格式和变量占位符必须保持正确。请严格按照指定 JSON 结构返回，不要输出解释或 Markdown。';
+export { TRANSLATION_SYSTEM_PROMPT } from './prompt';
 
 /**
- * 构造用户消息。
+ * 构造用户消息（商品字段版）。
+ *
+ * 实现在 `batch.ts` 的 `buildUnitPrompt` 里，这里只把八个固定的商品字段
+ * 摊成通用的「路径 + 说明 + 原文」。保留这个包装是为了让商品那边的调用方
+ * 不必关心通用批次的存在。
  *
  * 刻意把「字段名」原样留在 JSON 里：模型只要照着键回填，就不存在
  * 「把名称填进描述里」这类错位 —— 需求里要求「不能把内容填错位置」，
  * 靠结构而不是靠模型自觉来保证。
  */
 export function buildTranslationUserPrompt(request: TranslationRequest): string {
-  const languageList = request.targets
-    .map((locale) => `- ${locale}: ${localeEnglishNames[locale]}`)
-    .join('\n');
-
-  const fieldList = Object.keys(request.source)
-    .map((field) => `- ${field}: ${FIELD_LABELS_ZH[field as TranslatableField]}`)
-    .join('\n');
-
-  return [
-    '请把下面 JSON 中 source 里的每个中文字段，翻译成这些语言：',
-    languageList,
-    '',
-    '需要翻译的字段：',
-    fieldList,
-    '',
-    '严格按这个结构返回（键名原样保留，不要增删）：',
-    '{',
-    '  "translations": {',
-    `    ${request.targets.map((locale) => `"${locale}": { ${Object.keys(request.source).map((f) => `"${f}": "译文"`).join(', ')} }`).join(',\n    ')}`,
-    '  }',
-    '}',
-    '',
-    '要求：',
-    '1. 每个字段的译文必须放回**同名字段**，不要错位。',
-    '2. 某条原文为空时不要凭空补内容。',
-    '3. 数字、单位、型号、品牌名保持原样（例如 "25 mm"、"A-2026"、"3M" 不要翻译）。',
-    '4. 原文里的 HTML 标签、Markdown 标记、{占位符} 原样保留。',
-    '5. 只输出 JSON，不要输出任何解释或 Markdown 代码块。',
-    '',
-    '原文：',
-    JSON.stringify({ source: request.source }, null, 2),
-  ].join('\n');
+  const units = (Object.entries(request.source) as [TranslatableField, string][]).map(
+    ([field, text]) => ({
+      // 商品字段的路径就是字段名本身，与 ProductTranslationValues 的键一一对应
+      path: field,
+      label: FIELD_LABELS_ZH[field],
+      text,
+      format: detectFormat(text),
+    }),
+  );
+  return buildUnitPrompt(units, request.targets);
 }
 
 // ---------------------------------------------------------------------------
