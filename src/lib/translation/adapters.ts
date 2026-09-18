@@ -52,6 +52,15 @@ export interface ContentAdapter {
   /** 读取某语言当前已有的译文 */
   readTarget(db: Db, entityId: string, locale: Locale): Promise<TargetValues>;
   /**
+   * 一次读取多个语言的译文。
+   *
+   * 「语言同步」页要对十几条内容各算十种语言的状态，逐语言读会让商品/页面这类
+   * 草稿型内容被反复加载十遍。默认实现就是循环 `readTarget`；
+   * 草稿型的适配器覆写它，把草稿读一次就够了。**结果必须与逐个调用完全一致** ——
+   * 这只是省查询，不是另一套判断。
+   */
+  readTargets(db: Db, entityId: string, locales: readonly Locale[]): Promise<Record<string, TargetValues>>;
+  /**
    * 写入译文。商品与页面写进**草稿**（线上不受影响，发布时才生效）；
    * 其余类型没有草稿机制，直接写库 —— 与它们现有的后台表单行为一致。
    */
@@ -210,7 +219,7 @@ async function loadProductForEdit(db: Db, productId: string): Promise<{ draft: P
   return { draft: state.draft, slug: state.draft.basic.slug };
 }
 
-const productAdapter: ContentAdapter = {
+const productAdapter: RawAdapterWithBatchReads = {
   type: 'product',
 
   async readSource(db, entityId) {
@@ -230,6 +239,19 @@ const productAdapter: ContentAdapter = {
 
     const paths = productPaths(loaded.draft, locale as AdminLocale);
     return Object.fromEntries([...paths.entries()].map(([path, access]) => [path, access.read()]));
+  },
+
+  /** 覆写：草稿只读一次，十种语言共用同一份 */
+  async readTargets(db, entityId, targetLocales_) {
+    const loaded = await loadProductForEdit(db, entityId);
+    if (!loaded) return {};
+    const out: Record<string, TargetValues> = {};
+    for (const locale of targetLocales_) {
+      if (locale === 'zh') continue;
+      const paths = productPaths(loaded.draft, locale as AdminLocale);
+      out[locale] = Object.fromEntries([...paths.entries()].map(([path, access]) => [path, access.read()]));
+    }
+    return out;
   },
 
   async writeTranslations(db, entityId, locale, values, cleared) {
@@ -377,7 +399,7 @@ export function pageDraftFromRow(row: PageRow): PageDraft {
 
 type PageBlockDraftValues = Record<AdminLocale, PageBlockTranslationValues>;
 
-const pageAdapter: ContentAdapter = {
+const pageAdapter: RawAdapterWithBatchReads = {
   type: 'page',
 
   async readSource(db, entityId) {
@@ -398,6 +420,19 @@ const pageAdapter: ContentAdapter = {
     if (!draft) return {};
     const paths = pagePaths(draft, locale as AdminLocale);
     return Object.fromEntries([...paths.entries()].map(([path, access]) => [path, access.read()]));
+  },
+
+  /** 覆写：草稿只读一次，十种语言共用同一份 */
+  async readTargets(db, entityId, targetLocales_) {
+    const draft = await loadPageForEdit(db, entityId);
+    if (!draft) return {};
+    const out: Record<string, TargetValues> = {};
+    for (const locale of targetLocales_) {
+      if (locale === 'zh') continue;
+      const paths = pagePaths(draft, locale as AdminLocale);
+      out[locale] = Object.fromEntries([...paths.entries()].map(([path, access]) => [path, access.read()]));
+    }
+    return out;
   },
 
   async writeTranslations(db, entityId, locale, values, cleared) {
@@ -460,7 +495,7 @@ async function companyRow(db: Db) {
   });
 }
 
-const companyAdapter: ContentAdapter = {
+const companyAdapter: RawAdapter = {
   type: 'company',
 
   async readSource(db) {
@@ -557,7 +592,7 @@ async function contactRows(db: Db, entityId: string) {
   });
 }
 
-const contactAdapter: ContentAdapter = {
+const contactAdapter: RawAdapter = {
   type: 'contact',
 
   async readSource(db, entityId) {
@@ -624,7 +659,7 @@ const contactAdapter: ContentAdapter = {
 // 导航
 // ---------------------------------------------------------------------------
 
-const navAdapter: ContentAdapter = {
+const navAdapter: RawAdapter = {
   type: 'nav',
 
   async readSource(db, entityId) {
@@ -673,7 +708,7 @@ const navAdapter: ContentAdapter = {
 // 商品类目
 // ---------------------------------------------------------------------------
 
-const categoryAdapter: ContentAdapter = {
+const categoryAdapter: RawAdapter = {
   type: 'category',
 
   async readSource(db, entityId) {
@@ -734,7 +769,7 @@ const ASSET_FIELDS = [
   { key: 'alt' as const, label: '图片替代文字（alt）' },
 ];
 
-const assetAdapter: ContentAdapter = {
+const assetAdapter: RawAdapter = {
   type: 'asset',
 
   async readSource(db, entityId) {
@@ -807,14 +842,44 @@ const assetAdapter: ContentAdapter = {
 // 注册表
 // ---------------------------------------------------------------------------
 
+/** 每种内容类型的适配器实现；`readTargets` 由注册表统一补上（见 attachReadTargets） */
+type RawAdapter = Omit<ContentAdapter, 'readTargets'>;
+
+/** 草稿型内容的适配器：额外提供「一次读多种语言」，把草稿只加载一遍 */
+type RawAdapterWithBatchReads = RawAdapter & Pick<ContentAdapter, 'readTargets'>;
+
+/**
+ * 把「一次读多种语言」补到适配器上。
+ *
+ * 默认实现是逐个读 —— 没有草稿的内容类型（导航、联系方式、类目、素材、公司资料）
+ * 一次查询就取一行，批量省不下什么。草稿型的内容（商品、页面）自己覆写这个方法，
+ * 把草稿只读一次，避免被反复加载十遍。
+ */
+function attachReadTargets(
+  adapter: RawAdapter & Partial<Pick<ContentAdapter, 'readTargets'>>,
+): ContentAdapter {
+  return {
+    ...adapter,
+    readTargets:
+      adapter.readTargets ??
+      (async (db, entityId, localesToRead) => {
+        const out: Record<string, TargetValues> = {};
+        for (const locale of localesToRead) {
+          out[locale] = await adapter.readTarget(db, entityId, locale);
+        }
+        return out;
+      }),
+  };
+}
+
 export const ADAPTERS: Record<ContentType, ContentAdapter> = {
-  product: productAdapter,
-  page: pageAdapter,
-  company: companyAdapter,
-  contact: contactAdapter,
-  nav: navAdapter,
-  category: categoryAdapter,
-  asset: assetAdapter,
+  product: attachReadTargets(productAdapter),
+  page: attachReadTargets(pageAdapter),
+  company: attachReadTargets(companyAdapter),
+  contact: attachReadTargets(contactAdapter),
+  nav: attachReadTargets(navAdapter),
+  category: attachReadTargets(categoryAdapter),
+  asset: attachReadTargets(assetAdapter),
 };
 
 export function getAdapter(type: string): ContentAdapter | null {

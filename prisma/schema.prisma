@@ -195,8 +195,6 @@ model TranslationJob {
 
   /// 幂等键：同一个键只创建一个任务，重复点击不会重复翻译（需求 7.9）
   idempotencyKey String? @unique
-  /// 全站同步时的当前游标（已处理到第几条内容）
-  scopeCursor    Int     @default(0)
 
   totalItems     Int @default(0)
   completedItems Int @default(0)
@@ -205,8 +203,10 @@ model TranslationJob {
   /// token 估算：把原文与译文的字符数按经验系数折算，用于后台对账
   tokenEstimate  Int @default(0)
 
-  /// 断点：下一个待处理的项在 items 里的序号
-  cursor    Int     @default(0)
+  /// 推进锁。取锁失败的调用方直接返回当前进度而不是排队 —— 全站同步按钮
+  /// 连点两下不该把同一批内容翻两遍（需求 十三.5）。超时的锁可以被后来者接管，
+  /// 免得进程被杀之后任务卡死在 RUNNING 上。
+  lockedAt  DateTime?
   lastError String?
 
   createdById String?
@@ -236,6 +236,9 @@ model TranslationJobItem {
   locale     Locale
   /// 该工作项对应的中文版本；与 job 一起保证「同一批次的来源一致」
   revision   Int
+  /// 稳定的处理顺序。断点续跑按它推进 —— 位置一旦确定就不再变化，
+  /// 因此中途插入新内容不会让「已经跑到第几个」变得没有意义。
+  sortOrder  Int    @default(0)
 
   status        TranslationItemStatus @default(PENDING)
   attempts      Int                   @default(0)
@@ -248,6 +251,7 @@ model TranslationJobItem {
 
   @@unique([jobId, entityType, entityId, locale])
   @@index([jobId, status])
+  @@index([jobId, sortOrder])
   @@index([entityType, entityId])
 }
 

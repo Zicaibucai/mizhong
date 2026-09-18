@@ -13,7 +13,8 @@ import {
   parseLocaleFields,
   type AdminLocale,
 } from '@/lib/admin/validation';
-import { getAdminMessagesForRequest, type AdminMessages } from '@/lib/admin/i18n';
+import { getAdminMessagesForRequest, formatMessage, type AdminMessages } from '@/lib/admin/i18n';
+import { describeSyncFailure, runPublishSync, toProgress } from '@/lib/admin/publish-sync';
 import { CURRENCY_CODES, PRICE_MODES, decimalToString, normalizeCurrency } from '@/lib/pricing';
 import {
   DRAFT_TRANSACTION_OPTIONS,
@@ -765,6 +766,42 @@ export async function setProductPublishedAction(
         return {
           status: 'error',
           message: `${t.products.validationTitle}: ${reasons.join(' ')}`,
+        };
+      }
+
+      /**
+       * 发布自带的同步保险。
+       *
+       * 即使管理员改了中文之后**没有**再点「一键翻译」，这里也会把改动补齐到全部
+       * 目标语言 —— 这是需求里那句「发布必须自带同步保险」的落点。
+       *
+       * 三条边界：
+       *   - 一个待同步字段都没有时零调用（`syncForPublish` 直接返回 ready）；
+       *   - 一次请求只跑一段预算，没跑完就把 jobId 交给界面继续推，
+       *     绝不把整轮翻译塞进这一个请求里；
+       *   - 任何目标语言失败就**放弃本次发布**，线上保持原样 ——
+       *     宁可不上线，也不要上线一个中英混杂的版本。
+       */
+      const { outcome, hasApiKey } = await runPublishSync(db, 'product', parsed.data.id, user.id);
+
+      if (outcome.status === 'working') {
+        return {
+          status: 'idle',
+          message: formatMessage(t.translation.publishSyncing, {
+            completed: outcome.progress?.completedItems ?? 0,
+            total: outcome.progress?.totalItems ?? 0,
+          }),
+          jobId: outcome.jobId ?? undefined,
+          progress: toProgress(outcome.progress),
+        };
+      }
+
+      if (outcome.status === 'failed') {
+        return {
+          status: 'error',
+          message: describeSyncFailure(outcome, hasApiKey, t),
+          jobId: outcome.jobId ?? undefined,
+          progress: toProgress(outcome.progress),
         };
       }
     }

@@ -1,9 +1,10 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { setProductPublishedAction } from '@/lib/admin/actions/products';
+import { advanceJobAction } from '@/lib/admin/actions/sync';
 import { initialFormState } from '@/lib/admin/action-state';
 import { formatMessage } from '@/lib/admin/i18n';
 import { Alert } from '@/components/admin/form';
@@ -69,6 +70,57 @@ export function ProductActionBar({
   }, [state, router]);
 
   /**
+   * 发布自带的译文同步没跑完时，在这里把它推完。
+   *
+   * 服务端每次只推进一段预算就返回（不会有一个挂满 60 秒的请求），所以由前端接着
+   * 调 `advanceJobAction`；跑完之后自动再提交一次发布，管理员不需要再点第二下。
+   *
+   * 两条防重复：同一个任务 id 只自动重提一次；失败时不再重提 ——
+   * 否则「翻译一直失败」会变成「一直自动重试」，把 API 额度烧光。
+   */
+  const publishFormRef = useRef<HTMLFormElement | null>(null);
+  const resubmitted = useRef<string | null>(null);
+  const jobId = state.jobId;
+
+  useEffect(() => {
+    if (!jobId || resubmitted.current === jobId) return;
+    let cancelled = false;
+
+    void (async () => {
+      let guard = 0;
+      while (!cancelled && guard < 200) {
+        guard += 1;
+
+        // 调用 Server Action 本质是一次 fetch：断网、服务器重启、代理超时都会让它
+        // 抛异常。这里没有表单会被毁掉，所以静默停下即可 —— 任务状态还在数据库里，
+        // 再点一次发布就从这里继续。但仍然要接住异常：未处理的拒绝不该流淌到 React 外面。
+        let next: Awaited<ReturnType<typeof advanceJobAction>>;
+        try {
+          next = await advanceJobAction({ jobId });
+        } catch {
+          return;
+        }
+
+        if (next.hasMore) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          continue;
+        }
+
+        // 同步完成且没有失败 → 自动重新提交发布，这一次会真正写进线上
+        if (next.ok && (next.progress?.failed ?? 0) === 0) {
+          resubmitted.current = jobId;
+          publishFormRef.current?.requestSubmit();
+        }
+        return;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+
+  /**
    * 有没有待发布的改动。
    *
    * 服务端的 `pendingChanges` 是页面加载时的快照；本次会话里刚自动保存的改动还没
@@ -94,6 +146,8 @@ export function ProductActionBar({
             : t.products.saveStatusIdle;
 
   const blocked = data.publishBlockers.length > 0;
+  /** 发布自带的译文同步正在跑：按钮显示「同步中」并禁用，避免重复触发 */
+  const syncing = Boolean(jobId);
   const saveTargets = active === 'visual' ? saveFormIds ?? [] : [];
   const saveVisualForms = () => {
     for (const formId of saveTargets) {
@@ -155,27 +209,28 @@ export function ProductActionBar({
             而这是个上线/下架级别的大动作。文案写死，猜错的代价最多是按钮禁用。
           */}
           {!product.published ? (
-            <form action={formAction}>
+            <form action={formAction} ref={publishFormRef}>
               <input type="hidden" name="id" value={product.id} />
               <input type="hidden" name="target" value="publish" />
               <button
                 type="submit"
-                className="inline-flex h-10 items-center rounded-full bg-copper-700 px-5 text-sm font-medium text-ivory-50 transition-colors hover:bg-copper-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+                disabled={syncing}
+                className="inline-flex h-10 items-center rounded-full bg-copper-700 px-5 text-sm font-medium text-ivory-50 transition-colors hover:bg-copper-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {t.products.publish}
+                {syncing ? t.sync.running : t.products.publish}
               </button>
             </form>
           ) : (
             <>
-              <form action={formAction}>
+              <form action={formAction} ref={publishFormRef}>
                 <input type="hidden" name="id" value={product.id} />
                 <input type="hidden" name="target" value="publish" />
                 <button
                   type="submit"
-                  disabled={!pending && !busy}
+                  disabled={(!pending && !busy) || syncing}
                   className="inline-flex h-10 items-center rounded-full bg-copper-700 px-5 text-sm font-medium text-ivory-50 transition-colors hover:bg-copper-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {t.products.publishChanges}
+                  {syncing ? t.sync.running : t.products.publishChanges}
                 </button>
               </form>
               <form action={formAction}>
@@ -231,6 +286,41 @@ export function ProductActionBar({
       {state.status === 'success' && state.message ? (
         <div className="mt-3">
           <Alert kind="success">{state.message}</Alert>
+        </div>
+      ) : null}
+      {state.status === 'idle' && state.message ? (
+        <div className="mt-3">
+          <Alert kind="info">{state.message}</Alert>
+        </div>
+      ) : null}
+
+      {/* 译文同步的进度条：让「发布还差多少种语言」这件事看得见 */}
+      {syncing && state.progress ? (
+        <div className="mt-3 space-y-1.5">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-navy-100">
+            <div
+              className="h-full rounded-full bg-copper-600 transition-[width] duration-500"
+              style={{
+                width: `${
+                  state.progress.total > 0
+                    ? Math.min(
+                        100,
+                        Math.round(
+                          ((state.progress.completed + state.progress.failed) / state.progress.total) * 100,
+                        ),
+                      )
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+          <p className="text-xs text-muted">
+            {formatMessage(t.sync.jobSummary, {
+              completed: state.progress.completed,
+              total: state.progress.total,
+              failed: state.progress.failed,
+            })}
+          </p>
         </div>
       ) : null}
     </div>

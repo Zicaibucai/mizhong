@@ -82,6 +82,7 @@ const en = {
     products: 'Products',
     audit: 'Audit log',
     translationSettings: 'Translation',
+    sync: 'Language sync',
   },
   shell: {
     subtitle: 'Content Admin',
@@ -408,6 +409,96 @@ const en = {
     errorBusy: 'Another translation is already running. Wait for it to finish and try again.',
     encryptionMissing:
       'Refused to save: TRANSLATION_ENCRYPTION_KEY is not set on the server, and storing the key in plain text is not allowed.',
+
+    // ---- 发布时自带的同步保险 ----
+    publishSyncing:
+      'Translating the latest Chinese into the other languages… {completed} of {total} done.',
+    publishSyncFailed:
+      'Not published: some languages could not be translated, so the live site was left untouched. Fix the cause, then press publish again.',
+    publishSyncNotConfigured:
+      'Publishing now requires every language to be up to date, but DeepSeek is not configured. Add an API key under Translation settings.',
+    publishSyncChanged:
+      'The Chinese content changed while it was being translated. Press publish again to sync from the latest version.',
+    publishSyncStillPending: 'Some fields are still waiting to be translated. Press publish again to continue.',
+  },
+
+  // ---------------------------------------------------------------------------
+  // 语言同步中心
+  // ---------------------------------------------------------------------------
+  sync: {
+    title: 'Language sync',
+    subtitle:
+      'Chinese is the only source. This page shows, for every piece of published content, how far the other languages have been brought up to date.',
+    navLabel: 'Language sync',
+
+    contentTypeProduct: 'Product',
+    contentTypePage: 'Page',
+    contentTypeCompany: 'Company profile',
+    contentTypeContact: 'Contact method',
+    contentTypeNav: 'Navigation',
+    contentTypeCategory: 'Category',
+    contentTypeAsset: 'Media',
+
+    colContent: 'Content',
+    colType: 'Type',
+    colRevision: 'Chinese version',
+    colSynced: 'Synced',
+    colPending: 'Pending',
+    colFailed: 'Failed',
+    colStatus: 'Status',
+    colLastSynced: 'Last synced',
+
+    stateSynced: 'Up to date',
+    statePartial: 'Partly out of date',
+    stateStale: 'Out of date',
+    stateFailed: 'Failed',
+    stateEmpty: 'Nothing to translate',
+
+    countOf: '{done} / {total} languages',
+    revisionValue: 'v{revision}',
+    revisionChanged: 'Chinese changed — translations are out of date',
+    neverSynced: 'Never',
+
+    syncOne: 'Sync',
+    syncAll: 'Sync all published content',
+    retryFailed: 'Retry failed only',
+    viewErrors: 'View errors',
+    hideErrors: 'Hide errors',
+    refresh: 'Refresh',
+
+    running: 'Syncing…',
+    done: 'Sync finished.',
+    nothingToDo: 'Everything is already up to date — no request was sent.',
+
+    jobSummary: '{completed} of {total} done, {failed} failed',
+    jobRequests: '{count} requests',
+    jobTokens: '≈{count} tokens',
+    jobStatusPending: 'Queued',
+    jobStatusRunning: 'Running',
+    jobStatusSucceeded: 'Succeeded',
+    jobStatusPartial: 'Partly succeeded',
+    jobStatusFailed: 'Failed',
+    jobStatusCancelled: 'Cancelled',
+
+    recentJobs: 'Recent jobs',
+    noJobs: 'No sync jobs yet.',
+
+    empty: 'No published Chinese content yet.',
+    errorsTitle: 'Failed items',
+    errorNotConfigured: 'DeepSeek is not configured.',
+    errorAuth: 'The API key was rejected.',
+    errorRateLimit: 'Rate limited by DeepSeek.',
+    errorTimeout: 'The request timed out.',
+    errorNetwork: 'Could not reach DeepSeek.',
+    errorServer: 'DeepSeek returned an error.',
+    errorBadResponse: 'The response was not in the expected shape.',
+    errorIncomplete: 'Some fields were not returned.',
+    errorUnknown: 'Unknown error.',
+    errorSourceChanged: 'The Chinese content changed during the sync.',
+    errorStillPending: 'Some fields are still out of date.',
+
+    dbUnavailable: 'The database is not reachable right now.',
+    notFound: 'That content no longer exists.',
   },
   media: mediaMessagesEn,
   productCategories: productCategoryMessagesEn,
@@ -452,6 +543,7 @@ const zh: AdminMessages = {
     products: '商品',
     audit: '操作日志',
     translationSettings: '翻译设置',
+    sync: '语言同步',
   },
   shell: {
     subtitle: '内容管理后台',
@@ -761,6 +853,94 @@ const zh: AdminMessages = {
     errorBusy: '已经有一个翻译在进行中，请等它结束后再试。',
     encryptionMissing:
       '已拒绝保存：服务器没有配置 TRANSLATION_ENCRYPTION_KEY，而明文存储密钥是不允许的。',
+
+    // ---- 发布时自带的同步保险 ----
+    publishSyncing: '正在把最新中文同步到其它语言……已完成 {completed} / {total}。',
+    publishSyncFailed:
+      '未发布：部分语言没能翻译成功，线上内容保持原样。处理原因后再点一次发布。',
+    publishSyncNotConfigured:
+      '现在发布要求所有语言都是最新的，但 DeepSeek 还没有配置。请先在「翻译设置」里填入 API Key。',
+    publishSyncChanged: '翻译过程中中文被修改过。请再点一次发布，从最新版本重新同步。',
+    publishSyncStillPending: '还有字段在等待翻译。请再点一次发布继续。',
+  },
+
+  // ---------------------------------------------------------------------------
+  // 语言同步中心
+  // ---------------------------------------------------------------------------
+  sync: {
+    title: '语言同步',
+    subtitle:
+      '中文是唯一母版。这里显示每一条已发布内容的中文改动，在各语言上同步到了什么程度。',
+    navLabel: '语言同步',
+
+    contentTypeProduct: '商品',
+    contentTypePage: '页面',
+    contentTypeCompany: '公司资料',
+    contentTypeContact: '联系方式',
+    contentTypeNav: '导航',
+    contentTypeCategory: '类目',
+    contentTypeAsset: '素材',
+
+    colContent: '内容',
+    colType: '类型',
+    colRevision: '中文版本',
+    colSynced: '已同步',
+    colPending: '待同步',
+    colFailed: '失败',
+    colStatus: '状态',
+    colLastSynced: '最后同步',
+
+    stateSynced: '已是最新',
+    statePartial: '部分过期',
+    stateStale: '已过期',
+    stateFailed: '失败',
+    stateEmpty: '无需翻译',
+
+    countOf: '{done} / {total} 种语言',
+    revisionValue: '第 {revision} 版',
+    revisionChanged: '中文已改动，译文待更新',
+    neverSynced: '从未',
+
+    syncOne: '同步',
+    syncAll: '同步全部已发布中文内容',
+    retryFailed: '只重试失败内容',
+    viewErrors: '查看错误',
+    hideErrors: '收起错误',
+    refresh: '刷新',
+
+    running: '正在同步……',
+    done: '同步完成。',
+    nothingToDo: '全部都已是最新，没有发起任何请求。',
+
+    jobSummary: '已完成 {completed} / {total}，失败 {failed}',
+    jobRequests: '{count} 次请求',
+    jobTokens: '约 {count} tokens',
+    jobStatusPending: '排队中',
+    jobStatusRunning: '进行中',
+    jobStatusSucceeded: '成功',
+    jobStatusPartial: '部分成功',
+    jobStatusFailed: '失败',
+    jobStatusCancelled: '已取消',
+
+    recentJobs: '最近任务',
+    noJobs: '还没有同步任务。',
+
+    empty: '还没有已发布的中文内容。',
+    errorsTitle: '失败明细',
+    errorNotConfigured: 'DeepSeek 还没有配置。',
+    errorAuth: 'API Key 被拒绝。',
+    errorRateLimit: '被 DeepSeek 限流。',
+    errorTimeout: '请求超时。',
+    errorNetwork: '连不上 DeepSeek。',
+    errorServer: 'DeepSeek 返回了错误。',
+    errorBadResponse: '返回内容不是预期结构。',
+    errorIncomplete: '有字段没有翻出来。',
+    errorUnknown: '未知错误。',
+    errorSourceChanged: '同步过程中中文被修改过。',
+    errorStillPending: '仍有字段处于待同步状态。',
+
+    dbUnavailable: '数据库暂时连不上。',
+    notFound: '这条内容已经不存在了。',
   },
   media: mediaMessagesZh,
   productCategories: productCategoryMessagesZh,

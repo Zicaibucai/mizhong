@@ -1,0 +1,136 @@
+- generic [active] [ref=e1]:
+  - link "跳转到主要内容" [ref=e2] [cursor=pointer]:
+    - /url: "#main"
+  - banner [ref=e3]:
+    - generic [ref=e5]:
+      - link "米众新材料有限公司" [ref=e6] [cursor=pointer]:
+        - /url: /zh
+        - img "米众新材料品牌标识" [ref=e7]
+      - navigation "主导航" [ref=e9]:
+        - link "产品" [ref=e10] [cursor=pointer]:
+          - /url: /zh/products
+        - link "供应链" [ref=e11] [cursor=pointer]:
+          - /url: /zh#supply
+        - link "质量" [ref=e12] [cursor=pointer]:
+          - /url: /zh#quality
+        - link "联系我们" [ref=e13] [cursor=pointer]:
+          - /url: /zh#inquiry
+      - generic [ref=e14]:
+        - button "中文" [ref=e17]
+        - link "发起询盘" [ref=e24] [cursor=pointer]:
+          - /url: /zh#inquiry
+  - main [ref=e28]:
+    - generic [ref=e31]:
+      - generic [ref=e32]:
+        - paragraph [ref=e33]: INDEX / PRODUCTS
+        - heading "产品目录" [level=1] [ref=e34]
+      - paragraph [ref=e35]: 浏览我们的纺织辅料产品，可使用左侧分类与筛选缩小范围。
+    - generic [ref=e39]:
+      - generic [ref=e40]:
+        - search [ref=e41]:
+          - generic [ref=e42]: 搜索产品名称、SKU 或分类…
+          - searchbox "搜索产品名称、SKU 或分类…" [ref=e43]
+          - button "搜索" [ref=e44]
+        - generic [ref=e45]:
+          - generic [ref=e46]: 排序
+          - combobox "排序" [ref=e47]:
+            - option "推荐优先" [selected]
+            - option "最新"
+            - option "价格从低到高"
+            - option "价格从高到低"
+      - paragraph [ref=e49]: 共 2 件产品
+      - list [ref=e51]:
+        - listitem [ref=e52]:
+          - article [ref=e53]:
+            - img "金姐" [ref=e55]
+            - generic [ref=e56]:
+              - heading [level=3] [ref=e57]:
+                - link "金姐" [ref=e58] [cursor=pointer]:
+                  - /url: /zh/products/manli
+              - paragraph [ref=e59]: $0.10 / 千克
+              - generic [ref=e61]:
+                - term [ref=e62]: 最小起订量
+                - definition [ref=e63]: "200"
+              - generic [ref=e64]:
+                - generic [ref=e65]: 查看详情
+                - link "立即询价" [ref=e68] [cursor=pointer]:
+                  - /url: /zh/products/manli#inquiry
+        - listitem [ref=e69]:
+          - article [ref=e70]:
+            - img "S型沙发特殊钩子" [ref=e72]
+            - generic [ref=e73]:
+              - heading [level=3] [ref=e74]:
+                - link "S型沙发特殊钩子" [ref=e75] [cursor=pointer]:
+                  - /url: /zh/products/tehsugouzi
+              - paragraph [ref=e76]: 面议
+              - generic [ref=e77]:
+                - generic [ref=e78]: 查看详情
+                - link "立即询价" [ref=e81] [cursor=pointer]:
+                  - /url: /zh/products/tehsugouzi#inquiry
+  - contentinfo [ref=e82]:
+    - generic [ref=e83]:
+      - generic [ref=e84]:
+        - img "米众新材料品牌标识" [ref=e85]
+        - heading "米众新材料有限公司" [level=2] [ref=e86]
+      - paragraph [ref=e87]: 张姐周姐杨姐
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - heading "公司" [level=3] [ref=e90]
+          - list [ref=e91]:
+            - listitem [ref=e92]:
+              - link "产品" [ref=e93] [cursor=pointer]:
+                - /url: /zh/products
+            - listitem [ref=e94]:
+              - link "供应链" [ref=e95] [cursor=pointer]:
+                - /url: /zh#supply
+            - listitem [ref=e96]:
+              - link "质量" [ref=e97] [cursor=pointer]:
+                - /url: /zh#quality
+            - listitem [ref=e98]:
+              - link "联系我们" [ref=e99] [cursor=pointer]:
+                - /url: /zh#inquiry
+        - generic [ref=e100]:
+          - heading "联系方式" [level=3] [ref=e101]
+          - list [ref=e102]:
+            - listitem [ref=e103]:
+              - 'link "WhatsApp: +86 151 0221 5145" [ref=e104] [cursor=pointer]':
+                - /url: https://wa.me/8615102215145
+                - generic [ref=e105]: WhatsApp
+                - generic [ref=e106]: +86 151 0221 5145
+            - listitem [ref=e107]:
+              - 'link "邮箱: 2936962147@qq.com" [ref=e108] [cursor=pointer]':
+                - /url: mailto:2936962147@qq.com
+                - generic [ref=e109]: 邮箱
+                - generic [ref=e110]: 2936962147@qq.com
+            - listitem [ref=e111]:
+              - 'link "电话: +86 151 0221 5145" [ref=e112] [cursor=pointer]':
+                - /url: tel:+8615102215145
+                - generic [ref=e113]: 电话
+                - generic [ref=e114]: +86 151 0221 5145
+        - generic [ref=e115]:
+          - heading "语言" [level=3] [ref=e116]
+          - list [ref=e117]:
+            - listitem [ref=e118]:
+              - link "中文" [ref=e119] [cursor=pointer]:
+                - /url: /zh
+            - listitem [ref=e120]:
+              - link "English" [ref=e121] [cursor=pointer]:
+                - /url: /en
+            - listitem [ref=e122]:
+              - link "Tiếng Việt" [ref=e123] [cursor=pointer]:
+                - /url: /vi
+      - paragraph [ref=e125]: © 2026 米众新材料有限公司 · 版权所有。
+  - list [ref=e126]:
+    - listitem [ref=e127]:
+      - 'link "WhatsApp: +86 151 0221 5145" [ref=e128] [cursor=pointer]':
+        - /url: https://wa.me/8615102215145
+        - generic: +86 151 0221 5145
+    - listitem [ref=e131]:
+      - 'link "邮箱: 2936962147@qq.com" [ref=e132] [cursor=pointer]':
+        - /url: mailto:2936962147@qq.com
+        - generic: 2936962147@qq.com
+    - listitem [ref=e136]:
+      - 'link "电话: +86 151 0221 5145" [ref=e137] [cursor=pointer]':
+        - /url: tel:+8615102215145
+        - generic: +86 151 0221 5145
+  - alert [ref=e140]

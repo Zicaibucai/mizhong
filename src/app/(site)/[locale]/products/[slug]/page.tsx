@@ -4,7 +4,6 @@ import {
   defaultLocale,
   isLocale,
   localeCodes,
-  locales,
   type Locale,
 } from '@/lib/i18n';
 import { getCatalogDict } from '@/lib/i18n/catalog';
@@ -32,8 +31,17 @@ export async function generateMetadata({
 
   const base = site.url;
   const path = `/products/${product.slug}`;
+
+  /**
+   * hreflang 只列出**真正有该语言内容**的版本。
+   *
+   * 之前是 11 种语言全列 —— 商品只有中文时，等于对外声明「阿拉伯语版本在这里」，
+   * 而那个地址指向的是中文内容，属于跨语言污染。现在没有内容的语言一律不出现在 hreflang 里。
+   * x-default 指向默认语言（中文）—— 它一定存在，因为商品名称的中文是发布的前提。
+   */
+  const contentLocales = product.contentLocales;
   const languages: Record<string, string> = {};
-  for (const loc of locales) languages[localeCodes[loc]] = `${base}/${loc}${path}`;
+  for (const loc of contentLocales) languages[localeCodes[loc]] = `${base}/${loc}${path}`;
   languages['x-default'] = `${base}/${defaultLocale}${path}`;
 
   // 与后台「SEO」分区的灰色占位提示共用同一套回退规则（见 lib/product-metadata.ts），

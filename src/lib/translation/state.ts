@@ -128,12 +128,15 @@ export async function planSync(
   const clearedByLocale = new Map<Locale, string[]>();
   const fieldStatesByLocale = new Map<Locale, Record<string, FieldState>>();
 
-  for (const locale of targets) {
-    if (locale === 'zh') continue;
+  // 一次把所有语言的现有译文读出来：草稿型的内容（商品、页面）只加载一次草稿，
+  // 而不是每种语言各加载一遍
+  const targetsToRead = targets.filter((locale) => locale !== 'zh');
+  const currentByLocale = await adapter.readTargets(db, entityId, targetsToRead);
 
+  for (const locale of targetsToRead) {
     const state = states.get(locale);
     const fieldStates = asFieldStates(state?.fields);
-    const current = await adapter.readTarget(db, entityId, locale);
+    const current = currentByLocale[locale] ?? {};
 
     /**
      * 有译文但没有逐字段记录的兜底判断。

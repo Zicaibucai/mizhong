@@ -74,13 +74,12 @@ CREATE TABLE "TranslationJob" (
     "kind" "TranslationJobKind" NOT NULL,
     "status" "TranslationJobStatus" NOT NULL DEFAULT 'PENDING',
     "idempotencyKey" TEXT,
-    "scopeCursor" INTEGER NOT NULL DEFAULT 0,
     "totalItems" INTEGER NOT NULL DEFAULT 0,
     "completedItems" INTEGER NOT NULL DEFAULT 0,
     "failedItems" INTEGER NOT NULL DEFAULT 0,
     "requestCount" INTEGER NOT NULL DEFAULT 0,
     "tokenEstimate" INTEGER NOT NULL DEFAULT 0,
-    "cursor" INTEGER NOT NULL DEFAULT 0,
+    "lockedAt" TIMESTAMP(3),
     "lastError" TEXT,
     "createdById" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -99,6 +98,7 @@ CREATE TABLE "TranslationJobItem" (
     "entityId" TEXT NOT NULL,
     "locale" "Locale" NOT NULL,
     "revision" INTEGER NOT NULL,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
     "status" "TranslationItemStatus" NOT NULL DEFAULT 'PENDING',
     "attempts" INTEGER NOT NULL DEFAULT 0,
     "lastError" TEXT,
@@ -153,6 +153,9 @@ CREATE INDEX "TranslationJob_createdById_idx" ON "TranslationJob"("createdById")
 
 -- CreateIndex
 CREATE INDEX "TranslationJobItem_jobId_status_idx" ON "TranslationJobItem"("jobId", "status");
+
+-- CreateIndex
+CREATE INDEX "TranslationJobItem_jobId_sortOrder_idx" ON "TranslationJobItem"("jobId", "sortOrder");
 
 -- CreateIndex
 CREATE INDEX "TranslationJobItem_entityType_entityId_idx" ON "TranslationJobItem"("entityType", "entityId");

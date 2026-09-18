@@ -1,5 +1,5 @@
 import { tryDb } from '@/lib/db';
-import type { Locale } from '@/lib/i18n/config';
+import { locales, type Locale } from '@/lib/i18n/config';
 import { decimalToString, normalizeCurrency, type PriceMode } from '@/lib/pricing';
 import { readSpecTable, readVariantGroups } from '@/lib/product-draft';
 
@@ -104,6 +104,11 @@ export interface ProductDetailView extends ProductCardView {
   variantGroups: ProductVariantGroupView[];
   /** 当前语言缺失、已回退英文时为 true（页面据此提示，而不是显示字段名） */
   usingFallback: boolean;
+  /**
+   * 这个商品**真正有内容**的语言列表，用于生成 hreflang。
+   * 不含「会回退到英文」的语言 —— hreflang 声明的是内容语言，不是可访问的地址。
+   */
+  contentLocales: Locale[];
 }
 
 /**
@@ -120,7 +125,9 @@ export async function getProductForPreview(
   slug: string,
   locale: Locale,
 ): Promise<ProductDetailView | null> {
-  const direct = await getProductBySlug(slug, locale, { includeUnpublished: true });
+  // 预览放宽语言要求：管理员要在发布前看到「这个商品现在长什么样」，
+  // 此时因为缺少对应语言而 404 帮不上忙。
+  const direct = await getProductBySlug(slug, locale, { includeUnpublished: true, lenientLocale: true });
   if (direct) return direct;
 
   const match = await tryDb((db) =>
@@ -132,7 +139,7 @@ export async function getProductForPreview(
   );
   if (!match) return null;
 
-  return getProductBySlug(match.slug, locale, { includeUnpublished: true });
+  return getProductBySlug(match.slug, locale, { includeUnpublished: true, lenientLocale: true });
 }
 
 export interface ProductListResult {
@@ -160,8 +167,44 @@ export function normalizeQuery(raw: string | null | undefined): string {
   return (raw ?? '').trim().slice(0, MAX_QUERY_LENGTH);
 }
 
+/**
+ * 按语言取翻译行。
+ *
+ * 规则（与 SEO 字段的回退是两件不同的事，别混）：
+ *   - **中文页面只认中文**：没有中文内容就不显示，绝不拿别的语言顶上；
+ *   - 其它语言：先看该语言，没有则回退**英文**；
+ *   - 该语言与英文都没有 → 返回 `undefined`，由调用方决定 404 / 不进目录。
+ *
+ * 这里刻意**去掉了原来 `?? rows[0]` 那一层**：它会把「任意一条翻译」当成兜底，
+ * 结果阿拉伯语页面显示中文名、并对外生成 hreflang，等于告诉搜索引擎
+ * 「这是阿拉伯语内容」。宁可不展示，也不要展示错的语言。
+ */
 function pickTranslation<T extends { locale: Locale }>(rows: T[], locale: Locale): T | undefined {
-  return rows.find((row) => row.locale === locale) ?? rows.find((row) => row.locale === 'en') ?? rows[0];
+  const exact = rows.find((row) => row.locale === locale);
+  if (exact) return exact;
+  if (locale === 'zh') return undefined;
+  return rows.find((row) => row.locale === 'en');
+}
+
+/**
+ * 该商品在指定语言下是否有真实内容。
+ *
+ * 判断依据是**是否存在可用的翻译行**（名称非空），而不是「渲染时会不会回退」——
+ * 目录、hreflang、面包屑都要用同一个判断，否则又会出现「列表里有、点进去 404」。
+ */
+function hasTranslation<T extends { locale: Locale; name?: string | null }>(
+  rows: T[],
+  locale: Locale,
+): boolean {
+  const usable = (row: T) => (row.name ?? '').trim().length > 0;
+  if (rows.some((row) => row.locale === locale && usable(row))) return true;
+  if (locale === 'zh') return false;
+  return rows.some((row) => row.locale === 'en' && usable(row));
+}
+
+/** 该商品有内容的全部语言，用于生成 hreflang */
+export function localesWithContent(rows: { locale: Locale; name: string }[], available: readonly Locale[]): Locale[] {
+  return available.filter((locale) => hasTranslation(rows, locale));
 }
 
 function coverOf(
@@ -255,6 +298,13 @@ export async function listProducts(options: {
   const result = await tryDb(async (db) => {
     const where = {
       published: true,
+      // 该语言下没有内容的商品不出现在该语言的目录里。
+      // 中文只认中文；其它语言允许英文兜底（页面上会标出这是英文内容）。
+      // 不这样做就会出现「列表里看得见、点进去 404」的自相矛盾。
+      translations:
+        locale === 'zh'
+          ? { some: { locale, name: { not: '' } } }
+          : { some: { locale: { in: [locale, 'en'] as Locale[] }, name: { not: '' } } },
       ...(options.featuredOnly ? { featured: true } : {}),
       ...(categorySlug ? { category: { slug: categorySlug, enabled: true } } : {}),
       ...(query
@@ -357,7 +407,15 @@ export async function listProducts(options: {
 export async function getProductBySlug(
   slug: string,
   locale: Locale,
-  options: { includeUnpublished?: boolean } = {},
+  options: {
+    includeUnpublished?: boolean;
+    /**
+     * 放宽语言要求：当前语言与英文都没有内容时也照常返回（回退到任意一条）。
+     * 只给**后台草稿预览**用 —— 管理员要在发布前检查「这个商品现在长什么样」，
+     * 此时 404 帮不上忙。正式站点一律用默认的严格模式。
+     */
+    lenientLocale?: boolean;
+  } = {},
 ): Promise<ProductDetailView | null> {
   const clean = slug.trim();
   if (!clean) return null;
@@ -384,9 +442,13 @@ export async function getProductBySlug(
 
   if (!row) return null;
 
-  const exact = row.translations.find((tr) => tr.locale === locale);
-  const fallback = row.translations.find((tr) => tr.locale === 'en') ?? row.translations[0];
-  const tr = (exact ?? fallback) as TranslationRow | undefined;
+  const translations = row.translations as TranslationRow[];
+  // 严格模式：该语言与英文都没有内容就当作不存在（正式站点用这条）
+  // 放宽模式：回退到任意一条，仅供后台预览
+  const tr = options.lenientLocale
+    ? (pickTranslation(translations, locale) ?? translations[0])
+    : pickTranslation(translations, locale);
+  if (!tr) return null;
   const categoryTr = row.category ? pickTranslation(row.category.translations, locale) : undefined;
   const cover = coverOf(row.coverAsset, locale);
   const hover = hoverVideoOf(row.hoverVideoAsset);
@@ -542,7 +604,10 @@ export async function getProductBySlug(
     specifications,
     specificationTable,
     variantGroups,
-    usingFallback: Boolean(tr) && !exact,
+    // 真正在展示的语言与请求的语言不一致 —— 也就是「英文回退」。
+    // 页面据此显示「该商品暂无您所选语言的内容，当前显示英文」。
+    usingFallback: tr.locale !== locale,
+    contentLocales: localesWithContent(translations, locales),
     ...priceOf(row),
   };
 }
