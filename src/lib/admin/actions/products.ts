@@ -36,7 +36,7 @@ import {
 } from '@/lib/product-draft';
 import type { FormState } from '@/lib/admin/action-state';
 import { localizedRecord } from '@/lib/i18n/localized';
-import { SLUG_PATTERN } from '@/lib/slug';
+import { SLUG_PATTERN, slugify, uniqueSlug } from '@/lib/slug';
 
 /**
  * 自动保存的提示。
@@ -988,7 +988,7 @@ export async function deleteProductVersionAction(
 export async function duplicateProductAction(
   _prev: FormState,
   formData: FormData,
-): Promise<FormState> {
+): Promise<FormState & { duplicateId?: string }> {
   const { t } = await getAdminMessagesForRequest();
 
   const guard = await requireAdminOrError(t);
@@ -1002,6 +1002,8 @@ export async function duplicateProductAction(
   const db = getPrisma();
   if (!db) return getDbUnavailableState(t);
 
+  let copyId: string | undefined;
+
   try {
     const source = await db.product.findUnique({
       where: { id: parsed.data.id },
@@ -1013,19 +1015,27 @@ export async function duplicateProductAction(
     });
     if (!source) return { status: 'error', message: t.products.notFound };
 
-    let slug = `${source.slug}-copy`;
-    let counter = 2;
-    for (;;) {
-      const taken = await db.product.findUnique({ where: { slug }, select: { id: true } });
-      if (!taken) break;
-      slug = `${source.slug}-copy-${counter}`;
-      counter += 1;
-      if (counter > 100) return { status: 'error', message: t.actions.saveFailed };
-    }
+    // 复制品必须有唯一 slug。命名规则与新建商品共用同一套实现（下划线 + 递增序号），
+    // 这样「复制出来的地址」和「新建出来的地址」样式一致。
+    const baseSlug = slugify(`${source.slug}_copy`) || 'product_copy';
+    const slug = await uniqueSlug(baseSlug, async (candidate) =>
+      Boolean(await db.product.findUnique({ where: { slug: candidate }, select: { id: true } })),
+    );
+
+    // 编辑器里看到的是**草稿**（没有草稿时就是线上内容）。原实现只复制线上行，
+    // 于是「正在编辑的商品」复制出来会丢掉你刚改的东西 —— 这里把草稿一并带过去。
+    const draftState = await loadProductDraftState(db, source.id);
+    const sourceDraft = draftState?.hasDraft ? draftState.draft : null;
 
     const copy = await db.product.create({
       data: {
         slug,
+        // 运行数据一律不继承：published 固定为 false、不复制订单/统计/发布时间；
+        // sortOrder 属于展示配置，随内容一起复制。
+        draftData: sourceDraft
+          ? (sourceDraft as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+        draftUpdatedAt: sourceDraft ? new Date() : null,
         sku: source.sku,
         categoryId: source.categoryId,
         coverAssetId: source.coverAssetId,
@@ -1078,6 +1088,8 @@ export async function duplicateProductAction(
       },
     });
 
+    copyId = copy.id;
+
     await writeAudit({
       userId: user.id,
       actorEmail: user.email,
@@ -1085,7 +1097,7 @@ export async function duplicateProductAction(
       targetType: 'Product',
       targetId: copy.id,
       summary: t.products.duplicated,
-      detail: { duplicatedFrom: source.id, slug: copy.slug },
+      detail: { duplicatedFrom: source.id, slug: copy.slug, carriedDraft: Boolean(sourceDraft) },
     });
   } catch (error) {
     console.error('[admin] duplicate product failed:', error);
@@ -1093,7 +1105,7 @@ export async function duplicateProductAction(
   }
 
   revalidatePublicCatalogue();
-  return { status: 'success', message: t.products.duplicated };
+  return { status: 'success', message: t.products.duplicated, duplicateId: copyId };
 }
 
 /** Deletes a product (translations, media and cover bindings cascade) and returns to the list. */

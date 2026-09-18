@@ -15,6 +15,7 @@ import type { AdminUiLocale } from '@/lib/admin/i18n';
 import { cn } from '@/lib/cn';
 import { deleteProductAction } from '@/lib/admin/actions/products';
 import { DeleteForm } from '@/components/admin/delete-form';
+import { DuplicateProductButton } from './duplicate-product-button';
 import type { ProductEditorData, ProductVersionData } from './types';
 
 /**
@@ -150,9 +151,23 @@ export function VersionsTab({ data }: { data: ProductEditorData }) {
       </section>
 
       {/*
+        商品管理区：复制与删除。
+        这两个入口原本都在「基本信息」分区里，编辑器改版后那个分区不再渲染，
+        于是后台既不能删也不能复制商品 —— 这里把它们放回来。
+      */}
+      <section className="space-y-4 rounded-xl border border-navy-200 bg-white p-5">
+        <div>
+          <h2 className="text-sm font-semibold text-navy-900">{t.products.duplicate}</h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted">{t.products.duplicateHint}</p>
+        </div>
+        <DuplicateProductButton
+          productId={data.product.id}
+          productName={productName || t.products.unnamedProduct}
+        />
+      </section>
+
+      {/*
         商品删除入口。
-        它原本在「基本信息」分区里，而编辑器改版后那个分区不再渲染，
-        于是整个后台都没有地方能删商品了 —— 这里把它放回来。
 
         放在「版本」分区而不是编辑区里，是刻意的：删除是不可撤销的破坏性操作，
         离日常编辑的输入框越远越好，免得误点。位置虽然换了，用的还是同一个

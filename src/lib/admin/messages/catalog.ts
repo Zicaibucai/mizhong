@@ -315,7 +315,11 @@ export const productMessagesEn = {
   saveBarHint: 'Save the section you are editing, publish it, or open the public page.',
   preview: 'Preview on site',
   duplicate: 'Duplicate',
+  duplicateHint:
+    'Create an unpublished draft copy of this product. Content is copied; publish state, orders and statistics are not.',
   duplicated: 'Product duplicated as a draft.',
+  duplicateConfirmNamed:
+    'Create a copy of “{name}”? The copy is an unpublished draft: content is copied, publish state is not.',
   delete: 'Delete product',
   deleteConfirm: 'Delete this product permanently?',
   deleted: 'Product deleted.',
@@ -562,7 +566,9 @@ export const productMessagesZh = {
   saveBarHint: '保存当前正在编辑的分区、发布商品，或在前台查看效果。',
   preview: '在前台查看',
   duplicate: '复制商品',
+  duplicateHint: '复制成一个未发布的草稿商品。只复制内容，不复制发布状态、订单与统计。',
   duplicated: '已复制为草稿商品。',
+  duplicateConfirmNamed: '创建「{name}」的副本？副本是未发布的草稿：只复制内容，不复制发布状态。',
   delete: '删除商品',
   deleteConfirm: '确认永久删除该商品？',
   deleted: '商品已删除。',
