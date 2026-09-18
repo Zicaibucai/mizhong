@@ -65,8 +65,33 @@ describe('API Key 静态加密', () => {
   test('密文被篡改时认证失败，返回 null', () => {
     const cipher = encryptSecret(PLAINTEXT);
     const parts = cipher.split('.');
-    // 改动密文段的最后一个字符
-    const tampered = parts[3].slice(0, -2) + (parts[3].endsWith('A') ? 'B' : 'A') + '=';
+
+    /**
+     * 在**解码后的字节**上翻一位，而不是在 base64 文本上换一个字符。
+     *
+     * 换字符的写法有一类情况会「改出和原来一模一样的串」：单 '=' 填充时，
+     * base64 的倒数第二位只可能是 A/Q/g/w 之一，于是把倒数第二位换成 'A'
+     * 有四分之一的概率什么都没改 —— 解密当然成功，测试随机失败。
+     * 在字节上翻位则在定义上一定改变了密文。
+     */
+    const bytes = Buffer.from(parts[3], 'base64');
+    bytes[0] ^= 0x01;
+    const tampered = bytes.toString('base64');
+
+    assert.notEqual(tampered, parts[3], '篡改必须真的改变了密文');
+    assert.equal(decryptSecret([parts[0], parts[1], parts[2], tampered].join('.')), null);
+  });
+
+  test('认证标签被篡改时同样解不开（GCM 的意义就在这里）', () => {
+    const cipher = encryptSecret(PLAINTEXT);
+    const parts = cipher.split('.');
+
+    // 认证标签是密文段的最后 16 字节；动它同样必须解不开，
+    // 否则「加密」就只是编码，谁都能改了再放回去
+    const bytes = Buffer.from(parts[3], 'base64');
+    bytes[bytes.length - 1] ^= 0x01;
+    const tampered = bytes.toString('base64');
+
     assert.equal(decryptSecret([parts[0], parts[1], parts[2], tampered].join('.')), null);
   });
 
