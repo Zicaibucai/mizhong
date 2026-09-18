@@ -117,9 +117,17 @@ export async function createJob(db: PrismaClient, input: CreateJobInput): Promis
   if (input.idempotencyKey) {
     const existing = await db.translationJob.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
-      select: { id: true, totalItems: true },
+      select: { id: true, totalItems: true, status: true },
     });
-    if (existing) return { jobId: existing.id, created: false, totalItems: existing.totalItems };
+    if (existing) {
+      // 上次是部分失败 / 失败的话，把失败的工作项放回队列再跑一次。
+      // 这一步是「重复点发布」与「只重试失败内容」的交汇点：同一个键既不会翻两遍
+      // 已经成功的语言，也不会因为「任务已结束」而把失败的部分永远晾在那里。
+      if (existing.status === 'PARTIAL' || existing.status === 'FAILED') {
+        await reopenJob(db, existing.id);
+      }
+      return { jobId: existing.id, created: false, totalItems: existing.totalItems };
+    }
   }
 
   // 已经有同类任务在跑 → 复用它，不新开
@@ -160,8 +168,26 @@ export async function createJob(db: PrismaClient, input: CreateJobInput): Promis
   return { jobId: job.id, created: true, totalItems: targets.length * targetLocalesToUse.length };
 }
 
-function dedupeTargets(targets: readonly ScopeTarget[]): ScopeTarget[] {
-  const seen = new Set<string>();
+/**
+ * 把一个已经结束、但有失败项的任务重新打开。
+ *
+ * 只把 **FAILED 的工作项放回队列**：已经 SYNCED 的保持原样，所以不会为了重试
+ * 一种语言而把成功的九种再翻一遍。SKIPPED（内容已删）也不动 —— 那是终态。
+ */
+async function reopenJob(db: PrismaClient, jobId: string): Promise<void> {
+  const reset = await db.translationJobItem.updateMany({
+    where: { jobId, status: 'FAILED' },
+    data: { status: 'PENDING', lastError: null, finishedAt: null },
+  });
+  if (reset.count === 0) return;
+
+  await db.translationJob.update({
+    where: { id: jobId },
+    data: { status: 'RUNNING', finishedAt: null, lastError: null },
+  });
+}
+
+function dedupeTargets(targets: readonly ScopeTarget[]): ScopeTarget[] {  const seen = new Set<string>();
   const out: ScopeTarget[] = [];
   for (const target of targets) {
     const key = `${target.entityType}:${target.entityId}`;

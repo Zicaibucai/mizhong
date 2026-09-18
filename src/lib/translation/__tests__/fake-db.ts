@@ -58,6 +58,94 @@ export interface FakeDbSeed {
   assets?: FakeAsset[];
 }
 
+// ---------------------------------------------------------------------------
+// 最小的查询引擎
+//
+// 任务相关的查询用到了 `where: { status: { in: [...] } }`、`OR`、`{ increment: 1 }`
+// 与 `orderBy` / `take` / `distinct`。逐个方法手写这些会把假库写得比被测代码还长，
+// 所以这里做三个小工具，让每个「表」只需要声明自己的行为。
+// ---------------------------------------------------------------------------
+
+/** 支持等值、`{ in }`、`{ lt }` 与 `OR` 的最小 where 匹配 */
+function matches(row: Record<string, unknown>, where: Record<string, unknown> | undefined): boolean {
+  if (!where) return true;
+
+  for (const [key, condition] of Object.entries(where)) {
+    if (key === 'OR') {
+      const branches = condition as Record<string, unknown>[];
+      if (!branches.some((branch) => matches(row, branch))) return false;
+      continue;
+    }
+    if (key === 'AND') {
+      const branches = condition as Record<string, unknown>[];
+      if (!branches.every((branch) => matches(row, branch))) continue;
+      continue;
+    }
+
+    const actual = row[key];
+    if (condition && typeof condition === 'object' && !Array.isArray(condition)) {
+      const object = condition as Record<string, unknown>;
+      if ('in' in object) {
+        if (!(object.in as unknown[]).includes(actual)) return false;
+        continue;
+      }
+      if ('lt' in object) {
+        const limit = object.lt as Date;
+        if (!(actual instanceof Date) || !(actual.getTime() < limit.getTime())) return false;
+        continue;
+      }
+    }
+    if (actual !== condition) return false;
+  }
+  return true;
+}
+
+/** 支持 `{ increment: N }` 的字段更新 */
+function applyUpdate(row: Record<string, unknown>, data: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(data)) {
+    if (value && typeof value === 'object' && 'increment' in (value as Record<string, unknown>)) {
+      const current = typeof row[key] === 'number' ? (row[key] as number) : 0;
+      row[key] = current + ((value as { increment: number }).increment ?? 0);
+      continue;
+    }
+    row[key] = value;
+  }
+  row.updatedAt = new Date();
+}
+
+function sortRows(
+  rows: Record<string, unknown>[],
+  orderBy: Record<string, 'asc' | 'desc'> | Record<string, 'asc' | 'desc'>[] | undefined,
+): Record<string, unknown>[] {
+  if (!orderBy) return rows;
+  const keys = Array.isArray(orderBy) ? orderBy : [orderBy];
+  return [...rows].sort((a, b) => {
+    for (const entry of keys) {
+      for (const [key, direction] of Object.entries(entry)) {
+        const left = a[key];
+        const right = b[key];
+        if (left === right) continue;
+        const comparison = left instanceof Date && right instanceof Date
+          ? left.getTime() - right.getTime()
+          : String(left) < String(right)
+            ? -1
+            : 1;
+        return direction === 'desc' ? -comparison : comparison;
+      }
+    }
+    return 0;
+  });
+}
+
+function project(row: Record<string, unknown>, select?: Record<string, boolean>): Record<string, unknown> {
+  if (!select) return row;
+  const out: Record<string, unknown> = {};
+  for (const [key, wanted] of Object.entries(select)) {
+    if (wanted) out[key] = row[key];
+  }
+  return out;
+}
+
 let counter = 0;
 function nextId(prefix: string): string {
   counter += 1;
@@ -160,6 +248,19 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
   const assets = new Map<string, FakeAsset>();
   for (const asset of seed.assets ?? []) assets.set(asset.id, asset);
 
+  const jobRows: Record<string, unknown>[] = [];
+  const jobItemRows: Record<string, unknown>[] = [];
+  const releaseRows: Record<string, unknown>[] = [];
+  const productVersionRows: Record<string, unknown>[] = [];
+
+  /** 内容类型 × 关联的翻译行，用于 listScope 那种「按语言取一行」的 select */
+  type TranslationSelect = { where?: { locale?: Locale }; select?: Record<string, boolean> };
+
+  function selectTranslations(rows: Record<string, unknown>[], spec: TranslationSelect | undefined) {
+    const filtered = spec?.where?.locale ? rows.filter((row) => row.locale === spec.where?.locale) : rows;
+    return filtered.map((row) => project(row, spec?.select));
+  }
+
   /** 按 include 的形状把关联挂上去 —— 假库也要模拟「include 里有什么就返回什么」 */
   function withProductInclude(row: Record<string, unknown>) {
     return {
@@ -175,7 +276,214 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
   }
 
   const db = {
+    translationJob: {
+      // Prisma 的 findUnique 支持任意唯一列，任务表上有两个：id 与 idempotencyKey。
+      // 只认 id 的话，「重复发布命中同一个任务」这类测试会在假库上假通过 —— 必须都支持。
+      async findUnique({
+        where,
+        select,
+      }: {
+        where: { id?: string; idempotencyKey?: string };
+        select?: Record<string, boolean>;
+      }) {
+        const row = jobRows.find(
+          (item) =>
+            (where.id !== undefined && item.id === where.id) ||
+            (where.idempotencyKey !== undefined && item.idempotencyKey === where.idempotencyKey),
+        );
+        return row ? project(row, select) : null;
+      },
+      async findFirst({
+        where,
+        orderBy,
+        select,
+      }: {
+        where?: Record<string, unknown>;
+        orderBy?: Record<string, 'asc' | 'desc'>;
+        select?: Record<string, boolean>;
+      }) {
+        const [row] = sortRows(jobRows.filter((item) => matches(item, where)), orderBy);
+        return row ? project(row, select) : null;
+      },
+      async findMany({
+        where,
+        orderBy,
+        take,
+        select,
+      }: {
+        where?: Record<string, unknown>;
+        orderBy?: Record<string, 'asc' | 'desc'>;
+        take?: number;
+        select?: Record<string, boolean>;
+      }) {
+        const rows = sortRows(jobRows.filter((item) => matches(item, where)), orderBy);
+        return (take ? rows.slice(0, take) : rows).map((row) => project(row, select));
+      },
+      async create({ data, select }: { data: Record<string, unknown>; select?: Record<string, boolean> }) {
+        const row = {
+          id: nextId('job'),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          startedAt: null,
+          finishedAt: null,
+          lockedAt: null,
+          lastError: null,
+          totalItems: 0,
+          completedItems: 0,
+          failedItems: 0,
+          requestCount: 0,
+          tokenEstimate: 0,
+          idempotencyKey: null,
+          createdById: null,
+          ...data,
+        };
+        jobRows.push(row);
+        return project(row, select);
+      },
+      async update({
+        where,
+        data,
+        select,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+        select?: Record<string, boolean>;
+      }) {
+        const row = jobRows.find((item) => item.id === where.id);
+        if (!row) throw new Error(`fake db: no job ${where.id}`);
+        applyUpdate(row, data);
+        return project(row, select);
+      },
+      async updateMany({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) {
+        const rows = jobRows.filter((item) => matches(item, where));
+        for (const row of rows) applyUpdate(row, data);
+        return { count: rows.length };
+      },
+    },
+    translationJobItem: {
+      async createMany({ data }: { data: Record<string, unknown>[] }) {
+        for (const item of data) {
+          jobItemRows.push({
+            id: nextId('jitem'),
+            status: 'PENDING',
+            attempts: 0,
+            lastError: null,
+            requestCount: 0,
+            tokenEstimate: 0,
+            revision: 0,
+            sortOrder: 0,
+            startedAt: null,
+            finishedAt: null,
+            ...item,
+          });
+        }
+        return { count: data.length };
+      },
+      async findFirst({
+        where,
+        orderBy,
+        select,
+      }: {
+        where?: Record<string, unknown>;
+        orderBy?: Record<string, 'asc' | 'desc'>;
+        select?: Record<string, boolean>;
+      }) {
+        const [row] = sortRows(jobItemRows.filter((item) => matches(item, where)), orderBy);
+        return row ? project(row, select) : null;
+      },
+      async findMany({
+        where,
+        orderBy,
+        take,
+        select,
+      }: {
+        where?: Record<string, unknown>;
+        orderBy?: Record<string, 'asc' | 'desc'>;
+        take?: number;
+        select?: Record<string, boolean>;
+      }) {
+        const rows = sortRows(jobItemRows.filter((item) => matches(item, where)), orderBy);
+        return (take ? rows.slice(0, take) : rows).map((row) => project(row, select));
+      },
+      async update({ where, data }: { where: { id: string }; data: Record<string, unknown> }) {
+        const row = jobItemRows.find((item) => item.id === where.id);
+        if (!row) throw new Error(`fake db: no job item ${where.id}`);
+        applyUpdate(row, data);
+        return row;
+      },
+      async updateMany({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) {
+        const rows = jobItemRows.filter((item) => matches(item, where));
+        for (const row of rows) applyUpdate(row, data);
+        return { count: rows.length };
+      },
+      async count({ where }: { where?: Record<string, unknown> }) {
+        return jobItemRows.filter((item) => matches(item, where)).length;
+      },
+    },
+    contentRelease: {
+      async create({ data, select }: { data: Record<string, unknown>; select?: Record<string, boolean> }) {
+        const row = { id: nextId('rel'), publishedAt: new Date(), createdAt: new Date(), ...data };
+        releaseRows.push(row);
+        return project(row, select);
+      },
+      async findFirst({ where, orderBy }: { where?: Record<string, unknown>; orderBy?: Record<string, 'asc' | 'desc'> }) {
+        const [row] = sortRows(releaseRows.filter((item) => matches(item, where)), orderBy);
+        return row ?? null;
+      },
+    },
+    productVersion: {
+      async create({ data }: { data: Record<string, unknown> }) {
+        const row = { id: nextId('pver'), createdAt: new Date(), releaseId: null, note: null, ...data };
+        productVersionRows.push(row);
+        return row;
+      },
+      async findMany({
+        where,
+        orderBy,
+        take,
+        select,
+      }: {
+        where?: Record<string, unknown>;
+        orderBy?: Record<string, 'asc' | 'desc'>;
+        take?: number;
+        select?: Record<string, boolean>;
+      }) {
+        const rows = sortRows(productVersionRows.filter((item) => matches(item, where)), orderBy);
+        return (take ? rows.slice(0, take) : rows).map((row) => project(row, select));
+      },
+      async deleteMany({ where }: { where: Record<string, unknown> }) {
+        const before = productVersionRows.length;
+        for (let index = productVersionRows.length - 1; index >= 0; index -= 1) {
+          if (matches(productVersionRows[index], where)) productVersionRows.splice(index, 1);
+        }
+        return { count: before - productVersionRows.length };
+      },
+    },
     product: {
+      async findMany({
+        where,
+        orderBy,
+        select,
+      }: {
+        where?: Record<string, unknown>;
+        orderBy?: Record<string, 'asc' | 'desc'>;
+        select?: Record<string, boolean> & { translations?: TranslationSelect };
+      }) {
+        const rows = sortRows(
+          [...products.values()].filter((row) => matches(row, where)),
+          orderBy,
+        );
+        return rows.map((row) => {
+          const base = project(row, select);
+          if (select?.translations) {
+            base.translations = selectTranslations(
+              row.translations as Record<string, unknown>[],
+              select.translations,
+            );
+          }
+          return base;
+        });
+      },
       async findUnique({ where, include }: { where: { id: string }; include?: unknown }) {
         const row = products.get(where.id);
         if (!row) return null;
@@ -190,6 +498,27 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
       },
     },
     page: {
+      async findMany({
+        where,
+        orderBy,
+        select,
+      }: {
+        where?: Record<string, unknown>;
+        orderBy?: Record<string, 'asc' | 'desc'>;
+        select?: Record<string, boolean> & { translations?: TranslationSelect };
+      }) {
+        const rows = sortRows([...pages.values()].filter((row) => matches(row, where)), orderBy);
+        return rows.map((row) => {
+          const base = project(row, select);
+          if (select?.translations) {
+            base.translations = selectTranslations(
+              row.translations as Record<string, unknown>[],
+              select.translations,
+            );
+          }
+          return base;
+        });
+      },
       async findUnique({ where, include }: { where: { id: string }; include?: unknown }) {
         const row = pages.get(where.id);
         if (!row) return null;
@@ -268,8 +597,32 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
         return row;
       },
     },
-    companyProfile: {
-      async findUnique({ where }: { where: { slug: string }; include?: unknown }) {
+    // 这三种内容类型在这个假库里没有种子数据。留成空表而不是省略，
+    // 是为了让 collectScope 能真的跑一遍全类型 —— 类型漏了会立刻抛错，
+    // 而不是悄悄少统计几条。
+    navItem: {
+      async findMany() {
+        return [] as Record<string, unknown>[];
+      },
+      async findUnique() {
+        return null;
+      },
+    },
+    contactMethod: {
+      async findMany() {
+        return [] as Record<string, unknown>[];
+      },
+    },
+    productCategory: {
+      async findMany() {
+        return [] as Record<string, unknown>[];
+      },
+      async findUnique() {
+        return null;
+      },
+    },
+
+    companyProfile: {      async findUnique({ where }: { where: { slug: string }; include?: unknown }) {
         if (where.slug !== 'primary') return null;
         return {
           id: 'profile_1',

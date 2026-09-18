@@ -61,6 +61,11 @@ describe('每个 Server Action 都校验管理员会话', () => {
     assert.ok(actions.length >= 40, `只扫到 ${actions.length} 个 action，扫描逻辑可能失效了`);
     assert.ok(actions.some((action) => action.file === 'translation.ts'));
     assert.ok(actions.some((action) => action.file === 'products.ts'));
+    // 语言同步是花真钱的入口，必须确认它真的被扫到了 ——
+    // 只靠上面那条「全部 action 都有守卫」是不够的：万一扫描本身漏了这个文件，
+    // 它会以「没有 action」的形式静默通过。
+    assert.ok(actions.some((action) => action.file === 'sync.ts'), 'sync.ts 没有被扫到');
+    assert.ok(actions.some((action) => action.file === 'pages.ts'));
   });
 
   test('翻译相关 action 都调用 requireAdminOrError', () => {
