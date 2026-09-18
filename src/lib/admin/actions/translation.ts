@@ -10,10 +10,16 @@ import {
   parseTranslationRequest,
   translatableFieldSchema,
   type TranslatableField,
+  type TranslationRequest,
 } from '@/lib/translation/fields';
 import { slugify, uniqueSlug } from '@/lib/slug';
 import { loadTranslationSettings, saveTranslationSettings } from '@/lib/translation/settings';
+import { EncryptionUnavailableError } from '@/lib/translation/crypto';
+import { acquireTranslationSlot } from '@/lib/translation/rate-limit';
 import type { FormState } from '@/lib/admin/action-state';
+
+/** 上面已经确认过非空，这里只是给抽取出来的函数一个明确的类型 */
+type NonNullDb = NonNullable<ReturnType<typeof getPrisma>>;
 
 /**
  * 翻译相关的 Server Actions。
@@ -60,6 +66,8 @@ export type TranslateErrorReason =
   | 'empty-source'
   | 'too-large'
   | 'not-configured'
+  | 'rate-limited'
+  | 'busy'
   | TranslationErrorKind;
 
 /** 把底层错误翻译成用户能照着做的一句话 */
@@ -74,6 +82,10 @@ function describeError(
       return t.translation.tooLarge;
     case 'not-configured':
       return t.translation.notConfigured;
+    case 'rate-limited':
+      return t.translation.errorRateLimited;
+    case 'busy':
+      return t.translation.errorBusy;
     case 'auth':
       return t.translation.errorAuth;
     case 'rate-limit':
@@ -113,6 +125,37 @@ export async function translateProductContentAction(
   const db = getPrisma();
   if (!db) return { status: 'error', reason: 'invalid', message: getDbUnavailableState(t).message ?? '' };
 
+  // 限流与并发限制：翻译按量计费，连点或脚本刷会把费用放大
+  const slot = acquireTranslationSlot(user.id);
+  if (!slot.ok) {
+    return {
+      status: 'error',
+      reason: slot.reason === 'concurrency' ? 'busy' : 'rate-limited',
+      message: describeError(slot.reason === 'concurrency' ? 'busy' : 'rate-limited', t),
+    };
+  }
+
+  const startedAt = Date.now();
+  try {
+    return await runTranslation(db, parsed.data, input, t, user, startedAt);
+  } finally {
+    // 必须释放，否则并发计数只增不减，最终把翻译彻底锁死
+    slot.release();
+  }
+}
+
+/**
+ * 真正执行翻译。抽成独立函数，是为了让上面的限流额度能用 `finally` 稳稳释放 ——
+ * 中间任何一条提前 return 或抛异常都不会漏掉归还。
+ */
+async function runTranslation(
+  db: NonNullDb,
+  request: TranslationRequest,
+  input: TranslateFieldInput,
+  t: AdminMessages,
+  user: { id: string; email: string },
+  startedAt: number,
+): Promise<TranslateActionResult> {
   const settings = await loadTranslationSettings(db);
   if (!settings.apiKey) {
     return {
@@ -122,11 +165,18 @@ export async function translateProductContentAction(
     };
   }
 
-  const result = await translateWithDeepSeek(settings, parsed.data);
+  const result = await translateWithDeepSeek(settings, request);
+  const durationMs = Date.now() - startedAt;
 
   if (!result.ok) {
-    // 日志里只有错误类别与截断后的响应片段，绝不包含 API Key
-    console.error('[admin] deepseek translation failed:', result.error, result.attempts);
+    // 日志里只有错误类别、尝试次数与耗时，绝不包含 API Key，也不含响应原文
+    console.error(
+      '[admin] deepseek translation failed:',
+      result.error,
+      `attempts=${result.attempts}`,
+      `ms=${durationMs}`,
+      `locales=${request.targets.length}`,
+    );
     return {
       status: 'error',
       reason: result.error,
@@ -152,7 +202,7 @@ export async function translateProductContentAction(
   for (const [locale, fields] of Object.entries(result.values)) {
     for (const [field, value] of Object.entries(fields) as [TranslatableField, string][]) {
       // 原文为空的位置不接受译文（模型有时会自行补全）
-      if (!parsed.data.source[field]) continue;
+      if (!request.source[field]) continue;
       const current = existing[locale]?.[field]?.trim() ?? '';
       if (current && !overwrite) {
         skipped.push({ locale, field });
@@ -163,7 +213,7 @@ export async function translateProductContentAction(
   }
 
   // 哪些语言一条都没翻出来 —— 逐语言报告，成功的那部分照常保留
-  const failures = parsed.data.targets
+  const failures = request.targets
     .filter((locale) => !applied[locale])
     .map((locale) => ({ locale, reason: t.translation.errorBadResponse }));
 
@@ -174,11 +224,19 @@ export async function translateProductContentAction(
     targetType: 'Product',
     targetId: null,
     summary: t.translation.auditSummary,
+    // 需求要求记录「耗时、目标语言数量、成功/失败」；模型名也一并记下便于对账。
+    // 这里只有元数据 —— 没有 Key、没有密文、没有原文与译文。
     detail: {
-      targets: parsed.data.targets,
-      fields: Object.keys(parsed.data.source),
+      targets: request.targets,
+      targetCount: request.targets.length,
+      fields: Object.keys(request.source),
+      fieldCount: Object.keys(request.source).length,
       model: settings.model,
       attempts: result.attempts,
+      durationMs,
+      appliedCount: Object.keys(applied).length,
+      skippedCount: skipped.length,
+      failedLocales: failures.map((failure) => failure.locale),
     },
   });
 
@@ -187,7 +245,7 @@ export async function translateProductContentAction(
     applied,
     skipped,
     failures,
-    fieldCount: Object.keys(parsed.data.source).length,
+    fieldCount: Object.keys(request.source).length,
     attempts: result.attempts,
   };
 }
@@ -245,6 +303,11 @@ export async function saveTranslationSettingsAction(
       detail: { keyChanged: parsed.data.apiKey.length > 0, model: parsed.data.model },
     });
   } catch (error) {
+    if (error instanceof EncryptionUnavailableError) {
+      // 没有配置加密密钥时拒绝落库，并明确告诉管理员去配哪个环境变量
+      console.error('[admin] save translation settings refused: TRANSLATION_ENCRYPTION_KEY is not set');
+      return { status: 'error', message: t.translation.encryptionMissing };
+    }
     console.error('[admin] save translation settings failed:', error);
     return { status: 'error', message: t.actions.saveFailed };
   }

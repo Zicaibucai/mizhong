@@ -17,6 +17,7 @@ const settings: TranslationSettings = {
   baseUrl: 'https://api.deepseek.com/v1',
   model: 'deepseek-chat',
   source: 'database',
+  keyStorage: 'encrypted',
 };
 
 const realFetch = globalThis.fetch;
