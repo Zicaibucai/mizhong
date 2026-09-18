@@ -69,6 +69,17 @@ CREATE TABLE "ContentRelease" (
 );
 
 -- CreateTable
+CREATE TABLE "SlugHistory" (
+    "id" TEXT NOT NULL,
+    "entityType" TEXT NOT NULL,
+    "entityId" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SlugHistory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "TranslationJob" (
     "id" TEXT NOT NULL,
     "kind" "TranslationJobKind" NOT NULL,
@@ -138,6 +149,12 @@ CREATE INDEX "ContentRelease_entityType_entityId_publishedAt_idx" ON "ContentRel
 
 -- CreateIndex
 CREATE INDEX "ContentRelease_publishedById_idx" ON "ContentRelease"("publishedById");
+
+-- CreateIndex
+CREATE INDEX "SlugHistory_entityType_entityId_idx" ON "SlugHistory"("entityType", "entityId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SlugHistory_entityType_slug_key" ON "SlugHistory"("entityType", "slug");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "TranslationJob_idempotencyKey_key" ON "TranslationJob"("idempotencyKey");

@@ -1,6 +1,6 @@
-import { test, describe } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { localesWithContent } from '@/lib/catalog';
+import { localesWithContent, strictLocaleFallbackEnabled } from '@/lib/catalog';
 import { locales, localeCodes } from '@/lib/i18n/config';
 
 /**
@@ -15,17 +15,49 @@ import { locales, localeCodes } from '@/lib/i18n/config';
  *   - 其它语言先看该语言，没有则回退**英文**；
  *   - 该语言与英文都没有 → 当作不存在（404），而不是随便抓一条。
  *
- * 这里的断言全部落在 `localesWithContent` 上 —— 它是目录、hreflang、面包屑
- * 共用的那一个判断。三处用同一个函数，才不会出现「列表里有、点进去 404」。
- *
- * 注意：把这套规则**部署上去**有个前提 —— 全站翻译必须先跑完。否则
- * 「2 个商品 × 10 种语言 = 20 个原本 200 的 URL 会变成 404」。所以这里是
- * 规则本身的测试，不是部署开关。
+ * **这套规则默认关闭**，由 `STRICT_LOCALE_FALLBACK` 环境变量控制。原因是
+ * 「2 个商品 × 10 种语言 = 20 个原本 200 的 URL 会变成 404」——必须先翻译完
+ * 再开启。所以这里既测开启后的规则，也测关闭时确实是旧行为（不能误上线）。
  */
+
+const original = process.env.STRICT_LOCALE_FALLBACK;
+
+beforeEach(() => {
+  process.env.STRICT_LOCALE_FALLBACK = '1';
+});
+
+afterEach(() => {
+  if (original === undefined) delete process.env.STRICT_LOCALE_FALLBACK;
+  else process.env.STRICT_LOCALE_FALLBACK = original;
+});
 
 function rows(...entries: [string, string][]) {
   return entries.map(([locale, name]) => ({ locale: locale as never, name }));
 }
+
+describe('开关', () => {
+  test('默认关闭 —— 不设环境变量时必须是旧行为', () => {
+    delete process.env.STRICT_LOCALE_FALLBACK;
+    assert.equal(strictLocaleFallbackEnabled(), false, '不设变量时不能开启严格回退');
+  });
+
+  test('识别 1 / true，其余一律视为关闭', () => {
+    for (const value of ['1', 'true', 'TRUE', ' true ']) {
+      process.env.STRICT_LOCALE_FALLBACK = value;
+      assert.equal(strictLocaleFallbackEnabled(), true, `${value} 应当开启`);
+    }
+    for (const value of ['', '0', 'false', 'no', 'yes']) {
+      process.env.STRICT_LOCALE_FALLBACK = value;
+      assert.equal(strictLocaleFallbackEnabled(), false, `${value} 应当是关闭`);
+    }
+  });
+
+  test('关闭时 hreflang 列出全部语言（线上现状不变）', () => {
+    delete process.env.STRICT_LOCALE_FALLBACK;
+    const onlyChinese = rows(['zh', '特塑钩子']);
+    assert.deepEqual(localesWithContent(onlyChinese, locales), [...locales]);
+  });
+});
 
 describe('严格回退：哪些语言算「真的有内容」', () => {
   test('只有中文时，除中文外一个语言都不算有内容', () => {

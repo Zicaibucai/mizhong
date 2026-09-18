@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { getDictionary, defaultLocale, isLocale } from '@/lib/i18n';
+import { tryDb } from '@/lib/db';
+import { findSlugRedirect } from '@/lib/slug-history';
 
 /**
  * 兜底路由的 metadata。
@@ -33,7 +35,23 @@ export async function generateMetadata({
  *
  * 具体路由优先于 catch-all，所以它不会抢走 /zh/products、/zh/design-preview
  * 等已存在的页面。
+ *
+ * 顺带做一件事：页面（Page）改过 slug 之后，旧地址在这里被 301 到新地址。
+ * 这条查询只在**本来就要 404** 的路径上发生，正常访问一次都不会多查。
  */
-export default function CatchAll(): never {
+export default async function CatchAll({
+  params,
+}: {
+  params: Promise<{ locale: string; rest: string[] }>;
+}) {
+  const { locale, rest } = await params;
+  const l = isLocale(locale) ? locale : defaultLocale;
+
+  // 单段路径才可能是页面 slug；更深的路径（/products/xxx 之类）由各自的页面处理
+  if (rest.length === 1) {
+    const moved = await tryDb((db) => findSlugRedirect(db, 'page', rest[0]));
+    if (moved) permanentRedirect(`/${l}/${encodeURIComponent(moved)}`);
+  }
+
   notFound();
 }

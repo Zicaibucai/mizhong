@@ -168,22 +168,54 @@ export function normalizeQuery(raw: string | null | undefined): string {
 }
 
 /**
+ * 严格语言回退的总开关 —— **默认关闭**。
+ *
+ * 背景：线上的正式商品（tehsugouzi、manli）目前只有中文翻译行。旧的回退逻辑会把
+ * 「任意一条翻译」当成兜底，于是阿拉伯语页面显示中文商品名，还对外生成 hreflang
+ * 说「这里就是阿拉伯语版本」—— 属于跨语言污染。严格规则把这条兜底去掉。
+ *
+ * 但严格规则**不能先上线**：没有英文也没有该语言的商品会从 200 变成 404。
+ * 按「2 个商品 × 10 种语言」算，就是 20 个原本能打开的地址直接消失。
+ * 所以它必须是**先翻译、后开启**——这也是需求里排的上线顺序。
+ *
+ * 于是做成环境变量：
+ *   - 不设或设成 '0' / 'false' → 旧行为（任意语言兜底），线上现状不变；
+ *   - 设成 '1' / 'true'        → 严格回退。
+ *
+ * 第三阶段全站翻译完成后，在服务器上把它置为 true 再重启即可 ——
+ * 不需要改代码、不需要重新构建，也就不会在切换的那一刻引入别的变数。
+ */
+export function strictLocaleFallbackEnabled(): boolean {
+  const raw = (process.env.STRICT_LOCALE_FALLBACK ?? '').trim().toLowerCase();
+  return raw === '1' || raw === 'true';
+}
+
+/**
  * 按语言取翻译行。
  *
  * 规则（与 SEO 字段的回退是两件不同的事，别混）：
  *   - **中文页面只认中文**：没有中文内容就不显示，绝不拿别的语言顶上；
  *   - 其它语言：先看该语言，没有则回退**英文**；
- *   - 该语言与英文都没有 → 返回 `undefined`，由调用方决定 404 / 不进目录。
+ *   - 该语言与英文都没有 → 严格模式下返回 `undefined`（由调用方 404 / 不进目录）；
+ *     非严格模式下退回原来那层「任意一条翻译」的兜底。
  *
- * 这里刻意**去掉了原来 `?? rows[0]` 那一层**：它会把「任意一条翻译」当成兜底，
+ * 严格模式刻意**去掉了 `?? rows[0]`**：它会把「任意一条翻译」当成兜底，
  * 结果阿拉伯语页面显示中文名、并对外生成 hreflang，等于告诉搜索引擎
  * 「这是阿拉伯语内容」。宁可不展示，也不要展示错的语言。
  */
 function pickTranslation<T extends { locale: Locale }>(rows: T[], locale: Locale): T | undefined {
   const exact = rows.find((row) => row.locale === locale);
   if (exact) return exact;
-  if (locale === 'zh') return undefined;
-  return rows.find((row) => row.locale === 'en');
+
+  const english = rows.find((row) => row.locale === 'en');
+
+  if (strictLocaleFallbackEnabled()) {
+    // 严格：中文不认别的语言；其它语言只认英文，没有就是没有
+    return locale === 'zh' ? undefined : english;
+  }
+
+  // 非严格：与改造前逐字一致的旧行为 —— 先英文，再任意一条
+  return english ?? rows[0];
 }
 
 /**
@@ -191,19 +223,30 @@ function pickTranslation<T extends { locale: Locale }>(rows: T[], locale: Locale
  *
  * 判断依据是**是否存在可用的翻译行**（名称非空），而不是「渲染时会不会回退」——
  * 目录、hreflang、面包屑都要用同一个判断，否则又会出现「列表里有、点进去 404」。
+ *
+ * 严格模式关闭时一律返回 true —— 老行为下任何一条翻译都能兜底，
+ * 所以「这个语言有没有内容」这个问题没有意义，目录也不该因此过滤掉商品。
  */
 function hasTranslation<T extends { locale: Locale; name?: string | null }>(
   rows: T[],
   locale: Locale,
 ): boolean {
+  if (!strictLocaleFallbackEnabled()) return true;
+
   const usable = (row: T) => (row.name ?? '').trim().length > 0;
   if (rows.some((row) => row.locale === locale && usable(row))) return true;
   if (locale === 'zh') return false;
   return rows.some((row) => row.locale === 'en' && usable(row));
 }
 
-/** 该商品有内容的全部语言，用于生成 hreflang */
+/**
+ * 该商品有内容的全部语言，用于生成 hreflang。
+ *
+ * 严格模式关闭时返回全部语言（老行为：hreflang 列出全部 11 种），
+ * 开启后只列真正有内容的那些。
+ */
 export function localesWithContent(rows: { locale: Locale; name: string }[], available: readonly Locale[]): Locale[] {
+  if (!strictLocaleFallbackEnabled()) return [...available];
   return available.filter((locale) => hasTranslation(rows, locale));
 }
 
@@ -296,15 +339,25 @@ export async function listProducts(options: {
   const empty: ProductListResult = { items: [], total: 0, page, pageSize: PRODUCTS_PER_PAGE, pageCount: 0 };
 
   const result = await tryDb(async (db) => {
+    /**
+     * 严格模式下，该语言下没有内容的商品不出现在该语言的目录里 ——
+     * 中文只认中文；其它语言允许英文兜底（页面上会标出这是英文内容）。
+     * 不这样做就会出现「列表里看得见、点进去 404」的自相矛盾。
+     *
+     * 开关关闭时（线上现状）不加这条过滤：那时任何一条翻译都能兜底，
+     * 加了反而会让原本正常显示的商品从目录里消失。
+     */
+    const strict = strictLocaleFallbackEnabled();
     const where = {
       published: true,
-      // 该语言下没有内容的商品不出现在该语言的目录里。
-      // 中文只认中文；其它语言允许英文兜底（页面上会标出这是英文内容）。
-      // 不这样做就会出现「列表里看得见、点进去 404」的自相矛盾。
-      translations:
-        locale === 'zh'
-          ? { some: { locale, name: { not: '' } } }
-          : { some: { locale: { in: [locale, 'en'] as Locale[] }, name: { not: '' } } },
+      ...(strict
+        ? {
+            translations:
+              locale === 'zh'
+                ? { some: { locale, name: { not: '' } } }
+                : { some: { locale: { in: [locale, 'en'] as Locale[] }, name: { not: '' } } },
+          }
+        : {}),
       ...(options.featuredOnly ? { featured: true } : {}),
       ...(categorySlug ? { category: { slug: categorySlug, enabled: true } } : {}),
       ...(query

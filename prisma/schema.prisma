@@ -153,6 +153,27 @@ model ContentRelease {
   @@index([publishedById])
 }
 
+/// 旧的网址后缀 → 新网址后缀的永久重定向。
+///
+/// 主动改 slug 之后旧地址会 404，而搜索引擎索引、外链、客户收藏夹里还指着它 ——
+/// 那些流量和权重不该因为一次改网址就丢掉。这里记下历史，前台查不到内容时
+/// 按它 301 到新地址。
+///
+/// 刻意**不做成一张按请求查的重定向表**：只在「本来就要 404」的那条路径上查一次，
+/// 正常访问一次查询都不会多。
+model SlugHistory {
+  id         String   @id @default(cuid())
+  /// 'product' | 'page'
+  entityType String
+  entityId   String
+  slug       String
+  createdAt  DateTime @default(now())
+
+  /// 同一个 slug 只属于一条内容；重复改回来时保持最早的记录
+  @@unique([entityType, slug])
+  @@index([entityType, entityId])
+}
+
 enum TranslationJobStatus {
   PENDING
   RUNNING

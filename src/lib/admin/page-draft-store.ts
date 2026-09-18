@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { ADMIN_LOCALES } from '@/lib/admin/validation';
+import { recordSlugChange } from '@/lib/slug-history';
 import { pageDraftFromRow } from '@/lib/translation/adapters';
 import { readPageDraft, type PageBlockDraft, type PageDraft } from '@/lib/page-draft';
 
@@ -109,6 +110,10 @@ export async function applyPageDraftToLive(
   pageId: string,
   draft: PageDraft,
 ): Promise<void> {
+  // 改过 slug 就把旧地址记下来，前台据此 301 到新地址
+  const before = await tx.page.findUnique({ where: { id: pageId }, select: { slug: true } });
+  if (before) await recordSlugChange(tx, 'page', pageId, before.slug, draft.slug);
+
   await tx.page.update({ where: { id: pageId }, data: { slug: draft.slug } });
 
   // 页面自身的标题与 SEO。

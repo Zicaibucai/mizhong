@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import {
   defaultLocale,
   isLocale,
@@ -8,6 +8,8 @@ import {
 } from '@/lib/i18n';
 import { getCatalogDict } from '@/lib/i18n/catalog';
 import { getProductBySlug, listRelatedProducts } from '@/lib/catalog';
+import { tryDb } from '@/lib/db';
+import { findSlugRedirect } from '@/lib/slug-history';
 import { getSiteContent } from '@/lib/content';
 import { site } from '@/lib/site-config';
 import { productJsonLd } from '@/lib/product-jsonld';
@@ -88,7 +90,21 @@ export default async function ProductDetailPage({
   const l: Locale = isLocale(locale) ? locale : defaultLocale;
 
   const product = await getProductBySlug(slug, l);
-  if (!product) notFound();
+
+  /**
+   * 查不到内容时，先看看这是不是一个改过的旧地址。
+   *
+   * 管理员主动改 slug 之后，旧链接、搜索引擎索引、客户收藏夹都还指着旧地址。
+   * 直接把它们变成 404 是静默的损失（页面本身一切正常，只是那些流量没了），
+   * 所以这里用一次 301 把人送到新地址。
+   *
+   * 这次查询**只在本来就要 404 的路径上发生** —— 正常访问一次都不会多查。
+   */
+  if (!product) {
+    const moved = await tryDb((db) => findSlugRedirect(db, 'product', slug));
+    if (moved) permanentRedirect(`/${l}/products/${encodeURIComponent(moved)}`);
+    notFound();
+  }
 
   const [content, related] = await Promise.all([
     getSiteContent(l),

@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { ADMIN_LOCALES } from '@/lib/admin/validation';
 import { decimalToString, normalizeCurrency } from '@/lib/pricing';
+import { recordSlugChange } from '@/lib/slug-history';
 import {
   readDraft,
   readSpecTable,
@@ -186,6 +187,10 @@ export async function applyDraftToLive(
   draft: ProductDraft,
   price: { priceMin: string | null; priceMax: string | null },
 ): Promise<void> {
+  // 改过 slug 就把旧地址记下来，前台据此 301 到新地址（否则旧链接直接 404）
+  const before = await tx.product.findUnique({ where: { id: productId }, select: { slug: true } });
+  if (before) await recordSlugChange(tx, 'product', productId, before.slug, draft.basic.slug);
+
   await tx.product.update({
     where: { id: productId },
     data: {
