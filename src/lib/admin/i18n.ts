@@ -197,6 +197,16 @@ const en = {
     colBlocks: 'Blocks',
     colStatus: 'Status',
     home: 'Home',
+
+    // 页面发布前会被拦下的三种情况，以及版本操作
+    validationTitle: 'Please give the Chinese page title before publishing.',
+    seoWithoutTitle:
+      'A language has SEO text but no title. Fill in the title, or clear the SEO fields for that language.',
+    duplicateKeys: 'Two blocks share the same key ({keys}). Block keys must be unique within a page.',
+    versionSaved: 'Version saved.',
+    versionRestored: 'Version restored into the draft. Review it, then publish.',
+    versionMissing: 'That version no longer exists.',
+    versionDeleted: 'Version deleted.',
   },
   pageDetail: {
     dbUnavailable: 'The database is unavailable, so this page could not be loaded.',
@@ -206,6 +216,31 @@ const en = {
     blocks: 'Page blocks ({count})',
     noBlocksBefore: 'This page has no blocks yet. Run ',
     noBlocksAfter: ' to import the default home page blocks.',
+
+    // 草稿与同步
+    pendingTitle: 'Unpublished changes',
+    pendingHint: 'Saving writes to a draft. Visitors still see the last published version until you publish.',
+    translateHint:
+      'Saves every form above first, then translates the Chinese into {count} languages. Translations go into the draft — they go live on publish.',
+    syncStatus: 'Language sync',
+    syncPending: '{count} languages still need translating',
+    syncReady: 'Every language is up to date',
+    syncFailed: '{count} languages failed — see the Language sync page',
+    revisionLabel: 'Chinese version',
+
+    // 版本
+    versions: 'Version history',
+    versionNote: 'Note (optional)',
+    versionNotePlaceholder: 'e.g. before the spring campaign rewrite',
+    saveVersion: 'Save a version',
+    noVersions: 'No versions yet. Publishing saves one automatically.',
+    versionPublished: 'Published',
+    versionManual: 'Manual',
+    untitled: 'Untitled',
+    restoreVersion: 'Restore',
+    releaseHint: 'Versions sharing this id were published together as one release.',
+    versionHint:
+      'Restoring writes the version back into the draft, not straight to the live site. Review it, then publish — so a mis-click is always reversible. At most three versions are kept.',
   },
   pageForm: {
     slug: 'slug',
@@ -652,6 +687,15 @@ const zh: AdminMessages = {
     colBlocks: '区块数',
     colStatus: '状态',
     home: '首页',
+
+    // 页面发布前会被拦下的三种情况，以及版本操作
+    validationTitle: '发布前请先填写中文页面标题。',
+    seoWithoutTitle: '某种语言只填了 SEO 而没有标题。请补上标题，或清掉该语言的 SEO 字段。',
+    duplicateKeys: '有两个区块用了同一个 key（{keys}）。同一页面内区块 key 必须唯一。',
+    versionSaved: '已存档一个版本。',
+    versionRestored: '已把该版本恢复到草稿。确认无误后再发布。',
+    versionMissing: '该版本已不存在。',
+    versionDeleted: '已删除该版本。',
   },
   pageDetail: {
     dbUnavailable: '数据库不可用，无法加载该页面。',
@@ -661,6 +705,31 @@ const zh: AdminMessages = {
     blocks: '页面区块（{count}）',
     noBlocksBefore: '该页面暂无区块。运行 ',
     noBlocksAfter: ' 可导入首页默认区块。',
+
+    // 草稿与同步
+    pendingTitle: '有未发布的改动',
+    pendingHint: '保存只写草稿。在你点发布之前，访客看到的仍是上一版已发布的内容。',
+    translateHint:
+      '先保存上面每一个表单，再把这些中文翻译成 {count} 种语言。译文写进草稿，发布时才对外生效。',
+    syncStatus: '语言同步',
+    syncPending: '还有 {count} 种语言待翻译',
+    syncReady: '所有语言都已是最新',
+    syncFailed: '{count} 种语言失败，详见「语言同步」页',
+    revisionLabel: '中文版本',
+
+    // 版本
+    versions: '版本历史',
+    versionNote: '备注（可填）',
+    versionNotePlaceholder: '例如：春季改版之前',
+    saveVersion: '存档一版',
+    noVersions: '还没有版本。发布时会自动留一版。',
+    versionPublished: '发布',
+    versionManual: '手动存档',
+    untitled: '未命名',
+    restoreVersion: '恢复',
+    releaseHint: 'releaseId 相同的版本是同一次发布一起上线的。',
+    versionHint:
+      '「恢复」是把该版本写回草稿，不会直接改线上。确认无误后再点发布 —— 所以误点也能再退回去。最多保留三个版本。',
   },
   pageForm: {
     slug: 'slug',

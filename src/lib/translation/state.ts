@@ -391,6 +391,55 @@ export async function invalidateTranslationState(
 }
 
 // ---------------------------------------------------------------------------
+// 发布记录
+// ---------------------------------------------------------------------------
+
+/**
+ * 记下一次成功发布。
+ *
+ * 存在的意义是回答「这一版线上内容里，中文和各语言是不是同一次发布出去的」。
+ * 内容自己的版本快照（ProductVersion / PageVersion）带上这里返回的 id，
+ * 因此「整组回滚」有了一个明确的边界：同一个 releaseId 的那些语言属于同一版。
+ *
+ * **只在真正写进线上之后调用** —— 失败或部分成功的同步不该留下发布记录，
+ * 否则历史里会出现「发布过，但线上其实没变」的幻影版本。
+ */
+export async function recordRelease(
+  db: PrismaClient | Prisma.TransactionClient,
+  input: {
+    entityType: string;
+    entityId: string;
+    revision: number;
+    locales: readonly Locale[];
+    model: string | null;
+    userId: string | null;
+    result?: Record<string, unknown>;
+  },
+): Promise<string> {
+  const release = await db.contentRelease.create({
+    data: {
+      entityType: input.entityType,
+      entityId: input.entityId,
+      revision: input.revision,
+      locales: [...input.locales],
+      model: input.model,
+      publishedById: input.userId,
+      result: (input.result ?? null) as unknown as Prisma.InputJsonValue,
+    },
+    select: { id: true },
+  });
+  return release.id;
+}
+
+/** 最近一次成功发布，用于「这一版是不是同一次发布出去的」这类查证 */
+export async function latestRelease(db: Db, entityType: string, entityId: string) {
+  return db.contentRelease.findFirst({
+    where: { entityType, entityId },
+    orderBy: { publishedAt: 'desc' },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // 全站概览
 // ---------------------------------------------------------------------------
 

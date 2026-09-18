@@ -26,12 +26,19 @@ export interface BlockFormValues {
   >;
 }
 
+/**
+ * 区块表单。每个区块一个独立表单 —— 与商品编辑器一样，只写**草稿**，
+ * 发布时才进线上。
+ *
+ * `id` 必须与页面里 `PageTranslateButton` 收到的 `block-form-<区块id>` 一致：
+ * 一键翻译按它找到表单并逐个保存。改掉名字会让翻译读到旧内容。
+ */
 export function BlockForm({ values }: { values: BlockFormValues }) {
   const t = useAdminT();
   const [state, formAction] = useActionState(saveBlockAction, initialFormState);
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form id={`block-form-${values.id}`} action={formAction} className="space-y-4">
       <input type="hidden" name="id" value={values.id} />
 
       {state.status === 'error' && state.message ? (

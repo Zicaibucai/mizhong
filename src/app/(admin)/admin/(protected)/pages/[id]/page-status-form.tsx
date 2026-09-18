@@ -1,9 +1,12 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useRef } from 'react';
 import { useFormStatus } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { setPageStatusAction } from '@/lib/admin/actions/pages';
+import { advanceJobAction } from '@/lib/admin/actions/sync';
 import { initialFormState } from '@/lib/admin/action-state';
+import { formatMessage } from '@/lib/admin/i18n';
 import { Alert } from '@/components/admin/form';
 import { useAdminT } from '@/components/admin/i18n-provider';
 
@@ -47,11 +50,60 @@ export function PageStatusForm({
   status: 'DRAFT' | 'PUBLISHED';
 }) {
   const t = useAdminT();
+  const router = useRouter();
   const [state, formAction] = useActionState(setPageStatusAction, initialFormState);
   const published = status === 'PUBLISHED';
 
+  // 发布状态与草稿都会影响这一页的显示，成功后重新读取服务端数据
+  useEffect(() => {
+    if (state.status === 'success') router.refresh();
+  }, [state, router]);
+
+  /**
+   * 发布自带的译文同步没跑完时把它推完 —— 与商品编辑器同一套做法。
+   * 服务端每次只推进一段预算就返回，所以由前端接着调；跑完自动重新提交发布。
+   * 同一个任务只自动重提一次，失败也不再重提，免得把 API 额度烧光。
+   */
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const resubmitted = useRef<string | null>(null);
+  const jobId = state.jobId;
+
+  useEffect(() => {
+    if (!jobId || resubmitted.current === jobId) return;
+    let cancelled = false;
+
+    void (async () => {
+      let guard = 0;
+      while (!cancelled && guard < 200) {
+        guard += 1;
+
+        let next: Awaited<ReturnType<typeof advanceJobAction>>;
+        try {
+          next = await advanceJobAction({ jobId });
+        } catch {
+          return;
+        }
+
+        if (next.hasMore) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          continue;
+        }
+
+        if (next.ok && (next.progress?.failed ?? 0) === 0) {
+          resubmitted.current = jobId;
+          formRef.current?.requestSubmit();
+        }
+        return;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId]);
+
   return (
-    <form action={formAction} className="space-y-3">
+    <form ref={formRef} action={formAction} className="space-y-3">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="status" value={published ? 'DRAFT' : 'PUBLISHED'} />
 
@@ -72,6 +124,39 @@ export function PageStatusForm({
       ) : null}
       {state.status === 'success' && state.message ? (
         <Alert kind="success">{state.message}</Alert>
+      ) : null}
+      {state.status === 'idle' && state.message ? (
+        <Alert kind="info">{state.message}</Alert>
+      ) : null}
+
+      {/* 译文同步的进度：让「发布还差多少种语言」看得见 */}
+      {jobId && state.progress ? (
+        <div className="space-y-1.5">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-navy-100">
+            <div
+              className="h-full rounded-full bg-copper-600 transition-[width] duration-500"
+              style={{
+                width: `${
+                  state.progress.total > 0
+                    ? Math.min(
+                        100,
+                        Math.round(
+                          ((state.progress.completed + state.progress.failed) / state.progress.total) * 100,
+                        ),
+                      )
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+          <p className="text-xs text-muted">
+            {formatMessage(t.sync.jobSummary, {
+              completed: state.progress.completed,
+              total: state.progress.total,
+              failed: state.progress.failed,
+            })}
+          </p>
+        </div>
       ) : null}
     </form>
   );

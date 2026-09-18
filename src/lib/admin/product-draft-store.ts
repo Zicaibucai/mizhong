@@ -333,6 +333,12 @@ export async function recordVersion(
     snapshot: ProductDraft;
     userId: string | null;
     note?: string | null;
+    /**
+     * 这次发布对应的 ContentRelease.id。
+     * 同一版线上内容里，中文与各语言共用它 —— 因此
+     * 「这一版是不是同一次发布出去的」可以直接查证，回滚也有明确的整组边界。
+     */
+    releaseId?: string | null;
   },
 ): Promise<void> {
   await tx.productVersion.create({
@@ -342,6 +348,7 @@ export async function recordVersion(
       snapshot: input.snapshot as unknown as Prisma.InputJsonValue,
       createdById: input.userId,
       note: input.note?.trim() || null,
+      releaseId: input.releaseId ?? null,
     },
   });
 

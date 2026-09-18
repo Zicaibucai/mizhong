@@ -21,12 +21,18 @@ export interface PageFormValues {
   translations: Record<AdminLocale, { title: string; seoTitle: string; seoDescription: string }>;
 }
 
+/**
+ * 页面信息表单。
+ *
+ * `id="page-form"` 不是装饰：一键翻译按钮按这个 id 找到表单、把它交给保存动作，
+ * 再让服务端按刚保存的内容去翻译。改掉它会静默地让翻译读到旧内容。
+ */
 export function PageForm({ values }: { values: PageFormValues }) {
   const t = useAdminT();
   const [state, formAction] = useActionState(savePageAction, initialFormState);
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form id="page-form" action={formAction} className="space-y-5">
       <input type="hidden" name="id" value={values.id} />
 
       {state.status === 'error' && state.message ? (

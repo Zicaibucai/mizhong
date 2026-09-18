@@ -14,7 +14,12 @@ import {
   type AdminLocale,
 } from '@/lib/admin/validation';
 import { getAdminMessagesForRequest, formatMessage, type AdminMessages } from '@/lib/admin/i18n';
-import { describeSyncFailure, runPublishSync, toProgress } from '@/lib/admin/publish-sync';
+import {
+  describeSyncFailure,
+  runPublishSync,
+  toProgress,
+  type PublishSyncOutcome,
+} from '@/lib/admin/publish-sync';
 import { CURRENCY_CODES, PRICE_MODES, decimalToString, normalizeCurrency } from '@/lib/pricing';
 import {
   DRAFT_TRANSACTION_OPTIONS,
@@ -24,6 +29,10 @@ import {
   recordVersion,
   saveDraft,
 } from '@/lib/admin/product-draft-store';
+import {
+  invalidateTranslationState,
+  recordRelease,
+} from '@/lib/translation/state';
 import {
   draftMediaRoleFor,
   readDraft,
@@ -722,6 +731,12 @@ export async function setProductPublishedAction(
 
   const publish = parsed.data.target === 'publish';
 
+  /**
+   * 本次发布跑过的同步结果。`null` 表示还没跑（取消发布时永远不会跑）——
+   * 发布记录里的中文版本号与任务 id 都取自它。
+   */
+  let publishOutcome: PublishSyncOutcome | null = null;
+
   try {
     const loaded = await loadWorkingDraft(db, parsed.data.id, t);
     if (!loaded.ok) return loaded.error;
@@ -804,21 +819,48 @@ export async function setProductPublishedAction(
           progress: toProgress(outcome.progress),
         };
       }
+
+      publishOutcome = outcome;
     }
+
+    /**
+     * 发布时**必须重新读一次草稿**。
+     *
+     * 上面那段同步把新翻出来的译文写进了 `Product.draftData`；而 `draft` 是同步**之前**
+     * 读的快照。沿用旧的那份，结果就是「同步成功、发布也成功、译文却没上线」——
+     * 而且不会有任何报错。这类 bug 只能靠这里的一次多余读取挡掉。
+     */
+    const fresh = publish ? await loadWorkingDraft(db, parsed.data.id, t) : null;
+    if (publish && !fresh?.ok) return fresh?.error ?? { status: 'error', message: t.products.notFound };
+    const toPublish = fresh && fresh.ok ? fresh.draft : draft;
 
     await db.$transaction(async (tx) => {
       if (publish) {
-        await applyDraftToLive(tx, parsed.data.id, draft, resolveDraftPrice(draft));
-      }
-      await tx.product.update({ where: { id: parsed.data.id }, data: { published: publish } });
-      if (publish) {
+        const releaseId = await recordRelease(tx, {
+          entityType: 'product',
+          entityId: parsed.data.id,
+          revision: publishOutcome?.revision ?? 0,
+          locales: [...ADMIN_LOCALES],
+          model: null,
+          userId: user.id,
+          result: {
+            jobId: publishOutcome?.jobId ?? null,
+            synced: publishOutcome?.progress?.completedItems ?? 0,
+          },
+        });
+
+        await applyDraftToLive(tx, parsed.data.id, toPublish, resolveDraftPrice(toPublish));
+        await tx.product.update({ where: { id: parsed.data.id }, data: { published: true } });
         await recordVersion(tx, {
           productId: parsed.data.id,
           kind: 'PUBLISHED',
-          snapshot: draft,
+          snapshot: toPublish,
           userId: user.id,
+          releaseId,
         });
         await clearDraft(tx, parsed.data.id);
+      } else {
+        await tx.product.update({ where: { id: parsed.data.id }, data: { published: false } });
       }
     }, DRAFT_TRANSACTION_OPTIONS);
 
@@ -829,7 +871,7 @@ export async function setProductPublishedAction(
       targetType: 'Product',
       targetId: parsed.data.id,
       summary: publish ? t.products.publish : t.products.unpublish,
-      detail: { slug: draft.basic.slug },
+      detail: { slug: toPublish.basic.slug, release: publish ? (publishOutcome?.revision ?? null) : undefined },
     });
   } catch (error) {
     console.error('[admin] set product status failed:', error);
@@ -954,6 +996,14 @@ export async function restoreProductVersionAction(
     };
 
     await saveDraft(db, parsed.data.id, restored);
+
+    /**
+     * 内容是**整体换掉**的，没经过翻译引擎 —— 同步状态必须一起清掉。
+     *
+     * 不清的话记录会描述一个已经不存在的版本：界面显示「已是最新」，
+     * 而线上跑的其实是另一份内容。这是最难查的一类不一致，清掉重翻的代价小得多。
+     */
+    await invalidateTranslationState(db, 'product', parsed.data.id);
 
     await writeAudit({
       userId: user.id,
@@ -1171,6 +1221,11 @@ export async function deleteProductAction(
     if (!product) return { status: 'error', message: t.products.notFound };
 
     await db.product.delete({ where: { id: product.id } });
+
+    // TranslationState 是按 (entityType, entityId) 字符串关联的，没有外键级联 ——
+    // 商品删了却留下同步状态，会让「语言同步」页出现指向空气的条目
+    await db.translationState.deleteMany({ where: { entityType: 'product', entityId: product.id } });
+    await db.contentRevision.deleteMany({ where: { entityType: 'product', entityId: product.id } });
 
     await writeAudit({
       userId: user.id,

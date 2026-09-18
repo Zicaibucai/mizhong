@@ -4,6 +4,8 @@ import { syncForPublish, type JobProgress, type PublishSyncOutcome } from '@/lib
 import type { AdminMessages } from '@/lib/admin/i18n';
 import type { PublishProgress } from '@/lib/admin/action-state';
 
+export type { PublishSyncOutcome };
+
 /**
  * 发布与后台界面共用的同步编排。
  *
