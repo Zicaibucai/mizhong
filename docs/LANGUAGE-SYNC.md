@@ -172,10 +172,31 @@ npm ci
 # Prisma CLI 读 .env 而项目用 .env.local，必须先取值再注入
 DBURL=$(grep "^DATABASE_URL=" .env.local | cut -d= -f2- | sed "s/?schema=public//") \
   && DATABASE_URL="$DBURL" npx prisma migrate deploy
+
+# ⚠️ 必须先停服务再构建 —— 原因见下面的「部署顺序」小节
+pm2 stop mizhong-web
+rm -rf .next
 npm run build
-pm2 reload mizhong-web --update-env
+pm2 start mizhong-web
 pm2 save
 ```
+
+> **部署顺序（2026-09-18 线上踩到，别再踩）**
+>
+> 构建期间**旧进程不能还活着**。`npm run build` 会重建 `.next`，而旧进程仍在用
+> **旧代码**响应请求；这些请求会触发 ISR 重新生成，把**旧代码渲染出来的页面**
+> 写进刚构建好的 `.next`。之后 `x-nextjs-cache: HIT` 端出来的就是那份被污染的产物。
+>
+> 症状很有迷惑性：**部署了、也 reload 了，页面却还是旧的**，看起来像缓存没清，
+> 其实是上一版代码写的预渲染。2026-09-18 就因为这个，前台连着几次拿到的都是
+> 部署前的数据（页脚显示的是早已改掉的邮箱）。
+>
+> 做成 `stop → rm -rf .next → build → start` 之后，构建期间没有任何进程能写入，
+> 产物就是干净的。代价是约 30 秒停机。
+>
+> 另外：`Cache-Control` 里带 `stale-while-revalidate=31535940`，所以 60 秒窗口
+> 过期后的**第一次**请求仍然返回旧页面，后台再生成，**第二次**才是新的。
+> 部署后立刻验证要看两次，否则会误判成「没生效」。
 
 这一阶段的迁移是**纯新增**（新表、可空列、新枚举），对现有数据零影响。
 
