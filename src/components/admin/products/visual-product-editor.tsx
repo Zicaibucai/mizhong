@@ -25,6 +25,7 @@ import { SpecsTab } from './specs-tab';
 import { TranslateButton } from './translate-button';
 import { SlugAutoFill } from './slug-auto-fill';
 import { SlugRegenerateButton } from './slug-regenerate-button';
+import { SlugPreview } from './slug-preview';
 import { DEFAULT_TARGET_LOCALES } from '@/lib/translation/fields';
 import { VariantOptionsEditor } from './variant-options-editor';
 import { useAutoSaveForm } from './tabs';
@@ -552,6 +553,13 @@ function VisualBasicFields({ data, t, state }: { data: ProductEditorData; t: Ret
             formId="product-form-visual"
             slugFieldId="visual-slug"
             nameFieldId="visual-en-name"
+          />
+          {/* 让管理员看到客户实际会打开的地址 —— 改 slug 时它跟着变 */}
+          <SlugPreview
+            formId="product-form-visual"
+            slugFieldId="visual-slug"
+            prefix={`/${defaultLocale}/products/`}
+            label={t.products.slugPreviewLabel}
           />
           <div className="rounded-xl border border-navy-100 bg-navy-50/60 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
