@@ -13,6 +13,8 @@ import { Alert, SubmitButton } from '@/components/admin/form';
 import { useAdminLocale, useAdminT } from '@/components/admin/i18n-provider';
 import type { AdminUiLocale } from '@/lib/admin/i18n';
 import { cn } from '@/lib/cn';
+import { deleteProductAction } from '@/lib/admin/actions/products';
+import { DeleteForm } from '@/components/admin/delete-form';
 import type { ProductEditorData, ProductVersionData } from './types';
 
 /**
@@ -42,6 +44,13 @@ export function VersionsTab({ data }: { data: ProductEditorData }) {
   const t = useAdminT();
   const locale = useAdminLocale();
   const router = useRouter();
+
+  // 确认语里要出现商品名，让人清楚自己删的是哪一条 —— 回退顺序与编辑器和列表保持一致
+  const productName =
+    data.translations[locale].name.trim() ||
+    data.translations.en.name.trim() ||
+    data.translations.zh.name.trim() ||
+    data.translations.vi.name.trim();
 
   const [saveState, saveAction] = useActionState(createProductVersionAction, initialFormState);
   const [restoreState, restoreAction] = useActionState(
@@ -138,6 +147,31 @@ export function VersionsTab({ data }: { data: ProductEditorData }) {
         )}
 
         <p className="text-xs text-muted">{t.products.versionMax}</p>
+      </section>
+
+      {/*
+        商品删除入口。
+        它原本在「基本信息」分区里，而编辑器改版后那个分区不再渲染，
+        于是整个后台都没有地方能删商品了 —— 这里把它放回来。
+
+        放在「版本」分区而不是编辑区里，是刻意的：删除是不可撤销的破坏性操作，
+        离日常编辑的输入框越远越好，免得误点。位置虽然换了，用的还是同一个
+        DeleteForm（两步确认、无浏览器弹窗）与同一个 deleteProductAction
+        （服务端校验管理员会话、级联删除、写审计、删完重定向并清缓存）。
+      */}
+      <section className="space-y-4 rounded-xl border border-red-200 bg-red-50/40 p-5">
+        <div>
+          <h2 className="text-sm font-semibold text-red-800">{t.products.delete}</h2>
+          <p className="mt-1 text-xs leading-relaxed text-red-700">{t.common.deleteWarning}</p>
+        </div>
+        <DeleteForm
+          action={deleteProductAction}
+          id={data.product.id}
+          label={t.products.delete}
+          confirmText={formatMessage(t.products.deleteConfirmNamed, {
+            name: productName || t.products.unnamedProduct,
+          })}
+        />
       </section>
     </div>
   );

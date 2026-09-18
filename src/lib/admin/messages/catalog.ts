@@ -319,6 +319,8 @@ export const productMessagesEn = {
   delete: 'Delete product',
   deleteConfirm: 'Delete this product permanently?',
   deleted: 'Product deleted.',
+  deleteConfirmNamed:
+    'Permanently delete “{name}”? Its images, specifications and version history are removed with it. This cannot be undone.',
   pendingBadge: 'Unpublished changes',
 
   // ---- 自动保存 / 草稿 / 版本 ----
@@ -564,6 +566,7 @@ export const productMessagesZh = {
   delete: '删除商品',
   deleteConfirm: '确认永久删除该商品？',
   deleted: '商品已删除。',
+  deleteConfirmNamed: '永久删除商品「{name}」？它的图片、规格参数与版本历史会一并删除，且无法恢复。',
   pendingBadge: '待发布',
 
   // ---- 自动保存 / 草稿 / 版本 ----
