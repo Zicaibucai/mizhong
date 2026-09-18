@@ -20,6 +20,23 @@ import { localesWithContent } from '@/lib/catalog';
 /** 站点地图缓存一小时：内容变了不需要立刻反映在 sitemap 里，但也不该永远是旧的 */
 export const revalidate = 3600;
 
+/**
+ * 查数据库的硬超时。
+ *
+ * 这一个不是可有可无的：sitemap 原本是纯静态的，现在会查库；而 Prisma 默认
+ * **没有查询超时** —— 数据库慢或网络卡住时，这个路由会一直挂着。
+ * sitemap 挂住不该影响任何一个访客能看到的页面，所以宁可降级成「只列首页」，
+ * 也不要把请求吊在那里。
+ */
+const DB_TIMEOUT_MS = 5_000;
+
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    work,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]).catch(() => null);
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const homeEntries: MetadataRoute.Sitemap = locales.map((locale) => ({
     url: `${site.url}/${locale}`,
@@ -27,58 +44,61 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 1,
   }));
 
-  const contentEntries = await tryDb(async (db) => {
-    const entries: MetadataRoute.Sitemap = [];
+  const contentEntries = await withTimeout(
+    tryDb(async (db) => {
+      const entries: MetadataRoute.Sitemap = [];
 
-    const [products, pages] = await Promise.all([
-      db.product.findMany({
-        where: { published: true },
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        select: {
-          slug: true,
-          updatedAt: true,
-          translations: { select: { locale: true, name: true } },
-        },
-      }),
-      db.page.findMany({
-        where: { status: 'PUBLISHED', isHome: false },
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        select: {
-          slug: true,
-          updatedAt: true,
-          translations: { select: { locale: true, title: true } },
-        },
-      }),
-    ]);
+      const [products, pages] = await Promise.all([
+        db.product.findMany({
+          where: { published: true },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            slug: true,
+            updatedAt: true,
+            translations: { select: { locale: true, name: true } },
+          },
+        }),
+        db.page.findMany({
+          where: { status: 'PUBLISHED', isHome: false },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          select: {
+            slug: true,
+            updatedAt: true,
+            translations: { select: { locale: true, title: true } },
+          },
+        }),
+      ]);
 
-    for (const product of products) {
-      for (const locale of contentLocales(
-        product.translations.map((row) => ({ locale: row.locale, text: row.name })),
-      )) {
-        entries.push({
-          url: `${site.url}/${locale}/products/${encodeURIComponent(product.slug)}`,
-          lastModified: product.updatedAt,
-          changeFrequency: 'weekly',
-          priority: 0.8,
-        });
+      for (const product of products) {
+        for (const locale of contentLocales(
+          product.translations.map((row) => ({ locale: row.locale, text: row.name })),
+        )) {
+          entries.push({
+            url: `${site.url}/${locale}/products/${encodeURIComponent(product.slug)}`,
+            lastModified: product.updatedAt,
+            changeFrequency: 'weekly',
+            priority: 0.8,
+          });
+        }
       }
-    }
 
-    for (const page of pages) {
-      for (const locale of contentLocales(
-        page.translations.map((row) => ({ locale: row.locale, text: row.title })),
-      )) {
-        entries.push({
-          url: `${site.url}/${locale}/${encodeURIComponent(page.slug)}`,
-          lastModified: page.updatedAt,
-          changeFrequency: 'monthly',
-          priority: 0.6,
-        });
+      for (const page of pages) {
+        for (const locale of contentLocales(
+          page.translations.map((row) => ({ locale: row.locale, text: row.title })),
+        )) {
+          entries.push({
+            url: `${site.url}/${locale}/${encodeURIComponent(page.slug)}`,
+            lastModified: page.updatedAt,
+            changeFrequency: 'monthly',
+            priority: 0.6,
+          });
+        }
       }
-    }
 
-    return entries;
-  });
+      return entries;
+    }),
+    DB_TIMEOUT_MS,
+  );
 
   return [...homeEntries, ...(contentEntries ?? [])];
 }
