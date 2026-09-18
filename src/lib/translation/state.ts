@@ -146,8 +146,20 @@ export async function planSync(
     const fieldStates = asFieldStates(state?.fields);
     const current = currentByLocale[locale] ?? {};
 
+    /**
+     * **明确标记为 stale** 的语言：整条重翻，不看哈希。
+     *
+     * 唯一写入这个状态的地方是应急发布 —— 那时我们**知道**译文是旧的
+     * （中文刚改过而翻译服务挂了），不需要、也不该靠哈希去猜。
+     * 而不写下任何哈希，正是需求里「不得伪造 sourceHash」那条要求的落点。
+     *
+     * 它在下一次成功同步后自动消失（recordSuccess 会把状态写回 SYNCED），
+     * 所以不会变成一个永远甩不掉的标记。
+     */
+    const explicitlyStale = state?.status === 'STALE';
+
     const diffs = diffUnits(document.units, current, fieldStates);
-    const pending = pendingUnits(diffs, document.units);
+    const pending = explicitlyStale ? [...document.units] : pendingUnits(diffs, document.units);
 
     /**
      * 「认下来」的字段：有译文、但没有逐字段记录。
@@ -156,9 +168,11 @@ export async function planSync(
      * 不补的话，以后中文改了它们也永远比对不出差异，会一直停在旧译文上，
      * 而界面显示「已是最新」。这是采纳规则唯一不显然的地方，漏了就是最难查的那类 bug。
      */
-    const adopted = document.units
-      .filter((unit) => (current[unit.path] ?? '').trim() && !fieldStates[unit.path])
-      .map((unit) => unit.path);
+    const adopted = explicitlyStale
+      ? []
+      : document.units
+          .filter((unit) => (current[unit.path] ?? '').trim() && !fieldStates[unit.path])
+          .map((unit) => unit.path);
 
     // 中文删掉的字段：我们翻译过、但现在文档里没有了 → 译文要一并清掉
     const live = new Set(document.units.map((unit) => unit.path));
@@ -171,7 +185,7 @@ export async function planSync(
     if (totalCount === 0 && cleared.length === 0) state_ = 'empty';
     else if (state?.status === 'FAILED') state_ = 'failed';
     else if (pendingCount === 0) state_ = 'synced';
-    else if (pendingCount === totalCount + cleared.length) state_ = 'stale';
+    else if (explicitlyStale || pendingCount === totalCount + cleared.length) state_ = 'stale';
     else state_ = 'partial';
 
     summaries.push({
@@ -356,6 +370,37 @@ export async function recordCleared(
 }
 
 /**
+ * 把若干语言**明确标记为 stale**：中文变了、译文确定是旧的，等翻译服务恢复后再补。
+ *
+ * 应急发布专用。它做两件刻意的选择：
+ *   - **不碰 fields**。不写哈希就等于不声称「这些译文是从当前中文来的」——
+ *     那正是需求里禁止伪造的 sourceHash；
+ *   - **不改 sourceRevision**。这里没有翻译发生，版本号不该往前走。
+ *
+ * 效果：下一次同步会把整条内容重翻一遍（planSync 认这个标记），
+ * 成功之后标记自然消失。
+ */
+export async function markExplicitlyStale(
+  db: PrismaClient,
+  input: { entityType: string; entityId: string; locales: readonly Locale[] },
+): Promise<void> {
+  for (const locale of input.locales) {
+    if (locale === 'zh') continue;
+    await db.translationState.upsert({
+      where: {
+        entityType_entityId_locale: {
+          entityType: input.entityType,
+          entityId: input.entityId,
+          locale,
+        },
+      },
+      create: { entityType: input.entityType, entityId: input.entityId, locale, status: 'STALE' },
+      update: { status: 'STALE', lastError: null },
+    });
+  }
+}
+
+/**
  * 给「认下来」的字段补上哈希记录。
  *
  * 这一步**不产生任何 API 调用**，但它是采纳规则能长期成立的前提：没有它，
@@ -473,6 +518,15 @@ export async function recordRelease(
     model: string | null;
     userId: string | null;
     result?: Record<string, unknown>;
+    /**
+     * 正常发布还是应急发布。默认 FULL —— 只有应急发布这一条路径会传 EMERGENCY，
+     * 因此不会出现「忘了标记」导致事后分不清某条内容的多语言齐不齐。
+     */
+    kind?: 'FULL' | 'EMERGENCY';
+    /** 应急发布时管理员填写的原因 */
+    reason?: string | null;
+    /** 应急发布时翻译失败的类型（已归类，不含原文译文与密钥） */
+    failureKind?: string | null;
   },
 ): Promise<string> {
   const release = await db.contentRelease.create({
@@ -484,6 +538,9 @@ export async function recordRelease(
       model: input.model,
       publishedById: input.userId,
       result: (input.result ?? null) as unknown as Prisma.InputJsonValue,
+      kind: input.kind ?? 'FULL',
+      reason: input.reason ?? null,
+      failureKind: input.failureKind ?? null,
     },
     select: { id: true },
   });

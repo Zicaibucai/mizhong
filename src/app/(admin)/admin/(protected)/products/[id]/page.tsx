@@ -4,6 +4,7 @@ import { tryDb } from '@/lib/db';
 import { ADMIN_LOCALES, type AdminLocale } from '@/lib/admin/validation';
 import { getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import { loadProductDraftState } from '@/lib/admin/product-draft-store';
+import { loadPendingEmergencyForEditor } from '@/lib/admin/pending-translation';
 import { changedSections, validateForPublish, type ProductDraft } from '@/lib/product-draft';
 import { formatPrice } from '@/lib/product-format';
 import { Alert } from '@/components/admin/form';
@@ -85,6 +86,9 @@ export default async function AdminProductDetailPage({
         )
       : [];
   const assetById = new Map((mediaAssets ?? []).map((asset) => [asset.id, asset]));
+
+  // 是否处于「应急发布过、多语言还没补齐」—— 顶部会据此常驻一条提示
+  const pendingEmergency = await tryDb((db) => loadPendingEmergencyForEditor(db, 'product', id));
 
   const versions = await tryDb((db) =>
     db.productVersion.findMany({
@@ -192,6 +196,7 @@ export default async function AdminProductDetailPage({
     publishBlockers: blockers.ok ? [] : [blockers.message],
     versions: versionRows,
     draftUpdatedAt: draftUpdatedAt?.toISOString() ?? null,
+    pendingEmergency: pendingEmergency ?? null,
   };
 
   return <ProductEditor data={data} />;

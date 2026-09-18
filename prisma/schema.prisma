@@ -130,6 +130,18 @@ enum ReleaseStatus {
   FAILED
 }
 
+/**
+ * 这次发布是怎么发出去的。
+ * `FULL` 是正常路径：全部目标语言都同步成功，中文与各语言一起上线。
+ * `EMERGENCY` 是 DeepSeek 故障时的兜底：只发布中文，其它语言沿用上一版。
+ * 两者必须分得清清楚楚 —— 「这一版的多语言是不是齐的」是事后判断一台站点
+ * 是否健康的关键信息，混在一起就再也查不出来了。
+ */
+enum ReleaseKind {
+  FULL
+  EMERGENCY
+}
+
 model ContentRelease {
   id         String @id @default(cuid())
   entityType String
@@ -141,6 +153,14 @@ model ContentRelease {
   locales Locale[]
   /// 发布摘要：每种语言翻了多少字段、用的哪个模型、耗时
   result  Json?
+
+  /// 正常发布还是应急发布（见 ReleaseKind）
+  kind        ReleaseKind @default(FULL)
+  /// 应急发布时管理员填的原因。正常发布为空。
+  reason      String?
+  /// 应急发布时翻译失败的类型（timeout / network / rate-limit / server）。
+  /// 只记归类后的类别，不含原文、译文或任何密钥。
+  failureKind String?
 
   status        ReleaseStatus @default(PUBLISHED)
   model         String?
@@ -193,6 +213,9 @@ enum TranslationJobKind {
   SYNC_ALL
   /// 只重试失败项
   RETRY_FAILED
+  /// 应急发布之后自动建立的补齐任务。
+  /// 与 PUBLISH 的区别是：它跑完会自动把内容正式发布一次（语言补齐版本）。
+  EMERGENCY_SYNC
 }
 
 enum TranslationItemStatus {
@@ -264,6 +287,14 @@ model TranslationJobItem {
   /// 稳定的处理顺序。断点续跑按它推进 —— 位置一旦确定就不再变化，
   /// 因此中途插入新内容不会让「已经跑到第几个」变得没有意义。
   sortOrder  Int    @default(0)
+
+  /**
+   * 该工作项**开始处理时**对应的中文内容哈希。
+   * 这是「中文改了，旧任务不能把旧译文写回去」这条保证的落点：
+   * 每次处理前先比一次当前哈希与这里记的哈希，对不上就整条作废。
+   * 由应急发布建立的任务会在创建时就把哈希钉进来，因此它永远只服务那一版中文。
+   */
+  sourceHash String?
 
   status        TranslationItemStatus @default(PENDING)
   attempts      Int                   @default(0)

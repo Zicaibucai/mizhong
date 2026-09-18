@@ -8,6 +8,7 @@ import { advanceJobAction } from '@/lib/admin/actions/sync';
 import { initialFormState } from '@/lib/admin/action-state';
 import { formatMessage } from '@/lib/admin/i18n';
 import { Alert } from '@/components/admin/form';
+import { EmergencyPublishPanel } from '@/components/admin/emergency-publish';
 import { useAdminT } from '@/components/admin/i18n-provider';
 
 /**
@@ -157,6 +158,14 @@ export function PageStatusForm({
             })}
           </p>
         </div>
+      ) : null}
+
+      {/*
+        应急发布：只有发布因为翻译服务暂时不可用而失败时，服务端才会带回来一个
+        eligible 的 offer，这时才渲染。
+      */}
+      {state.emergency ? (
+        <EmergencyPublishPanel entityType="page" entityId={id} offer={state.emergency} />
       ) : null}
     </form>
   );

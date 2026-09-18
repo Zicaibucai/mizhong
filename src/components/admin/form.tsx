@@ -66,12 +66,17 @@ export function TextArea({
   rows = 4,
   placeholder,
   id,
+  maxLength,
+  required,
 }: {
   name: string;
   defaultValue?: string;
   rows?: number;
   placeholder?: string;
   id?: string;
+  /** 与服务端 Zod 上限保持一致：前端先拦住，用户不必等一次往返才知道超了 */
+  maxLength?: number;
+  required?: boolean;
 }) {
   return (
     <textarea
@@ -80,6 +85,8 @@ export function TextArea({
       rows={rows}
       placeholder={placeholder}
       defaultValue={defaultValue}
+      maxLength={maxLength}
+      required={required}
       className={controlClasses}
     />
   );

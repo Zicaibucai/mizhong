@@ -458,6 +458,51 @@ const en = {
   },
 
   // ---------------------------------------------------------------------------
+  // 应急发布
+  // ---------------------------------------------------------------------------
+  emergency: {
+    button: 'Emergency publish Chinese only, sync other languages later',
+    title: 'Emergency publish',
+    hint:
+      'Only the Chinese content goes live now. Every other language keeps showing its last published version — nothing is cleared, and no translation is invented. Use this only while the translation service is down.',
+    reasonLabel: 'Why are you publishing without translations?',
+    reasonPlaceholder: 'e.g. DeepSeek is timing out and the price change cannot wait',
+    reasonRequired: 'Please give a short reason — it is recorded in the audit log.',
+    confirm: 'Publish Chinese only',
+    cancel: 'Cancel',
+
+    failureTimeout: 'The translation service timed out.',
+    failureNetwork: 'The translation service could not be reached.',
+    failureRateLimit: 'The translation service is rate limiting us (429).',
+    failureServer: 'The translation service returned an error (5xx).',
+    failureUnknown: 'The translation service is unavailable.',
+
+    blockedConfig:
+      'This is a configuration problem, not an outage. Fix the translation settings, then publish again.',
+    blockedContent:
+      'This failure is about the content, not the service. Fix the reported problem, then publish again.',
+    blockedNoneNeeded: 'Every language is already up to date — just publish normally.',
+    blockedUnknown: 'This failure cannot be attributed to the translation service, so emergency publish is not offered.',
+
+    staleWarning:
+      'These languages stay on their previous published version until the translation catches up: {locales}.',
+    missingWarning: 'These languages have no content at all and remain unavailable: {locales}.',
+
+    statusPending: 'Translations outstanding',
+    pendingBarOne: '1 piece of content was published in Chinese only — its other languages are still catching up.',
+    pendingBarMany: '{count} pieces of content were published in Chinese only — their other languages are still catching up.',
+    pendingBarAction: 'Open language sync',
+    statusPendingHint:
+      'Chinese was published without translations. A catch-up job has been queued and will run automatically once the translation service recovers.',
+    retryNow: 'Retry now',
+    queued: 'Catch-up job queued. It will finish on its own once translations succeed.',
+    allDone: 'All languages are up to date.',
+
+    auditSummary: 'Emergency publish (Chinese only)',
+    releaseNote: 'Chinese published without translations',
+    publishFailed: 'Emergency publish failed.',
+  },
+  // ---------------------------------------------------------------------------
   // 语言同步中心
   // ---------------------------------------------------------------------------
   sync: {
@@ -936,6 +981,48 @@ const zh: AdminMessages = {
     publishSyncStillPending: '还有字段在等待翻译。请再点一次发布继续。',
   },
 
+  // ---------------------------------------------------------------------------
+  // 应急发布
+  // ---------------------------------------------------------------------------
+  emergency: {
+    button: '应急发布中文，其他语言稍后同步',
+    title: '应急发布',
+    hint:
+      '现在只有中文会上线。其它语言继续显示各自上一次成功发布的版本 —— 不会被清空，也不会生成任何虚假译文。只在翻译服务不可用时使用。',
+    reasonLabel: '为什么不等译文一起发布？',
+    reasonPlaceholder: '例如：DeepSeek 一直超时，价格改动不能再等',
+    reasonRequired: '请填写一句简短原因 —— 它会记进审计日志。',
+    confirm: '仅发布中文',
+    cancel: '取消',
+
+    failureTimeout: '翻译服务请求超时。',
+    failureNetwork: '连不上翻译服务。',
+    failureRateLimit: '翻译服务触发了限流（429）。',
+    failureServer: '翻译服务返回错误（5xx）。',
+    failureUnknown: '翻译服务暂时不可用。',
+
+    blockedConfig: '这是配置问题，不是服务故障。请先修好翻译设置再发布。',
+    blockedContent: '这次失败与内容有关，不是服务故障。请先解决报出的问题再发布。',
+    blockedNoneNeeded: '所有语言都已经是最新的，正常发布即可。',
+    blockedUnknown: '这次失败无法归因到翻译服务，因此不提供应急发布。',
+
+    staleWarning: '在译文补齐之前，这些语言继续显示上一次成功发布的版本：{locales}。',
+    missingWarning: '这些语言完全没有内容，暂时不可用：{locales}。',
+
+    statusPending: '多语言待同步',
+    pendingBarOne: '有 1 条内容只发布了中文 —— 其它语言还在补齐。',
+    pendingBarMany: '有 {count} 条内容只发布了中文 —— 其它语言还在补齐。',
+    pendingBarAction: '打开语言同步',
+    statusPendingHint:
+      '中文已在没有译文的情况下发布。补齐任务已经排好，翻译服务恢复后会自动跑完。',
+    retryNow: '立即重试',
+    queued: '补齐任务已排好。译文成功之后它会自己跑完。',
+    allDone: '所有语言都已是最新。',
+
+    auditSummary: '应急发布（仅中文）',
+    releaseNote: '中文在没有译文的情况下发布',
+    publishFailed: '应急发布失败。',
+  },
   // ---------------------------------------------------------------------------
   // 语言同步中心
   // ---------------------------------------------------------------------------

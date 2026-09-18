@@ -100,4 +100,18 @@ export interface ProductEditorData {
   versions: ProductVersionData[];
   /** 草稿最后一次自动保存的时间（ISO），没有草稿时为 null */
   draftUpdatedAt: string | null;
+
+  /**
+   * 这条内容是不是「应急发布过、多语言还没补齐」。
+   *
+   * 有值时编辑器顶部会常驻一条醒目提示 —— 不依赖某个人记得回来看。
+   * 补齐任务跑完后它自己会消失（判断依据是发布记录，不是另存的标记）。
+   */
+  pendingEmergency: {
+    reason: string | null;
+    failureKind: string | null;
+    /** 已经排好的补齐任务；没有就由「立即重试」现建一个 */
+    jobId: string | null;
+    publishedAt: string;
+  } | null;
 }

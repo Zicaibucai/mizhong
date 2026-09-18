@@ -5,10 +5,13 @@ CREATE TYPE "TranslationStatus" AS ENUM ('SYNCED', 'STALE', 'TRANSLATING', 'FAIL
 CREATE TYPE "ReleaseStatus" AS ENUM ('PUBLISHED', 'FAILED');
 
 -- CreateEnum
+CREATE TYPE "ReleaseKind" AS ENUM ('FULL', 'EMERGENCY');
+
+-- CreateEnum
 CREATE TYPE "TranslationJobStatus" AS ENUM ('PENDING', 'RUNNING', 'SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELLED');
 
 -- CreateEnum
-CREATE TYPE "TranslationJobKind" AS ENUM ('PUBLISH', 'SYNC_ONE', 'SYNC_ALL', 'RETRY_FAILED');
+CREATE TYPE "TranslationJobKind" AS ENUM ('PUBLISH', 'SYNC_ONE', 'SYNC_ALL', 'RETRY_FAILED', 'EMERGENCY_SYNC');
 
 -- CreateEnum
 CREATE TYPE "TranslationItemStatus" AS ENUM ('PENDING', 'RUNNING', 'SYNCED', 'FAILED', 'SKIPPED');
@@ -59,6 +62,9 @@ CREATE TABLE "ContentRelease" (
     "revision" INTEGER NOT NULL,
     "locales" "Locale"[],
     "result" JSONB,
+    "kind" "ReleaseKind" NOT NULL DEFAULT 'FULL',
+    "reason" TEXT,
+    "failureKind" TEXT,
     "status" "ReleaseStatus" NOT NULL DEFAULT 'PUBLISHED',
     "model" TEXT,
     "publishedById" TEXT,
@@ -111,6 +117,7 @@ CREATE TABLE "TranslationJobItem" (
     "locale" "Locale" NOT NULL,
     "revision" INTEGER NOT NULL,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "sourceHash" TEXT,
     "status" "TranslationItemStatus" NOT NULL DEFAULT 'PENDING',
     "attempts" INTEGER NOT NULL DEFAULT 0,
     "lastError" TEXT,

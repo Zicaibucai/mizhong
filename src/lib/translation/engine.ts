@@ -274,10 +274,30 @@ export async function syncEntity(
   // 结果原样保留。这也是「部分失败时保留成功结果」（需求 7.6）与
   // 「只重试失败内容」（需求 7.7）能成立的前提 —— 失败的那些字段哈希没被记录，
   // 下次同步会自己认出它们还没翻。
-  for (const locale of targets) {
+  /**
+   * 结算范围是**请求的全部语言**，不只是这次有活干的那几个。
+   *
+   * 差集必须显式报出来：调用方（尤其是任务）要能区分「这个语言本来就已经是最新的」
+   * 与「这个语言这次没轮到」。少了这一条，任务收尾时会把「无需处理」的语言
+   * 当成失败 —— 于是每一个补齐任务都以 PARTIAL 结束，永远等不到自动发布。
+   */
+  //
+  // 「只重试失败内容」时不做这个扩展：调用方已经知道别的语言是好的，
+  // 再给它们各报一条「无需处理」只是噪音。
+  const settled = options.onlyFailed
+    ? [...targets]
+    : [...targets, ...requested.filter((locale) => locale !== 'zh' && !targets.includes(locale))];
+
+  for (const locale of settled) {
     const values = collected.get(locale) ?? {};
     const paths = touched.get(locale) ?? [];
     const pending = plan.pendingByLocale.get(locale) ?? [];
+
+    // 本来就已是最新、这次没有任何事要做的语言
+    if (!targets.includes(locale)) {
+      result.locales.push({ locale, outcome: 'nothing', translated: 0, cleared: 0 });
+      continue;
+    }
 
     if (paths.length === 0) {
       // 一个字段都没翻到：是「还没轮到」还是「真的失败了」，取决于预算有没有用完

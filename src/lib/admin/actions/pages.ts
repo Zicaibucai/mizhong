@@ -18,11 +18,9 @@ import { formatMessage, getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import { acquireTranslationSlot } from '@/lib/translation/rate-limit';
 import { loadTranslationSettings } from '@/lib/translation/settings';
 import { syncEntity } from '@/lib/translation/engine';
-import { recordRelease, invalidateTranslationState } from '@/lib/translation/state';
+import { invalidateTranslationState } from '@/lib/translation/state';
 import {
   PAGE_TRANSACTION_OPTIONS,
-  applyPageDraftToLive,
-  clearPageDraft,
   duplicateBlockKeys,
   loadPageDraftState,
   recordPageVersion,
@@ -30,6 +28,8 @@ import {
   savePageDraft,
 } from '@/lib/admin/page-draft-store';
 import { describeSyncFailure, runPublishSync, toProgress } from '@/lib/admin/publish-sync';
+import { classifyPublishFailure } from '@/lib/admin/emergency-publish';
+import { finishPagePublish } from '@/lib/admin/finish-publish';
 import { validatePageForPublish } from '@/lib/page-draft';
 import type { FormState } from '@/lib/admin/action-state';
 
@@ -237,6 +237,8 @@ export async function setPageStatusAction(_prev: FormState, formData: FormData):
           message: describeSyncFailure(outcome, hasApiKey, t),
           jobId: outcome.jobId ?? undefined,
           progress: toProgress(outcome.progress),
+          // 界面据此决定要不要显示应急发布。只有服务暂时性故障才会是 eligible。
+          emergency: classifyPublishFailure(outcome.progress),
         };
       }
 
@@ -244,28 +246,13 @@ export async function setPageStatusAction(_prev: FormState, formData: FormData):
       const fresh = await loadPageDraftState(db, parsed.data.id);
       if (!fresh) return { status: 'error', message: t.actions.pageMissing };
 
-      await db.$transaction(async (tx) => {
-        const releaseId = await recordRelease(tx, {
-          entityType: 'page',
-          entityId: parsed.data.id,
-          revision: outcome.revision,
-          locales: [...ADMIN_LOCALES],
-          model: null,
-          userId: user.id,
-          result: { jobId: outcome.jobId, synced: outcome.progress?.completedItems ?? 0 },
-        });
-
-        await applyPageDraftToLive(tx, parsed.data.id, fresh.draft);
-        await tx.page.update({ where: { id: parsed.data.id }, data: { status: 'PUBLISHED' } });
-        await recordPageVersion(tx, {
-          pageId: parsed.data.id,
-          kind: 'PUBLISHED',
-          snapshot: fresh.draft,
-          userId: user.id,
-          releaseId,
-        });
-        await clearPageDraft(tx, parsed.data.id);
-      }, PAGE_TRANSACTION_OPTIONS);
+      // 事务体与「应急发布之后自动补齐」那条路径共用
+      await finishPagePublish(db, parsed.data.id, fresh.draft, {
+        userId: user.id,
+        revision: outcome.revision,
+        jobId: outcome.jobId,
+        kind: 'FULL',
+      });
     } else {
       await db.page.update({ where: { id: parsed.data.id }, data: { status: 'DRAFT' } });
     }

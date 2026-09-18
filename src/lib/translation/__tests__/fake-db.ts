@@ -1,8 +1,13 @@
 import type { PrismaClient } from '@prisma/client';
 import type { Locale } from '@/lib/i18n/config';
 import { ADMIN_LOCALES } from '@/lib/admin/validation';
-import { emptySpecTable, emptyTranslations, type ProductDraft } from '@/lib/product-draft';
-import { emptyPageTranslations, emptyBlockTranslations, type PageDraft } from '@/lib/page-draft';
+import { emptySpecTable, emptyTranslations, readDraft, type ProductDraft } from '@/lib/product-draft';
+import {
+  emptyPageTranslations,
+  emptyBlockTranslations,
+  readPageDraft,
+  type PageDraft,
+} from '@/lib/page-draft';
 
 /**
  * 一个够用的内存版 Prisma。
@@ -252,6 +257,8 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
   const jobItemRows: Record<string, unknown>[] = [];
   const releaseRows: Record<string, unknown>[] = [];
   const productVersionRows: Record<string, unknown>[] = [];
+  const pageVersionRows: Record<string, unknown>[] = [];
+  const slugRows = new Map<string, Record<string, unknown>>();
 
   /** 内容类型 × 关联的翻译行，用于 listScope 那种「按语言取一行」的 select */
   type TranslationSelect = { where?: { locale?: Locale }; select?: Record<string, boolean> };
@@ -276,6 +283,223 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
   }
 
   const db = {
+    // -------------------------------------------------------------------------
+    // 发布路径需要的表
+    //
+    // 应急发布最关键的两条保证是「只更新中文」与「已有的外语不被清空」，
+    // 而它们落在 applyDraftToLive 里 —— 所以假库必须支持真正的事务与关系表写入，
+    // 否则这两条只能靠读代码来相信。
+    // -------------------------------------------------------------------------
+
+    async $transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
+      // 假库不做真事务：出错时不会回滚。测试里不制造「写到一半失败」的场景，
+      // 所以这个简化是安全的；生产上走的是 Prisma 的真事务。
+      return fn(db);
+    },
+
+    productTranslation: {
+      async findMany({ where }: { where: Record<string, unknown> }) {
+        const rows = [...products.values()].flatMap(
+          (row) => row.translations as Record<string, unknown>[],
+        );
+        return rows.filter((row) => matches(row, where));
+      },
+      async upsert({
+        where,
+        create,
+        update,
+      }: {
+        where: { productId_locale: { productId: string; locale: Locale } };
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) {
+        const { productId, locale } = where.productId_locale;
+        const row = products.get(productId);
+        if (!row) throw new Error(`fake db: no product ${productId}`);
+        const rows = row.translations as Record<string, unknown>[];
+        const existing = rows.find((item) => item.locale === locale);
+        if (existing) {
+          Object.assign(existing, update);
+          return existing;
+        }
+        const created = { id: nextId('ptr'), ...create };
+        rows.push(created);
+        return created;
+      },
+      async deleteMany({ where }: { where: Record<string, unknown> }) {
+        let removed = 0;
+        for (const row of products.values()) {
+          const rows = row.translations as Record<string, unknown>[];
+          for (let index = rows.length - 1; index >= 0; index -= 1) {
+            if (matches({ productId: row.id, ...rows[index] }, where)) {
+              rows.splice(index, 1);
+              removed += 1;
+            }
+          }
+        }
+        return { count: removed };
+      },
+    },
+
+    slugHistory: {
+      async upsert({
+        where,
+        create,
+      }: {
+        where: { entityType_slug: { entityType: string; slug: string } };
+        create: { entityType: string; entityId: string; slug: string };
+        update: Record<string, unknown>;
+      }) {
+        const key = `${where.entityType_slug.entityType}:${where.entityType_slug.slug}`;
+        const existing = slugRows.get(key);
+        if (existing) return existing;
+        const row = { id: nextId('slug'), createdAt: new Date(), ...create };
+        slugRows.set(key, row);
+        return row;
+      },
+      async deleteMany({ where }: { where: Record<string, unknown> }) {
+        let removed = 0;
+        for (const [key, row] of slugRows) {
+          if (matches(row, where)) {
+            slugRows.delete(key);
+            removed += 1;
+          }
+        }
+        return { count: removed };
+      },
+      async findUnique({ where }: { where: { entityType_slug: { entityType: string; slug: string } } }) {
+        return slugRows.get(`${where.entityType_slug.entityType}:${where.entityType_slug.slug}`) ?? null;
+      },
+    },
+
+    productSpecification: {
+      async findMany() {
+        return [] as Record<string, unknown>[];
+      },
+      async create({ data }: { data: Record<string, unknown> }) {
+        return { id: nextId('spec'), ...data };
+      },
+      async update() {
+        return {};
+      },
+      async deleteMany() {
+        return { count: 0 };
+      },
+    },
+    productSpecificationTranslation: {
+      async deleteMany() {
+        return { count: 0 };
+      },
+      async createMany() {
+        return { count: 0 };
+      },
+    },
+    productMedia: {
+      async deleteMany() {
+        return { count: 0 };
+      },
+      async createMany() {
+        return { count: 0 };
+      },
+    },
+    pageTranslation: {
+      async upsert({
+        where,
+        create,
+        update,
+      }: {
+        where: { pageId_locale: { pageId: string; locale: Locale } };
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) {
+        const { pageId, locale } = where.pageId_locale;
+        const row = pages.get(pageId);
+        if (!row) throw new Error(`fake db: no page ${pageId}`);
+        const rows = row.translations as Record<string, unknown>[];
+        const existing = rows.find((item) => item.locale === locale);
+        if (existing) {
+          Object.assign(existing, update);
+          return existing;
+        }
+        const created = { id: nextId('ptr'), ...create };
+        rows.push(created);
+        return created;
+      },
+      async deleteMany({ where }: { where: Record<string, unknown> }) {
+        let removed = 0;
+        for (const row of pages.values()) {
+          const rows = row.translations as Record<string, unknown>[];
+          for (let index = rows.length - 1; index >= 0; index -= 1) {
+            if (matches({ pageId: row.id, ...rows[index] }, where)) {
+              rows.splice(index, 1);
+              removed += 1;
+            }
+          }
+        }
+        return { count: removed };
+      },
+    },
+    pageBlock: {
+      async findMany({ where }: { where: Record<string, unknown> }) {
+        const rows = [...pages.values()].flatMap((row) => row.blocks as Record<string, unknown>[]);
+        return rows.filter((row) => matches(row, where)).map((row) => ({ id: row.id }));
+      },
+      async create({ data }: { data: Record<string, unknown> }) {
+        const page = pages.get(data.pageId as string);
+        const created = { id: nextId('blk'), ...data };
+        if (page) (page.blocks as Record<string, unknown>[]).push(created);
+        return created;
+      },
+      async update({ where, data }: { where: { id: string }; data: Record<string, unknown> }) {
+        for (const page of pages.values()) {
+          const block = (page.blocks as Record<string, unknown>[]).find((row) => row.id === where.id);
+          if (block) {
+            Object.assign(block, data);
+            return block;
+          }
+        }
+        throw new Error(`fake db: no page block ${where.id}`);
+      },
+      async deleteMany({ where }: { where: Record<string, unknown> }) {
+        let removed = 0;
+        for (const page of pages.values()) {
+          const blocks = page.blocks as Record<string, unknown>[];
+          for (let index = blocks.length - 1; index >= 0; index -= 1) {
+            if (matches({ pageId: page.id, ...blocks[index] }, where)) {
+              blocks.splice(index, 1);
+              removed += 1;
+            }
+          }
+        }
+        return { count: removed };
+      },
+    },
+    pageBlockTranslation: {
+      async deleteMany() {
+        return { count: 0 };
+      },
+      async createMany() {
+        return { count: 0 };
+      },
+    },
+    pageVersion: {
+      async create({ data }: { data: Record<string, unknown> }) {
+        const row = { id: nextId('pgver'), createdAt: new Date(), releaseId: null, note: null, ...data };
+        pageVersionRows.push(row);
+        return row;
+      },
+      async findMany({ where }: { where?: Record<string, unknown> }) {
+        return pageVersionRows.filter((row) => matches(row, where));
+      },
+      async deleteMany({ where }: { where: Record<string, unknown> }) {
+        const before = pageVersionRows.length;
+        for (let index = pageVersionRows.length - 1; index >= 0; index -= 1) {
+          if (matches(pageVersionRows[index], where)) pageVersionRows.splice(index, 1);
+        }
+        return { count: before - pageVersionRows.length };
+      },
+    },
+
     translationJob: {
       // Prisma 的 findUnique 支持任意唯一列，任务表上有两个：id 与 idempotencyKey。
       // 只认 id 的话，「重复发布命中同一个任务」这类测试会在假库上假通过 —— 必须都支持。
@@ -738,14 +962,27 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
       return rows?.find((item) => item.locale === locale);
     },
 
-    /** 读商品草稿 —— 同步写的是草稿，发布之前线上不该变 */
+    /**
+     * 读商品草稿 —— 同步写的是草稿，发布之前线上不该变。
+     *
+     * 用生产代码自己的 `readDraft` 来读，而不是直接取字段：清空草稿写的是
+     * Prisma 的 `DbNull`（一个没有枚举键的空对象），只有形状校验能可靠地
+     * 把它和「真的没有草稿」区分开。
+     */
     getProductDraft(productId: string): ProductDraft | null {
-      return (products.get(productId)?.draftData as ProductDraft | null) ?? null;
+      return readDraft(products.get(productId)?.draftData);
     },
 
     /** 读页面草稿 */
     getPageDraft(pageId: string): PageDraft | null {
-      return (pages.get(pageId)?.draftData as PageDraft | null) ?? null;
+      return readPageDraft(pages.get(pageId)?.draftData);
+    },
+
+    /** 某条内容最近的发布记录，用来断言「这次发布是什么性质」 */
+    getReleases(entityType: string, entityId: string): FakeRelease[] {
+      return releaseRows
+        .filter((row) => row.entityType === entityType && row.entityId === entityId)
+        .map((row) => row as unknown as FakeRelease);
     },
 
     /** 某个「内容 × 语言」的同步状态，用于断言「这次到底翻了没有」 */
@@ -762,5 +999,20 @@ export function createFakePrisma(seed: FakeDbSeed = {}) {
 }
 
 export type FakeDb = ReturnType<typeof createFakePrisma>;
+
+/** 发布记录里测试真正会看的那几个字段 */
+export interface FakeRelease {
+  id: string;
+  entityType: string;
+  entityId: string;
+  kind: string;
+  locales: string[];
+  revision: number;
+  reason: string | null;
+  failureKind: string | null;
+  result: Record<string, unknown> | null;
+  publishedAt: Date;
+}
+
 
 export { emptySpecTable };

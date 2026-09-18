@@ -10,6 +10,7 @@ import { formatMessage } from '@/lib/admin/i18n';
 import { Alert } from '@/components/admin/form';
 import { useAdminLocale, useAdminT } from '@/components/admin/i18n-provider';
 import { cn } from '@/lib/cn';
+import { EmergencyPublishPanel, PendingTranslationBanner } from '@/components/admin/emergency-publish';
 import { useActiveTab, useSaveStatuses, type SaveStatus } from './tabs';
 import type { ProductEditorData } from './types';
 
@@ -321,6 +322,28 @@ export function ProductActionBar({
               failed: state.progress.failed,
             })}
           </p>
+        </div>
+      ) : null}
+
+      {/*
+        应急发布：只有发布因为翻译服务暂时不可用而失败时，服务端才会带回来一个
+        eligible 的 offer，这时才渲染。其余情况（内容问题、配置问题）显示的是
+        「为什么不能应急、下一步做什么」。
+      */}
+      {state.emergency ? (
+        <EmergencyPublishPanel entityType="product" entityId={product.id} offer={state.emergency} />
+      ) : null}
+
+      {/* 常驻提醒：只要这条内容最近一次发布是应急发布就一直显示 */}
+      {data.pendingEmergency ? (
+        <div className="mt-3">
+          <PendingTranslationBanner
+            entityType="product"
+            entityId={product.id}
+            reason={data.pendingEmergency.reason}
+            failureKind={data.pendingEmergency.failureKind}
+            jobId={data.pendingEmergency.jobId}
+          />
         </div>
       ) : null}
     </div>

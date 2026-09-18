@@ -174,20 +174,20 @@ export function normalizeQuery(raw: string | null | undefined): string {
  * 「任意一条翻译」当成兜底，于是阿拉伯语页面显示中文商品名，还对外生成 hreflang
  * 说「这里就是阿拉伯语版本」—— 属于跨语言污染。严格规则把这条兜底去掉。
  *
- * 但严格规则**不能先上线**：没有英文也没有该语言的商品会从 200 变成 404。
- * 按「2 个商品 × 10 种语言」算，就是 20 个原本能打开的地址直接消失。
- * 所以它必须是**先翻译、后开启**——这也是需求里排的上线顺序。
+ * 但严格规则**不能先上线**：没有该语言内容的商品会从 200 变成 404。
+ * 所以它必须是**先翻译、后开启**。
  *
- * 于是做成环境变量：
- *   - 不设或设成 '0' / 'false' → 旧行为（任意语言兜底），线上现状不变；
- *   - 设成 '1' / 'true'        → 严格回退。
+ * 解析规则刻意收得很紧：
+ *   - **只有字符串严格等于 `'true'` 才算开启**；
+ *   - 未配置、空值、`false`、`1`、`yes`、`TRUE` 一律关闭。
  *
- * 第三阶段全站翻译完成后，在服务器上把它置为 true 再重启即可 ——
- * 不需要改代码、不需要重新构建，也就不会在切换的那一刻引入别的变数。
+ * 为什么不接受 `1` / `TRUE` 这类「看起来也对」的写法：这个开关一打开，
+ * 没有译文的那批 URL 会直接从 200 变 404。在运维脚本里 `FOO=1` 与 `FOO=true`
+ * 都很常见，一个拼写差异就足以把整站的一部分页面关掉 —— 这种代价下，
+ * 「多写一个字就生效」比「宽松一点更方便」值钱得多。要开就明确写 `true`。
  */
 export function strictLocaleFallbackEnabled(): boolean {
-  const raw = (process.env.STRICT_LOCALE_FALLBACK ?? '').trim().toLowerCase();
-  return raw === '1' || raw === 'true';
+  return process.env.STRICT_LOCALE_FALLBACK === 'true';
 }
 
 /**
@@ -219,35 +219,37 @@ function pickTranslation<T extends { locale: Locale }>(rows: T[], locale: Locale
 }
 
 /**
- * 该商品在指定语言下是否有真实内容。
- *
- * 判断依据是**是否存在可用的翻译行**（名称非空），而不是「渲染时会不会回退」——
- * 目录、hreflang、面包屑都要用同一个判断，否则又会出现「列表里有、点进去 404」。
+ * 该语言下是否有**自己的**译文。
  *
  * 严格模式关闭时一律返回 true —— 老行为下任何一条翻译都能兜底，
- * 所以「这个语言有没有内容」这个问题没有意义，目录也不该因此过滤掉商品。
+ * 「这个语言有没有自己的内容」这个问题没有意义，目录也不该因此过滤掉商品。
+ *
+ * 严格模式下只看自己的译文，**不算英文兜底**：
+ * 一个显示英文内容的阿拉伯语页面，在 hreflang 里声明自己是阿拉伯语，
+ * 等于告诉搜索引擎「这里是阿拉伯语内容」—— 那是作弊式的内容声明，
+ * 比不声明更糟。宁可只在真正有阿拉伯语内容时才列它。
  */
-function hasTranslation<T extends { locale: Locale; name?: string | null }>(
+function hasOwnTranslation<T extends { locale: Locale; name?: string | null }>(
   rows: T[],
   locale: Locale,
 ): boolean {
   if (!strictLocaleFallbackEnabled()) return true;
-
-  const usable = (row: T) => (row.name ?? '').trim().length > 0;
-  if (rows.some((row) => row.locale === locale && usable(row))) return true;
-  if (locale === 'zh') return false;
-  return rows.some((row) => row.locale === 'en' && usable(row));
+  return rows.some((row) => row.locale === locale && (row.name ?? '').trim().length > 0);
 }
 
 /**
- * 该商品有内容的全部语言，用于生成 hreflang。
+ * 该内容**自己有译文**的全部语言，用于 hreflang 与 sitemap。
  *
- * 严格模式关闭时返回全部语言（老行为：hreflang 列出全部 11 种），
- * 开启后只列真正有内容的那些。
+ * 注意它与前两个函数的分工，三者回答的是不同的问题，不要互相替代：
+ *   - `pickTranslation`    —— 这个页面**渲染什么**（允许英文兜底）；
+ *   - 目录的筛选条件        —— 这个商品**能不能出现在该语言的产品列表里**（允许英文兜底）；
+ *   - 本函数                —— 该语言是否**真的有内容**（只认自己的译文）。
+ *
+ * 严格模式关闭时返回全部语言（老行为：hreflang 列出全部 11 种）。
  */
 export function localesWithContent(rows: { locale: Locale; name: string }[], available: readonly Locale[]): Locale[] {
   if (!strictLocaleFallbackEnabled()) return [...available];
-  return available.filter((locale) => hasTranslation(rows, locale));
+  return available.filter((locale) => hasOwnTranslation(rows, locale));
 }
 
 function coverOf(

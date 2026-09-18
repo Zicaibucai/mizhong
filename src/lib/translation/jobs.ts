@@ -3,6 +3,8 @@ import { locales, type Locale } from '@/lib/i18n/config';
 import { ADAPTERS, getAdapter, targetLocales, type ContentType } from './adapters';
 import { syncEntity, type EntitySyncResult } from './engine';
 import { adoptUntrackedTranslations, planSync } from './state';
+import { autoCompletePublish } from '@/lib/admin/finish-publish';
+import { writeAudit } from '@/lib/audit';
 import type { TranslationSettings } from './settings';
 
 /**
@@ -53,7 +55,7 @@ const OPEN_STATUSES = ['PENDING', 'RUNNING'] as const;
 /** 锁超时：超过这个时间没动静就认为上一个推进者已经不在了 */
 const LOCK_TIMEOUT_MS = 2 * 60 * 1000;
 
-export type JobKind = 'PUBLISH' | 'SYNC_ONE' | 'SYNC_ALL' | 'RETRY_FAILED';
+export type JobKind = 'PUBLISH' | 'SYNC_ONE' | 'SYNC_ALL' | 'RETRY_FAILED' | 'EMERGENCY_SYNC';
 
 // ---------------------------------------------------------------------------
 // 盘点范围
@@ -97,6 +99,15 @@ export interface CreateJobInput {
   userId?: string | null;
   /** 强制重翻：忽略「已同步」的判断，全部字段重新生成。默认 false。 */
   force?: boolean;
+  /**
+   * 把工作项钉在某一版中文上。
+   *
+   * 传了它，所有工作项在创建时就记下这个哈希；处理前会拿当前哈希比一次，
+   * 对不上就整条作废（`source-changed`），**一个字段都不会写回去**。
+   * 应急发布建立的补齐任务必须传它 —— 那是「中文改了，旧任务不能把旧译文
+   * 写回来」这条保证的落点。
+   */
+  sourceHash?: string | null;
 }
 
 export interface CreateJobResult {
@@ -163,6 +174,7 @@ export async function createJob(db: PrismaClient, input: CreateJobInput): Promis
           entityId: target.entityId,
           locale,
           revision: 0,
+          sourceHash: input.sourceHash ?? null,
           // 顺序稳定：同一组目标每次创建的排列完全一致，断点才有意义
           sortOrder: entityIndex * targetLocalesToUse.length + localeIndex,
         })),
@@ -309,6 +321,22 @@ export async function advanceJob(
       });
       if (!pending) break;
 
+      /**
+       * 处理之前先对齐中文版本。
+       *
+       * 中文在任务建立之后（或上一次推进之后）被改过的话，这一批整体作废 ——
+       * 一个字段都不写回去。否则会用旧译文覆盖新内容，而且覆盖得毫无痕迹：
+       * 界面显示「已同步」，实际内容是上一版中文的翻译。
+       */
+      const diverged = await guardSourceRevision(db, jobId, pending.entityType, pending.entityId);
+      if (diverged) {
+        // 任务级的失败原因也要写上：只有工作项标了红色、任务本身却说不出为什么，
+        // 后台看起来会像「无缘无故失败」
+        lastError = 'source-changed';
+        processed += 1;
+        continue;
+      }
+
       const items = await db.translationJobItem.findMany({
         where: {
           jobId,
@@ -357,6 +385,59 @@ export async function advanceJob(
 
   const progress = await getJobProgress(db, jobId);
   return { progress, hasMore: progress.pendingItems > 0, busy: false };
+}
+
+/**
+ * 处理一条内容之前，确认它的中文还是任务当时的那一版。
+ *
+ * 三种情况：
+ *   - 工作项还没记过哈希（首次处理）→ 记下当前哈希，放行；
+ *   - 记过、且与当前一致 → 放行；
+ *   - 记过、但当前已经不同 → **整批作废**：全部待处理项标成 FAILED 并写明
+ *     `source-changed`。这一步不写任何译文，所以「旧任务把旧译文写回来」
+ *     在结构上不可能发生，而不是靠小心翼翼避免。
+ *
+ * 返回 true 表示这一批已经作废，调用方应当跳过它。
+ */
+async function guardSourceRevision(
+  db: PrismaClient,
+  jobId: string,
+  entityType: string,
+  entityId: string,
+): Promise<boolean> {
+  const plan = await planSync(db, entityType, entityId);
+  // 内容不存在了：交给调用方原有的「跳过」逻辑处理
+  if (!plan) return false;
+
+  const items = await db.translationJobItem.findMany({
+    where: { jobId, entityType, entityId, status: 'PENDING' },
+    select: { id: true, sourceHash: true },
+  });
+  if (items.length === 0) return false;
+
+  const pinned = items.find((item) => item.sourceHash)?.sourceHash ?? null;
+
+  if (!pinned) {
+    // 首次处理：把当前这一版钉下来，之后的推进都拿它比对
+    await db.translationJobItem.updateMany({
+      where: { jobId, entityType, entityId, status: 'PENDING' },
+      data: { sourceHash: plan.hash },
+    });
+    return false;
+  }
+
+  if (pinned === plan.hash) return false;
+
+  await db.translationJobItem.updateMany({
+    where: { jobId, entityType, entityId, status: 'PENDING' },
+    data: {
+      status: 'FAILED',
+      lastError: 'source-changed',
+      finishedAt: new Date(),
+      attempts: { increment: 1 },
+    },
+  });
+  return true;
 }
 
 /** 把一条内容的同步结果落到它的工作项上 */
@@ -481,13 +562,60 @@ async function finalizeIfDone(db: PrismaClient, jobId: string): Promise<void> {
       ...(stale.length > 0
         ? {
             lastError:
-              job?.kind === 'PUBLISH'
+              job?.kind === 'PUBLISH' || job?.kind === 'EMERGENCY_SYNC'
                 ? 'source-changed' // 中文在同步过程中被改过，本次发布作废
                 : 'still-pending',
           }
         : {}),
     },
   });
+
+  /**
+   * 补齐任务成功 → 自动发布一次「语言补齐版本」。
+   *
+   * 这是需求里「全部语言成功后自动创建一次语言补齐版本，无需人工逐语言审核」的落点。
+   * 只有应急发布排下的 EMERGENCY_SYNC 任务会走到这里；普通同步任务不动线上内容 ——
+   * 后台点「同步」不该悄悄把草稿推到线上，那会绕过管理员的发布决定。
+   */
+  if (status === 'SUCCEEDED' && job?.kind === 'EMERGENCY_SYNC') {
+    await completeEmergencyCatchUp(db, jobId);
+  }
+}
+
+/**
+ * 补齐成功后把内容正式发布出去。
+ *
+ * 失败只记日志、不改任务状态：译文已经同步好并写进草稿了，发布这一步出错时
+ * 重试成本很低（再点一次发布即可），把整个任务标成失败反而会让人以为白翻了。
+ */
+async function completeEmergencyCatchUp(db: PrismaClient, jobId: string): Promise<void> {
+  const item = await db.translationJobItem.findFirst({
+    where: { jobId },
+    select: { entityType: true, entityId: true },
+  });
+  if (!item) return;
+
+  const job = await db.translationJob.findUnique({
+    where: { id: jobId },
+    select: { createdById: true },
+  });
+
+  try {
+    const finished = await autoCompletePublish(db, item.entityType, item.entityId, job?.createdById ?? null);
+    if (!finished) return;
+
+    await writeAudit({
+      userId: job?.createdById ?? null,
+      action: 'PUBLISH',
+      targetType: item.entityType === 'product' ? 'Product' : 'Page',
+      targetId: item.entityId,
+      // 系统自动执行的发布：没有请求上下文，因此用固定文案而不是界面语言
+      summary: '译文补齐后自动发布（语言补齐版本）',
+      detail: { kind: 'FULL', releaseId: finished.releaseId, revision: finished.revision, jobId },
+    });
+  } catch (error) {
+    console.error('[translation] auto-completing the catch-up publish failed:', error);
+  }
 }
 
 /** 任务结束后仍处于待同步状态的内容（用于发布前的一致性检查） */

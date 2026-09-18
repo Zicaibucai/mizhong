@@ -20,23 +20,19 @@ import {
   toProgress,
   type PublishSyncOutcome,
 } from '@/lib/admin/publish-sync';
+import { classifyPublishFailure } from '@/lib/admin/emergency-publish';
+import { finishProductPublish } from '@/lib/admin/finish-publish';
 import { CURRENCY_CODES, PRICE_MODES, decimalToString, normalizeCurrency } from '@/lib/pricing';
 import {
   DRAFT_TRANSACTION_OPTIONS,
-  applyDraftToLive,
-  clearDraft,
   loadProductDraftState,
   recordVersion,
   saveDraft,
 } from '@/lib/admin/product-draft-store';
-import {
-  invalidateTranslationState,
-  recordRelease,
-} from '@/lib/translation/state';
+import { invalidateTranslationState } from '@/lib/translation/state';
 import {
   draftMediaRoleFor,
   readDraft,
-  resolveDraftPrice,
   specTableFromLegacySpecs,
   validateForPublish,
   type ProductDraft,
@@ -817,6 +813,9 @@ export async function setProductPublishedAction(
           message: describeSyncFailure(outcome, hasApiKey, t),
           jobId: outcome.jobId ?? undefined,
           progress: toProgress(outcome.progress),
+          // 界面据此决定要不要显示「应急发布中文，其他语言稍后同步」。
+          // 只有服务暂时性故障才会是 eligible —— 内容或配置问题一律 false。
+          emergency: classifyPublishFailure(outcome.progress),
         };
       }
 
@@ -834,35 +833,18 @@ export async function setProductPublishedAction(
     if (publish && !fresh?.ok) return fresh?.error ?? { status: 'error', message: t.products.notFound };
     const toPublish = fresh && fresh.ok ? fresh.draft : draft;
 
-    await db.$transaction(async (tx) => {
-      if (publish) {
-        const releaseId = await recordRelease(tx, {
-          entityType: 'product',
-          entityId: parsed.data.id,
-          revision: publishOutcome?.revision ?? 0,
-          locales: [...ADMIN_LOCALES],
-          model: null,
-          userId: user.id,
-          result: {
-            jobId: publishOutcome?.jobId ?? null,
-            synced: publishOutcome?.progress?.completedItems ?? 0,
-          },
-        });
-
-        await applyDraftToLive(tx, parsed.data.id, toPublish, resolveDraftPrice(toPublish));
-        await tx.product.update({ where: { id: parsed.data.id }, data: { published: true } });
-        await recordVersion(tx, {
-          productId: parsed.data.id,
-          kind: 'PUBLISHED',
-          snapshot: toPublish,
-          userId: user.id,
-          releaseId,
-        });
-        await clearDraft(tx, parsed.data.id);
-      } else {
-        await tx.product.update({ where: { id: parsed.data.id }, data: { published: false } });
-      }
-    }, DRAFT_TRANSACTION_OPTIONS);
+    if (publish) {
+      // 事务体与「应急发布之后自动补齐」那条路径共用，避免两处各写一遍、
+      // 日后在故障恢复时才暴露出差异
+      await finishProductPublish(db, parsed.data.id, toPublish, {
+        userId: user.id,
+        revision: publishOutcome?.revision ?? 0,
+        jobId: publishOutcome?.jobId ?? null,
+        kind: 'FULL',
+      });
+    } else {
+      await db.product.update({ where: { id: parsed.data.id }, data: { published: false } });
+    }
 
     await writeAudit({
       userId: user.id,

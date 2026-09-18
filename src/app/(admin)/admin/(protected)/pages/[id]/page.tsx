@@ -7,6 +7,8 @@ import { getBlockLabel } from '@/lib/admin/labels';
 import { formatMessage, getAdminMessagesForRequest } from '@/lib/admin/i18n';
 import { Alert } from '@/components/admin/form';
 import { loadPageDraftState } from '@/lib/admin/page-draft-store';
+import { loadPendingEmergencyForEditor } from '@/lib/admin/pending-translation';
+import { PendingTranslationBanner } from '@/components/admin/emergency-publish';
 import { planSync } from '@/lib/translation/state';
 import { locales } from '@/lib/i18n/config';
 import { readPageDraft, type PageDraft } from '@/lib/page-draft';
@@ -48,7 +50,7 @@ export default async function AdminPageDetail({ params }: { params: Promise<{ id
 
   if (!state) notFound();
 
-  const [plan, versions] = await Promise.all([
+  const [plan, versions, pendingEmergency] = await Promise.all([
     tryDb((client) => planSync(client, 'page', id)),
     tryDb((client) =>
       client.pageVersion.findMany({
@@ -65,6 +67,7 @@ export default async function AdminPageDetail({ params }: { params: Promise<{ id
         },
       }),
     ),
+    tryDb((client) => loadPendingEmergencyForEditor(client, 'page', id)),
   ]);
 
   const { draft, hasDraft, published } = state;
@@ -124,6 +127,17 @@ export default async function AdminPageDetail({ params }: { params: Promise<{ id
           {' — '}
           {t.pageDetail.pendingHint}
         </Alert>
+      ) : null}
+
+      {/* 常驻提醒：只要这个页面最近一次发布是应急发布就一直显示 */}
+      {pendingEmergency ? (
+        <PendingTranslationBanner
+          entityType="page"
+          entityId={id}
+          reason={pendingEmergency.reason}
+          failureKind={pendingEmergency.failureKind}
+          jobId={pendingEmergency.jobId}
+        />
       ) : null}
 
       <section className="rounded-xl border border-navy-200 bg-white p-5">

@@ -25,24 +25,49 @@ import { locales } from '@/lib/i18n/config';
 /** 从统一的语言清单派生，加语言后新语言的首页会自动一起失效 */
 const PUBLIC_LOCALES = locales;
 
-export function revalidatePublicSite(): void {
-  revalidatePath('/', 'layout');
-
-  for (const locale of PUBLIC_LOCALES) {
-    // 正式站首页（含页头 / 页脚 / metadata —— 它们都在该 layout 下渲染）
-    revalidatePath(`/${locale}`, 'layout');
-    // 设计预览（独立路由组，显式点名以免被漏掉）
-    revalidatePath(`/${locale}/design-preview`, 'page');
+/**
+ * 缓存失效只在**请求上下文**里有意义。
+ *
+ * `revalidatePath` 依赖 Next 的请求级存储；在命令行（`npm run translation:sync`）
+ * 或没有请求的后台任务里调用它会直接抛异常。而「补齐任务跑完自动发布」这条路径
+ * 恰恰两头都会走 —— 后台点按钮时在请求里，定时/命令行补跑时不在。
+ *
+ * 所以这里统一兜住：失败只记一条日志。**不把异常往上抛**是有意的 ——
+ * 内容已经写进数据库了，因为「清理缓存」这一步失败就让整个同步任务报错，
+ * 会让人以为内容没同步成功，而实际上它成功了、只是前台要等 60 秒自然过期。
+ */
+function safeRevalidate(run: () => void): void {
+  try {
+    run();
+  } catch {
+    console.info('[admin] cache revalidation skipped (no request context)');
   }
+}
+
+export function revalidatePublicSite(): void {
+  safeRevalidate(() => {
+    revalidatePath('/', 'layout');
+
+    for (const locale of PUBLIC_LOCALES) {
+      // 正式站首页（含页头 / 页脚 / metadata —— 它们都在该 layout 下渲染）
+      revalidatePath(`/${locale}`, 'layout');
+      // 设计预览（独立路由组，显式点名以免被漏掉）
+      revalidatePath(`/${locale}/design-preview`, 'page');
+    }
+  });
 }
 
 /** 商品目录与商品详情：语言前缀 + 目录页 + 详情页动态段 */
 export function revalidatePublicCatalogue(): void {
-  revalidatePublicSite();
+  safeRevalidate(() => {
+    revalidatePath('/', 'layout');
 
-  for (const locale of PUBLIC_LOCALES) {
-    revalidatePath(`/${locale}/products`, 'page');
-    // 详情页是动态段，用 'layout' 类型一次性覆盖该语言下所有 slug
-    revalidatePath(`/${locale}/products/[slug]`, 'page');
-  }
+    for (const locale of PUBLIC_LOCALES) {
+      revalidatePath(`/${locale}`, 'layout');
+      revalidatePath(`/${locale}/design-preview`, 'page');
+      revalidatePath(`/${locale}/products`, 'page');
+      // 详情页是动态段，用 'page' 类型一次性覆盖该语言下所有 slug
+      revalidatePath(`/${locale}/products/[slug]`, 'page');
+    }
+  });
 }

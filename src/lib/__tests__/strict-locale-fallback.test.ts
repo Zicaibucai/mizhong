@@ -10,20 +10,25 @@ import { locales, localeCodes } from '@/lib/i18n/config';
  * 旧的回退逻辑会把「任意一条翻译」当成兜底，于是阿拉伯语页面显示中文商品名，
  * 还对外生成一个 hreflang 说「这里就是阿拉伯语版本」—— 属于跨语言污染。
  *
- * 新的规则是：
- *   - 中文页面只认中文，没有中文内容就不显示；
- *   - 其它语言先看该语言，没有则回退**英文**；
- *   - 该语言与英文都没有 → 当作不存在（404），而不是随便抓一条。
+ * 新的规则分成两层，回答的是两个不同的问题：
  *
- * **这套规则默认关闭**，由 `STRICT_LOCALE_FALLBACK` 环境变量控制。原因是
- * 「2 个商品 × 10 种语言 = 20 个原本 200 的 URL 会变成 404」——必须先翻译完
- * 再开启。所以这里既测开启后的规则，也测关闭时确实是旧行为（不能误上线）。
+ *   - **渲染**（`pickTranslation`）：其它语言先看该语言，没有则回退英文；
+ *     该语言与英文都没有 → 当作不存在（404）。
+ *   - **hreflang 与 sitemap**（`localesWithContent`）：**只列有自己译文的语言**。
+ *     一个显示英文内容的阿拉伯语页面，在 hreflang 里声明自己是阿拉伯语，
+ *     等于告诉搜索引擎「这里是阿拉伯语内容」—— 比不声明更糟。
+ *
+ * **这套规则默认关闭**，由 `STRICT_LOCALE_FALLBACK` 环境变量控制，且
+ * **只有严格等于 `'true'` 才开启**。原因是「2 个商品 × 10 种语言 = 20 个原本 200
+ * 的 URL 会变成 404」——必须先翻译完再开启。所以这里既测开启后的规则，
+ * 也测关闭时确实是旧行为（不能误上线）。
  */
 
 const original = process.env.STRICT_LOCALE_FALLBACK;
 
 beforeEach(() => {
-  process.env.STRICT_LOCALE_FALLBACK = '1';
+  // 只有严格等于 'true' 才开启（见 catalog.ts 的说明）
+  process.env.STRICT_LOCALE_FALLBACK = 'true';
 });
 
 afterEach(() => {
@@ -41,15 +46,25 @@ describe('开关', () => {
     assert.equal(strictLocaleFallbackEnabled(), false, '不设变量时不能开启严格回退');
   });
 
-  test('识别 1 / true，其余一律视为关闭', () => {
-    for (const value of ['1', 'true', 'TRUE', ' true ']) {
+  test('只有严格等于 "true" 才是开启', () => {
+    process.env.STRICT_LOCALE_FALLBACK = 'true';
+    assert.equal(strictLocaleFallbackEnabled(), true);
+  });
+
+  test('其余写法一律关闭 —— 这个开关一开，没有译文的 URL 会直接 404', () => {
+    // `FOO=1` 与 `FOO=true` 在运维脚本里都很常见，一个拼写差异就足以把
+    // 整站的一部分页面关掉。这种代价下「必须明确写 true」是刻意的。
+    for (const value of ['', ' ', 'false', '0', '1', 'yes', 'no', 'TRUE', 'True', ' true', 'true ', 'on']) {
       process.env.STRICT_LOCALE_FALLBACK = value;
-      assert.equal(strictLocaleFallbackEnabled(), true, `${value} 应当开启`);
+      assert.equal(strictLocaleFallbackEnabled(), false, `"${value}" 必须是关闭`);
     }
-    for (const value of ['', '0', 'false', 'no', 'yes']) {
-      process.env.STRICT_LOCALE_FALLBACK = value;
-      assert.equal(strictLocaleFallbackEnabled(), false, `${value} 应当是关闭`);
-    }
+  });
+
+  test('变量被删除后回到关闭', () => {
+    process.env.STRICT_LOCALE_FALLBACK = 'true';
+    assert.equal(strictLocaleFallbackEnabled(), true);
+    delete process.env.STRICT_LOCALE_FALLBACK;
+    assert.equal(strictLocaleFallbackEnabled(), false);
   });
 
   test('关闭时 hreflang 列出全部语言（线上现状不变）', () => {
@@ -67,12 +82,16 @@ describe('严格回退：哪些语言算「真的有内容」', () => {
     assert.deepEqual(available, ['zh'], '只有中文内容时，hreflang 只该出现中文');
   });
 
-  test('中文 + 英文时，英文可以兜底其余语言', () => {
+  test('中文 + 英文时只列这两种 —— 英文兜底的页面不算「有该语言内容」', () => {
     const translations = rows(['zh', '特塑钩子'], ['en', 'Plastic Hook']);
     const available = localesWithContent(translations, locales);
 
-    assert.deepEqual(available, ['zh', 'en', ...locales.filter((l) => l !== 'zh' && l !== 'en')]);
-    assert.equal(available.includes('ar'), true, '英文存在时，阿拉伯语页面显示英文而不是 404');
+    assert.deepEqual(available, ['zh', 'en']);
+    assert.equal(
+      available.includes('ar'),
+      false,
+      '阿拉伯语页面即使会显示英文，也不该在 hreflang 里声称自己是阿拉伯语',
+    );
   });
 
   test('全部语言都有内容时，十一种语言全部列出', () => {
