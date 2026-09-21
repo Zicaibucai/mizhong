@@ -26,7 +26,7 @@ export function AdminShell({
         <aside className="border-b border-navy-200 bg-white px-4 py-4 lg:min-h-screen lg:w-64 lg:shrink-0 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
           <Link href="/admin" className="block">
             <span className="block text-sm font-semibold tracking-tight text-navy-900">
-              Mizhong Trading Co., Ltd.
+              Mizhong New Materials Co., Ltd.
             </span>
             <span className="mt-0.5 block text-xs text-muted">{t.shell.subtitle}</span>
           </Link>

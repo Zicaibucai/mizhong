@@ -113,6 +113,8 @@ export function PreviewHeader({
                 menuLabel={labels.menu}
                 closeLabel={labels.close}
                 navLabel={labels.mobileNav}
+                currentLocale={locale}
+                languageLabel={labels.lang}
               />
             </div>
           </div>

@@ -2,7 +2,7 @@
   "name": "mizhong-trade-website",
   "version": "0.1.0",
   "private": true,
-  "description": "米众贸易有限公司多语言企业官网（简体中文 / English / Tiếng Việt）",
+  "description": "米众新材料有限公司多语言沙发辅料企业官网",
   "engines": {
     "node": ">=22.0.0"
   },

@@ -110,6 +110,7 @@ export function PreviewProducts({
   title,
   subtitle,
   catalogueHref,
+  emptyHref,
   products,
   categories,
   copy,
@@ -122,6 +123,8 @@ export function PreviewProducts({
   subtitle: string;
   /** 完整产品目录地址（已带语言前缀） */
   catalogueHref: string;
+  /** 无已发布商品时，分类与主按钮直接引导询盘，避免进入空目录。 */
+  emptyHref: string;
   products: ProductCardView[];
   categories: ReadonlyArray<{ name: string; desc: string }>;
   copy: PreviewCopy;
@@ -149,7 +152,7 @@ export function PreviewProducts({
       }))
     : categories.map((category) => ({
         key: category.name,
-        href: catalogueHref,
+        href: emptyHref,
         label: null,
         title: category.name,
         description: category.desc,
@@ -250,8 +253,8 @@ export function PreviewProducts({
           data-reveal
           className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-[var(--pv-rule)] pt-6"
         >
-          <a href={catalogueHref} className="pv-btn pv-btn-ink">
-            <span>{copy.browseProducts}</span>
+          <a href={published ? catalogueHref : emptyHref} className="pv-btn pv-btn-ink">
+            <span>{published ? copy.browseProducts : copy.requestCatalogue}</span>
             <ArrowRightIcon className="pv-arrow h-4 w-4" />
           </a>
         </div>

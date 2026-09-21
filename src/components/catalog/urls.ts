@@ -1,3 +1,5 @@
+import { site } from '@/lib/site-config';
+
 /**
  * 产品目录 / 搜索页面的 URL 与查询参数工具。
  *
@@ -54,13 +56,8 @@ export function searchPath(locale: string): string {
 
 /**
  * 产品的绝对地址，用于 WhatsApp / 邮件正文。
- * 域名来自 NEXT_PUBLIC_SITE_URL，未配置或格式非法时回退到占位域名（与站点其他位置一致）。
+ * 域名与全站 canonical 共用同一个经过校验的配置。
  */
 export function absoluteProductUrl(locale: string, slug: string): string {
-  const configured = (process.env.NEXT_PUBLIC_SITE_URL ?? '').trim();
-  // 未配置域名时的兜底，与 src/lib/site-config.ts 保持一致
-  const base = /^https?:\/\//i.test(configured)
-    ? configured.replace(/\/+$/, '')
-    : 'https://www.example.com';
-  return `${base}/${locale}/products/${encodeURIComponent(slug)}`;
+  return `${site.url}/${locale}/products/${encodeURIComponent(slug)}`;
 }

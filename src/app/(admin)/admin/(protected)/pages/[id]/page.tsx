@@ -142,7 +142,7 @@ export default async function AdminPageDetail({ params }: { params: Promise<{ id
 
       <section className="rounded-xl border border-navy-200 bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold text-navy-900">{t.pageDetail.publishStatus}</h2>
-        <PageStatusForm id={id} status={published ? 'PUBLISHED' : 'DRAFT'} />
+        <PageStatusForm id={id} status={published ? 'PUBLISHED' : 'DRAFT'} hasDraft={hasDraft} />
       </section>
 
       <section className="space-y-4 rounded-xl border border-navy-200 bg-white p-5">

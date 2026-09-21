@@ -46,14 +46,17 @@ function StatusSubmit({
 export function PageStatusForm({
   id,
   status,
+  hasDraft,
 }: {
   id: string;
   status: 'DRAFT' | 'PUBLISHED';
+  hasDraft: boolean;
 }) {
   const t = useAdminT();
   const router = useRouter();
   const [state, formAction] = useActionState(setPageStatusAction, initialFormState);
   const published = status === 'PUBLISHED';
+  const publishingChanges = published && hasDraft;
 
   // 发布状态与草稿都会影响这一页的显示，成功后重新读取服务端数据
   useEffect(() => {
@@ -106,7 +109,11 @@ export function PageStatusForm({
   return (
     <form ref={formRef} action={formAction} className="space-y-3">
       <input type="hidden" name="id" value={id} />
-      <input type="hidden" name="status" value={published ? 'DRAFT' : 'PUBLISHED'} />
+      <input
+        type="hidden"
+        name="status"
+        value={publishingChanges || !published ? 'PUBLISHED' : 'DRAFT'}
+      />
 
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm text-navy-700">
@@ -115,8 +122,15 @@ export function PageStatusForm({
             {published ? t.pageStatus.published : t.pageStatus.draft}
           </span>
         </span>
-        <StatusSubmit tone={published ? 'secondary' : 'primary'} pendingText={t.common.processing}>
-          {published ? t.pageStatus.moveToDraft : t.pageStatus.publish}
+        <StatusSubmit
+          tone={published && !publishingChanges ? 'secondary' : 'primary'}
+          pendingText={t.common.processing}
+        >
+          {publishingChanges
+            ? t.pageStatus.publishChanges
+            : published
+              ? t.pageStatus.moveToDraft
+              : t.pageStatus.publish}
         </StatusSubmit>
       </div>
 

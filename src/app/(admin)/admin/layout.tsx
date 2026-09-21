@@ -13,7 +13,7 @@ const inter = Inter({
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getAdminMessagesForRequest();
   return {
-    title: `${t.shell.subtitle} · Mizhong Trading Co., Ltd.`,
+    title: `${t.shell.subtitle} · Mizhong New Materials Co., Ltd.`,
     description: t.shell.subtitle,
     robots: { index: false, follow: false },
   };

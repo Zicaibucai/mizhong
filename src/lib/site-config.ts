@@ -11,17 +11,28 @@ import type { Locale } from '@/lib/i18n/config';
  */
 export const company = {
   /** 中文全称（已确认） */
-  nameZh: '米众贸易有限公司',
-  /** 英文全称（暂定，尚未经公司正式确认——如需修改仅改动此处） */
-  nameEn: 'Mizhong Trading Co., Ltd.',
-  /** 越南语全称（公司未提供，暂以英文名占位 —— TODO：待公司确认） */
-  nameVi: 'Mizhong Trading Co., Ltd.',
+  nameZh: '米众新材料有限公司',
+  /** 海外页面统一使用英文品牌名。 */
+  nameEn: 'Mizhong New Materials Co., Ltd.',
+  nameVi: 'Mizhong New Materials Co., Ltd.',
 } as const;
+
+const configuredSiteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? '').trim().replace(/\/+$/, '');
+const legacyProductionUrls = new Set([
+  'http://htd123.com',
+  'http://www.htd123.com',
+  'http://47.238.7.93',
+]);
+const canonicalSiteUrl = legacyProductionUrls.has(configuredSiteUrl)
+  ? 'https://htd123.com'
+  : /^https?:\/\//i.test(configuredSiteUrl)
+    ? configuredSiteUrl
+    : 'https://htd123.com';
 
 export const site = {
   name: company.nameEn,
-  /** 生产域名 —— TODO：域名提供后替换（优先读环境变量） */
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.example.com',
+  /** 已启用 HTTPS；顺带纠正服务器遗留的 HTTP/IP 配置。 */
+  url: canonicalSiteUrl,
   titleSeparator: '—',
 } as const;
 

@@ -23,11 +23,9 @@ export function ChannelLink({
   className?: string;
   children: ReactNode;
 }) {
-  const label = `${channel.label}: ${channel.value}`;
-
   if (!channel.href) {
     return (
-      <span className={className} aria-label={label}>
+      <span className={className}>
         {children}
       </span>
     );
@@ -37,7 +35,6 @@ export function ChannelLink({
     <a
       href={channel.href}
       {...(channel.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-      aria-label={label}
       className={className}
     >
       {children}

@@ -101,6 +101,8 @@ export function PreviewHero({
         <div className="relative grid grid-cols-12 items-start gap-x-6 gap-y-10">
           <div className="col-span-12 lg:col-span-8">
             <h1 className={cn('pv-display', sizeClass)}>
+              <span className="sr-only">{title}</span>
+              <span aria-hidden="true">
               {lines.map((line, i) => (
                 <span
                   key={line}
@@ -110,6 +112,7 @@ export function PreviewHero({
                   <span>{line}</span>
                 </span>
               ))}
+              </span>
             </h1>
 
             <p

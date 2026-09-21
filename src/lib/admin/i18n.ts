@@ -257,6 +257,7 @@ const en = {
     draft: 'Draft',
     moveToDraft: 'Move to draft',
     publish: 'Publish',
+    publishChanges: 'Publish changes',
   },
   blockForm: {
     enabled: 'Enable this block (hidden from the public site when off)',
@@ -794,6 +795,7 @@ const zh: AdminMessages = {
     draft: '草稿',
     moveToDraft: '转为草稿',
     publish: '发布',
+    publishChanges: '发布更改',
   },
   blockForm: {
     enabled: '启用该区块（关闭后不在官网显示）',

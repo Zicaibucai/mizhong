@@ -11,6 +11,7 @@ import { pt } from './pt';
 import { hi } from './hi';
 import type { Locale } from '../config';
 import type { Dict } from './en';
+import { getSofaDictionaryOverlay } from '../sofa-content';
 
 /**
  * 语言 → 字典。
@@ -25,7 +26,7 @@ const dictionaries: Record<Locale, Dict> = { zh, en, vi, es, ja, ru, ar, fr, ko,
  * 按语言取字典。所有文案集中管理于此，禁止在组件中硬编码。
  */
 export function getDictionary(locale: Locale): Dict {
-  return dictionaries[locale];
+  return { ...dictionaries[locale], ...getSofaDictionaryOverlay(locale) };
 }
 
 export type { Dict } from './en';

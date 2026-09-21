@@ -31,12 +31,15 @@ const ICONS: Record<string, (props: { className?: string }) => React.ReactElemen
  * 仅在桌面端出现 —— 移动端由「全球询盘」区块与页脚承担，避免遮挡正文。
  */
 export function PreviewContactRail({ channels }: { channels: PreviewChannel[] }) {
-  if (channels.length === 0) return null;
+  const primaryChannels = ['WHATSAPP', 'EMAIL', 'PHONE']
+    .map((type) => channels.find((channel) => channel.type === type))
+    .filter((channel): channel is PreviewChannel => Boolean(channel));
+  if (primaryChannels.length === 0) return null;
 
   return (
     <div className="pointer-events-none fixed bottom-6 right-6 z-40 hidden lg:block">
       <ul className="pointer-events-auto flex flex-col items-end gap-2">
-        {channels.map((channel) => {
+        {primaryChannels.map((channel) => {
           const Icon = ICONS[channel.type] ?? GlobeIcon;
           return (
             <li key={channel.key}>

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { CloseIcon, MenuIcon } from '@/components/ui/icons';
+import type { Locale } from '@/lib/i18n';
+import { LanguageSwitcher } from './language-switcher';
 
 interface NavItem {
   label: string;
@@ -16,6 +18,8 @@ interface MobileMenuProps {
   menuLabel: string;
   closeLabel: string;
   navLabel: string;
+  currentLocale: Locale;
+  languageLabel: string;
 }
 
 export function MobileMenu({
@@ -25,6 +29,8 @@ export function MobileMenu({
   menuLabel,
   closeLabel,
   navLabel,
+  currentLocale,
+  languageLabel,
 }: MobileMenuProps) {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -106,6 +112,9 @@ export function MobileMenu({
             >
               {ctaLabel}
             </a>
+            <div className="mt-5 border-t border-navy-100 pt-5">
+              <LanguageSwitcher current={currentLocale} label={languageLabel} />
+            </div>
           </nav>
         </div>
       ) : null}

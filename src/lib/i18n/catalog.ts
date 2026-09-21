@@ -9,7 +9,7 @@ import type { Locale } from '@/lib/i18n/config';
 const en = {
   list: {
     title: 'Product catalogue',
-    subtitle: 'Browse our textile accessories. Use the categories and filters to narrow the list.',
+    subtitle: 'Browse our sofa and upholstered-furniture accessories. Use categories and filters to narrow the list.',
     searchPlaceholder: 'Search products, SKU or category…',
     searchButton: 'Search',
     allCategories: 'All products',
@@ -119,7 +119,7 @@ export type CatalogDict = typeof en;
 const zh: CatalogDict = {
   list: {
     title: '产品目录',
-    subtitle: '浏览我们的纺织辅料产品，可使用左侧分类与筛选缩小范围。',
+    subtitle: '浏览沙发及软体家具辅料，可使用分类与筛选缩小范围。',
     searchPlaceholder: '搜索产品名称、SKU 或分类…',
     searchButton: '搜索',
     allCategories: '全部产品',
@@ -224,7 +224,7 @@ const zh: CatalogDict = {
 const vi: CatalogDict = {
   list: {
     title: 'Danh mục sản phẩm',
-    subtitle: 'Xem phụ kiện dệt may của chúng tôi. Dùng danh mục và bộ lọc để thu hẹp danh sách.',
+    subtitle: 'Xem phụ kiện sofa và nội thất bọc nệm. Dùng danh mục và bộ lọc để thu hẹp danh sách.',
     searchPlaceholder: 'Tìm sản phẩm, SKU hoặc danh mục…',
     searchButton: 'Tìm kiếm',
     allCategories: 'Tất cả sản phẩm',
@@ -333,7 +333,7 @@ const vi: CatalogDict = {
 const es: CatalogDict = {
   list: {
     title: 'Catálogo de productos',
-    subtitle: 'Explore nuestros accesorios textiles. Use las categorías y los filtros para acotar la lista.',
+    subtitle: 'Explore nuestros accesorios para sofás y muebles tapizados. Use las categorías y los filtros para acotar la lista.',
     searchPlaceholder: 'Buscar productos, SKU o categoría…',
     searchButton: 'Buscar',
     allCategories: 'Todos los productos',
@@ -440,7 +440,7 @@ const es: CatalogDict = {
 const ja: CatalogDict = {
   list: {
     title: '製品カタログ',
-    subtitle: '繊維資材の一覧です。カテゴリーと絞り込みで絞ってご覧いただけます。',
+    subtitle: 'ソファ・張り家具用副資材の一覧です。カテゴリーと絞り込みをご利用ください。',
     searchPlaceholder: '製品名・SKU・カテゴリーで検索…',
     searchButton: '検索',
     allCategories: 'すべての製品',
@@ -546,7 +546,7 @@ const ja: CatalogDict = {
 const ru: CatalogDict = {
   list: {
     title: 'Каталог продукции',
-    subtitle: 'Ознакомьтесь с нашей текстильной фурнитурой. Используйте категории и фильтры, чтобы сузить список.',
+    subtitle: 'Ознакомьтесь с комплектующими для диванов и мягкой мебели. Используйте категории и фильтры.',
     searchPlaceholder: 'Поиск по названию, артикулу или категории…',
     searchButton: 'Найти',
     allCategories: 'Вся продукция',
@@ -653,7 +653,7 @@ const ru: CatalogDict = {
 const ar: CatalogDict = {
   list: {
     title: 'كتالوج المنتجات',
-    subtitle: 'تصفّح مستلزماتنا النسيجية. استخدم الفئات وعوامل التصفية لتضييق القائمة.',
+    subtitle: 'تصفّح مستلزمات الأرائك والأثاث المنجد. استخدم الفئات وعوامل التصفية لتضييق القائمة.',
     searchPlaceholder: 'ابحث بالاسم أو رمز المنتج أو الفئة…',
     searchButton: 'بحث',
     allCategories: 'كل المنتجات',
@@ -760,7 +760,7 @@ const ar: CatalogDict = {
 const fr: CatalogDict = {
   list: {
     title: 'Catalogue produits',
-    subtitle: 'Parcourez nos accessoires textiles. Utilisez les catégories et les filtres pour affiner la liste.',
+    subtitle: 'Parcourez nos accessoires pour canapés et meubles rembourrés. Utilisez les catégories et les filtres.',
     searchPlaceholder: 'Rechercher un produit, un SKU ou une catégorie…',
     searchButton: 'Rechercher',
     allCategories: 'Tous les produits',
@@ -867,7 +867,7 @@ const fr: CatalogDict = {
 const ko: CatalogDict = {
   list: {
     title: '제품 카탈로그',
-    subtitle: '섬유 부자재를 살펴보세요. 카테고리와 필터로 목록을 좁힐 수 있습니다.',
+    subtitle: '소파와 스터프 가구용 부자재를 살펴보세요. 카테고리와 필터로 목록을 좁힐 수 있습니다.',
     searchPlaceholder: '제품명, SKU, 카테고리 검색…',
     searchButton: '검색',
     allCategories: '전체 제품',
@@ -973,7 +973,7 @@ const ko: CatalogDict = {
 const pt: CatalogDict = {
   list: {
     title: 'Catálogo de produtos',
-    subtitle: 'Explore os nossos acessórios têxteis. Use as categorias e os filtros para reduzir a lista.',
+    subtitle: 'Explore acessórios para sofás e móveis estofados. Use as categorias e os filtros para reduzir a lista.',
     searchPlaceholder: 'Pesquisar produtos, SKU ou categoria…',
     searchButton: 'Pesquisar',
     allCategories: 'Todos os produtos',
@@ -1080,7 +1080,7 @@ const pt: CatalogDict = {
 const hi: CatalogDict = {
   list: {
     title: 'उत्पाद कैटलॉग',
-    subtitle: 'हमारी टेक्सटाइल सहायक सामग्री देखें। सूची छोटी करने के लिए श्रेणियाँ और फ़िल्टर इस्तेमाल करें।',
+    subtitle: 'सोफ़ा और अपहोल्स्टर्ड फर्नीचर एक्सेसरीज़ देखें। सूची छोटी करने के लिए श्रेणियाँ और फ़िल्टर इस्तेमाल करें।',
     searchPlaceholder: 'उत्पाद, SKU या श्रेणी खोजें…',
     searchButton: 'खोजें',
     allCategories: 'सभी उत्पाद',

@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getAdminMessagesForRequest();
   return {
-    title: `${t.loginPage.subtitle} · Mizhong Trading Co., Ltd.`,
+    title: `${t.loginPage.subtitle} · Mizhong New Materials Co., Ltd.`,
     description: t.loginPage.subtitle,
     robots: { index: false, follow: false },
   };
@@ -26,7 +26,7 @@ export default async function AdminLoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-navy-950 px-5 py-12 texture-weave-dark">
       <div className="w-full max-w-sm rounded-2xl border border-navy-800 bg-ivory-50 p-8 shadow-xl shadow-navy-950/30">
-        <h1 className="text-lg font-semibold tracking-tight text-navy-900">Mizhong Trading Co., Ltd.</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-navy-900">Mizhong New Materials Co., Ltd.</h1>
         <p className="mt-1 text-sm text-muted">{t.loginPage.subtitle}</p>
         <div className="mt-7">
           <LoginForm dbReady={isDbConfigured()} />

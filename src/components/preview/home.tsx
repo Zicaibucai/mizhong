@@ -47,6 +47,8 @@ export async function PreviewHome({ locale }: { locale: Locale }) {
 
   const catalogueHref = `/${locale}/products`;
   const { items } = await listProducts({ locale, page: 1 });
+  const hasProducts = items.length > 0;
+  const productTarget = hasProducts ? catalogueHref : '#inquiry';
   const channels = resolveChannels(locale, t, content.contacts);
 
   return (
@@ -57,11 +59,11 @@ export async function PreviewHome({ locale }: { locale: Locale }) {
         title={hero.title}
         subtitle={hero.subtitle || t.hero.subtitle}
         primaryLabel={hero.ctaLabel || t.hero.ctaPrimary}
-        primaryHref={blockHref(locale, hero.ctaHref, catalogueHref)}
+        primaryHref={blockHref(locale, hero.ctaHref, productTarget)}
         secondaryLabel={t.hero.ctaSecondary}
         secondaryHref="#inquiry"
         categories={t.products.categories}
-        categoryHref={catalogueHref}
+        categoryHref={productTarget}
         indexLabel={t.products.eyebrow}
         scrollLabel={t.preview.scroll}
       />
@@ -73,6 +75,7 @@ export async function PreviewHome({ locale }: { locale: Locale }) {
         title={products.title}
         subtitle={products.subtitle}
         catalogueHref={catalogueHref}
+        emptyHref="#inquiry"
         products={items.slice(0, FEATURED_LIMIT)}
         categories={t.products.categories}
         copy={copy}
