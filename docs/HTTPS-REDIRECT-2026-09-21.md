@@ -127,10 +127,54 @@ cd /opt/mizhong && git pull --ff-only origin main && pm2 stop mizhong-web \
   不是数据库故障，也不是本次改动引起（改动只影响 URL 前缀，不碰路由与数据）。
 - `npm audit` 报 6 个依赖漏洞（1 moderate / 5 high），与本改动无关。
 
-## 7. 未做（可选）
+## 7. 两项可选项已落地（2026-09-21 11:47，Nginx 层）
 
-- **HSTS**：加上 `Strict-Transport-Security` 能让浏览器不再明文访问，也能顺带压掉
-  「用户浏览器缓存了早先那个 308 跳 http」的情况。属公开行为变更，需要先确认所有子域
-  都在 HTTPS 上，本次未纳入。
-- **www 的那一跳**：`http://www.htd123.com` 现在是 301 → `https://www.…` → 308 → apex，
-  两次跳转但都安全。想省一次可在 Nginx 上直接跳到 apex。
+`/etc/nginx/conf.d/mizhong.conf`（改动前已备份为 `mizhong.conf.bak-20260921-114610`）。
+
+**HSTS**：`add_header Strict-Transport-Security "max-age=31536000" always;`
+
+先以 `max-age=300` 上线、验证后再加长到 1 年。**必须写三处**，因为 Nginx 的
+`add_header` 只在当前层没有自己的 `add_header` 时才继承上层：
+
+| 位置 | 覆盖 |
+| --- | --- |
+| server 级 | `/`、`/api/...` 等走应用的位置 |
+| `location /media/` | 素材文件由 Nginx 直接发，**不经过应用** —— 应用层加头会漏掉这里 |
+| `location /_next/static/` | 同上，静态资源由 Nginx 直接发 |
+
+已核实四类响应都带上该头（`/`、`https://www.htd123.com/zh`、`/media/...`、`/_next/static/...`）。
+未加 `includeSubDomains`、未申请 preload —— 只约束 apex 与 www 两个已验证全 HTTPS 的主机名。
+
+**www 的那次多余跳转**：明文块里的 `return 301 https://$host$request_uri;` 改为
+`https://htd123.com$request_uri`（两处）。现在 `http://www.htd123.com/zh/products`
+**一次** 301 直接到 `https://htd123.com/zh/products`（原先要经 `https://www` 再 308）。
+未知 Host / 公网 IP 仍是 404，行为未变。
+
+## 8. 顺带补上的证书自动续期（同类风险）
+
+查 HSTS 的副作用时发现：服务器上有 certbot（`/usr/local/bin/certbot` → `/opt/certbot` 的
+venv，5.8.0 + nginx 插件）和 `/etc/letsencrypt/renewal/htd123.com.conf`，**但没有任何
+触发器** —— 没有 cron、没有 systemd timer、`/etc/cron.hourly` 里也没有。证书
+**2026-12-17 到期**，此前只能靠人工发现。
+
+启用 HSTS 后证书过期的后果从「浏览器可以点继续」变成「硬打不开」，所以补上了：
+
+```
+/etc/cron.d/htd-certbot-renew
+17 3 * * * root /usr/local/bin/certbot renew --quiet --deploy-hook "systemctl reload nginx"
+```
+
+- 用 `certbot renew --dry-run`（staging，不动线上证书）实测：**模拟续期成功**。
+- 认证方式沿用原有 nginx 插件，未改动。
+- 注意：nginx 插件在续期时会重写它管理的配置块。本次 dry-run 后比对，HSTS 与 www 两处改动
+  **都还在**；但不排除将来某次续期把它改回 `https://$host` —— 真被改回也只是 `http://www`
+  多一跳（应用层仍会收敛到 apex），按本节内容重跑一遍即可。
+
+## 9. 未做（可选）
+
+- **`includeSubDomains` 与 preload**：需要先确认 `htd123.com` 的所有子域都上了 HTTPS 且
+  长期可用，目前只有 apex 与 www 两个主机名，故未纳入。
+- **`https://www` 的那一跳**：仍是应用层的 308 → apex（一次跳转，已是最少）；
+  若想在 Nginx 层截住，要注意别与应用的「非语言路径 → /zh」逻辑叠成两次跳转。
+- **浏览器缓存的旧 308**：早先访问过 `http://htd123.com/zh` 的浏览器可能仍缓存着那次
+  308。HSTS 能让后续导航不再走明文，但已缓存的重定向要清缓存才消失。
