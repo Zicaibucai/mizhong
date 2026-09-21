@@ -182,6 +182,7 @@ async function runImport(options: Options) {
     if (options.dryRun) {
       console.log(`[dry-run] ${item.sku} ${item.nameZh} / ${item.nameEn} → ${item.category}${published ? '' : '（不发布）'}`);
       created += 1;
+      if (!published) unpublished += 1;
       continue;
     }
 
