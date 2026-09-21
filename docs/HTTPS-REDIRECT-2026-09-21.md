@@ -84,30 +84,48 @@ const proto = request.headers.get('x-forwarded-proto') === 'https' ? 'https' : '
 | 真实服务（`next dev -p 3100`，`NEXT_PUBLIC_SITE_URL=` 置空） | Host `htd123.com` → `https://htd123.com/zh`；Host `www.htd123.com` + 查询串 → `https://htd123.com/zh/products?page=2` |
 | 浏览器 | `/` → `/zh` 正常跳转并渲染（本机无 DB 隧道，内容走兜底，与本改动无关） |
 
-## 6. 部署（待执行）
+## 6. 部署（2026-09-21 已完成，`b2a9a51`）
 
 必须**重新构建**——middleware 的 `NEXT_PUBLIC_SITE_URL` 是构建时烘焙的，只 reload 不生效。
 顺序照旧（先停再删 `.next`，否则旧进程会把旧产物写进新目录）：
 
 ```
-cd /opt/mizhong && git pull --ff-only origin main && npm ci \
-  && pm2 stop mizhong-web && rm -rf .next && npm run build \
-  && pm2 start mizhong-web && pm2 save
+cd /opt/mizhong && git pull --ff-only origin main && pm2 stop mizhong-web \
+  && rm -rf .next && npm run build && pm2 start mizhong-web && pm2 save
 ```
+
+注意 `git pull` 要拉到的确实是带修复的 commit：第一次执行时改动还只在工作区，
+`Already up to date.` 重建的仍是旧代码 —— 这一步要看清 fast-forward 的区间。
 
 服务器上 `.env.local` 里的 `NEXT_PUBLIC_SITE_URL=http://47.238.7.93` **不改也已经是安全的**
 （生产主机名一律收敛到 `https://htd123.com`）；顺手把它改成 `https://htd123.com` 只是让
 配置更贴近事实。
 
-部署后验证（第二次请求才是新页面，`stale-while-revalidate` 的既有行为）：
+### 部署后验证（2026-09-21 11:10 前后，每项各请求两次绕开 stale-while-revalidate）
 
-```
-for u in https://htd123.com/ https://www.htd123.com/ https://htd123.com/products \
-         "https://htd123.com/products?x=1"; do
-  curl -sS -o /dev/null -w "%{http_code} %{redirect_url}\n" "$u"; done
-```
+| 入口 | 结果 |
+| --- | --- |
+| `https://htd123.com/` | 308 → `https://htd123.com/zh` |
+| `https://www.htd123.com/` | 308 → `https://htd123.com/zh` |
+| `https://htd123.com/products`、`/products?x=1&y=2` | 308 → `https://htd123.com/zh/...`（查询串保留） |
+| `http://htd123.com/`、`http://www.htd123.com/` | 301 → `https://…`（Nginx） |
+| 11 种语言首页 | 11 / 11 = 200 |
+| `/zh` 的 canonical 与 11 个 hreflang + x-default | 全部 `https://htd123.com/...` |
+| 页面内 http 自站地址 | 0 处 |
+| `robots.txt` / `sitemap.xml` | 200，`sitemap` 指向 `https://htd123.com/sitemap.xml` |
 
-四条都应落到 `https://htd123.com/...`。
+> 外部无法区分这次部署前后 `htd123.com` 上的跳转输出（旧代码配合 `http://47.238.7.93`
+> 这个配置值同样落 HTTPS）。本次部署的意义是**堵住回落路径**：配置缺失、协议头是
+> 代理链写法时也不会再产出 http。
+
+### 顺带核到、与本改动无关的两件事
+
+- **商品目录当前是空的**：`/zh/products` 显示「还没有」，`/ar/products/tehsugouzi`、
+  `/ja/products/manli` 返回 404，sitemap 只列 11 条语言首页。生产库**连接正常** ——
+  首页渲染出了只有后台录入才有的联系方式（微信 `Sofa_Materials_Mia`、
+  `512538257@qq.com`、`tel:+8618622185848`），所以这是**数据状态**（商品被下架或删除），
+  不是数据库故障，也不是本次改动引起（改动只影响 URL 前缀，不碰路由与数据）。
+- `npm audit` 报 6 个依赖漏洞（1 moderate / 5 high），与本改动无关。
 
 ## 7. 未做（可选）
 
