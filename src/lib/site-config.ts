@@ -1,4 +1,5 @@
 import type { Locale } from '@/lib/i18n/config';
+import { PRODUCTION_ORIGIN, resolveSiteOrigin } from '@/lib/site-origin';
 
 /**
  * 公司信息统一配置（前台回退值）。
@@ -17,22 +18,17 @@ export const company = {
   nameVi: 'Mizhong New Materials Co., Ltd.',
 } as const;
 
-const configuredSiteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? '').trim().replace(/\/+$/, '');
-const legacyProductionUrls = new Set([
-  'http://htd123.com',
-  'http://www.htd123.com',
-  'http://47.238.7.93',
-]);
-const canonicalSiteUrl = legacyProductionUrls.has(configuredSiteUrl)
-  ? 'https://htd123.com'
-  : /^https?:\/\//i.test(configuredSiteUrl)
-    ? configuredSiteUrl
-    : 'https://htd123.com';
-
 export const site = {
   name: company.nameEn,
-  /** 已启用 HTTPS；顺带纠正服务器遗留的 HTTP/IP 配置。 */
-  url: canonicalSiteUrl,
+  /**
+   * 已启用 HTTPS；顺带纠正服务器遗留的 HTTP/IP 配置。
+   * 与 middleware 的跳转共用同一套解析规则（见 `@/lib/site-origin`），
+   * 否则会出现「canonical 写 A、跳转去 B」这种自相矛盾的输出。
+   */
+  url: resolveSiteOrigin({
+    configured: process.env.NEXT_PUBLIC_SITE_URL,
+    fallback: PRODUCTION_ORIGIN,
+  }),
   titleSeparator: '—',
 } as const;
 
