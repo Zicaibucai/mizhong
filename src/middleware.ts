@@ -5,6 +5,9 @@ import { locales, defaultLocale } from '@/lib/i18n/config';
 /** 不参与语言前缀重定向的路径（后台自带权限守卫） */
 const BYPASS_PREFIXES = ['admin', 'api'];
 
+/** 历史环境变量里曾保存过 HTTP 域名和公网 IP，统一收敛到正式 HTTPS 域名。 */
+const LEGACY_PRODUCTION_HOSTS = new Set(['htd123.com', 'www.htd123.com', '47.238.7.93']);
+
 /**
  * 解析对外可访问的站点 origin。
  *
@@ -17,7 +20,12 @@ function resolveOrigin(request: NextRequest): string {
   if (configured) {
     try {
       const url = new URL(configured);
-      if (url.protocol === 'http:' || url.protocol === 'https:') return url.origin;
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        if (LEGACY_PRODUCTION_HOSTS.has(url.hostname.toLowerCase())) {
+          return 'https://htd123.com';
+        }
+        return url.origin;
+      }
     } catch {
       // 配置非法则回落到请求头
     }
