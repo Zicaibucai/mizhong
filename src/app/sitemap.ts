@@ -44,6 +44,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 1,
   }));
 
+  /**
+   * 产品目录页。原先只列了首页与商品详情 —— 客户从「产品」入口进来的那一页
+   * 反而不在地图里（2026-09-22 补）。这一页在每种语言下都存在（内容为空时
+   * 展示空目录提示），所以 11 种语言都列。
+   */
+  const catalogueEntries: MetadataRoute.Sitemap = locales.map((locale) => ({
+    url: `${site.url}/${locale}/products`,
+    changeFrequency: 'weekly',
+    priority: 0.9,
+  }));
+
   const contentEntries = await withTimeout(
     tryDb(async (db) => {
       const entries: MetadataRoute.Sitemap = [];
@@ -100,7 +111,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     DB_TIMEOUT_MS,
   );
 
-  return [...homeEntries, ...(contentEntries ?? [])];
+  return [...homeEntries, ...catalogueEntries, ...(contentEntries ?? [])];
 }
 
 /**

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import type { Locale } from '@/lib/i18n';
 import type { NavView } from '@/lib/content';
+import { companyShortName } from '@/lib/site-config';
 import { ArrowRightIcon } from '@/components/ui/icons';
 import { LanguageSwitcher } from '@/components/layout/language-switcher';
 import { MobileMenu } from '@/components/layout/mobile-menu';
@@ -62,8 +63,10 @@ export function PreviewHeader({
             aria-label={name}
           >
             {logo}
+            {/* 窄屏只显示品牌短名：全称在手机上会被截成省略号（英文、阿语尤其明显） */}
             <span className="truncate text-[0.95rem] font-medium tracking-[-0.01em] text-current">
-              {name}
+              <span className="hidden sm:inline">{name}</span>
+              <span className="sm:hidden">{companyShortName(locale)}</span>
             </span>
           </Link>
 

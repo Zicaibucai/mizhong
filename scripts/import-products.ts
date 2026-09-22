@@ -104,7 +104,7 @@ async function readManifest(file: string): Promise<Manifest> {
 }
 
 /** 把源图提交进素材库（与后台上传同一条路径：缩略图、key 规则都由存储层负责） */
-async function storeImage(sourceFile: string, originalName: string) {
+async function storeImage(sourceFile: string) {
   const tempFile = path.join(os.tmpdir(), `mizhong-import-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
   await fs.copyFile(sourceFile, tempFile);
   const storage = getStorage();
@@ -186,7 +186,7 @@ async function runImport(options: Options) {
       continue;
     }
 
-    const committed = await storeImage(sourceFile, path.basename(item.file));
+    const committed = await storeImage(sourceFile);
     const asset = await db.asset.create({
       data: {
         type: 'IMAGE',

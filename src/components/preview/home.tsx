@@ -1,6 +1,6 @@
 import { getDictionary, type Locale } from '@/lib/i18n';
 import { getBlock, getSiteContent } from '@/lib/content';
-import { listProducts } from '@/lib/catalog';
+import { listCategories, listProducts, type ProductCardView } from '@/lib/catalog';
 import { getPreviewCopy } from '@/lib/preview/content';
 import { inquiryHref, resolveChannels, withLocale } from '@/lib/preview/util';
 import { PreviewHero } from './sections/hero';
@@ -28,6 +28,46 @@ const SECTION = {
 
 const FEATURED_LIMIT = 6;
 
+/**
+ * 首页六个格子：**每个分类各取一个代表**。
+ *
+ * 直接按 sortOrder 取前六个商品时，六个格子会全部落在同一个分类里
+ * （2026-09-22 实测：全是「垫边与滚边」的 HD6001–HD6006），
+ * 而区块标题写的是「沙发辅料分类」—— 海外客户会据此以为经营范围只有这一类。
+ * 分类凑不满六个时，用其余商品补齐，格子不留空。
+ */
+async function pickAcrossCategories(
+  locale: Locale,
+  fallback: ProductCardView[],
+  limit: number,
+): Promise<ProductCardView[]> {
+  const picked: ProductCardView[] = [];
+  const chosen = new Set<string>();
+
+  if (fallback.length > 0) {
+    for (const category of await listCategories(locale)) {
+      if (picked.length >= limit) break;
+      if (category.productCount === 0) continue;
+      const { items } = await listProducts({ locale, categorySlug: category.slug, page: 1 });
+      const first = items[0];
+      if (first && !chosen.has(first.id)) {
+        picked.push(first);
+        chosen.add(first.id);
+      }
+    }
+  }
+
+  for (const item of fallback) {
+    if (picked.length >= limit) break;
+    if (!chosen.has(item.id)) {
+      picked.push(item);
+      chosen.add(item.id);
+    }
+  }
+
+  return picked;
+}
+
 function blockHref(locale: Locale, raw: string, fallback: string): string {
   const value = (raw ?? '').trim();
   if (value.startsWith('/')) return withLocale(locale, value);
@@ -48,6 +88,7 @@ export async function PreviewHome({ locale }: { locale: Locale }) {
   const catalogueHref = `/${locale}/products`;
   const { items } = await listProducts({ locale, page: 1 });
   const hasProducts = items.length > 0;
+  const featured = await pickAcrossCategories(locale, items, FEATURED_LIMIT);
   const productTarget = hasProducts ? catalogueHref : '#inquiry';
   const channels = resolveChannels(locale, t, content.contacts);
 
@@ -76,7 +117,7 @@ export async function PreviewHome({ locale }: { locale: Locale }) {
         subtitle={products.subtitle}
         catalogueHref={catalogueHref}
         emptyHref="#inquiry"
-        products={items.slice(0, FEATURED_LIMIT)}
+        products={featured}
         categories={t.products.categories}
         copy={copy}
         artworkLabel={t.preview.artwork}

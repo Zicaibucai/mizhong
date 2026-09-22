@@ -38,3 +38,18 @@ export function companyName(locale: Locale): string {
   // 需要为某个语言单独起名时，在 site-config 里加字段再在这里分支即可。
   return locale === 'zh' ? company.nameZh : company.nameEn;
 }
+
+/**
+ * 页头在窄屏使用的品牌短名。
+ *
+ * 手机端页头放不下公司全称 —— 英文与阿语会被截成省略号（2026-09-22 报），
+ * 而「米众新材料有限公司…」这种被截断的身份标识比短名更难认。短名取公司名里
+ * 真正是品牌的那一段：拉丁文取第一个词（Mizhong），中文取前两个字（米众）。
+ * 从 `companyName` 派生，将来改品牌名不会漏掉这里。
+ */
+export function companyShortName(locale: Locale): string {
+  const full = companyName(locale).trim();
+  const firstWord = full.split(/\s+/)[0] ?? full;
+  if (/^[㐀-鿿]/.test(firstWord)) return firstWord.slice(0, 2);
+  return firstWord.replace(/[.,;:]+$/, '') || full;
+}
