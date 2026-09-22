@@ -103,3 +103,30 @@ npx tsx scripts/fill-product-descriptions.ts [--dry-run]        # 补一句话�
 npx tsx scripts/translation-sync.ts sync                        # 译成其余 9 种语言（写草稿）
 npx tsx scripts/import-products.ts publish                      # 发布草稿上线
 ```
+
+---
+
+## 追加：页面标题缺品牌与型号（2026-09-22 下午，`3e6b11b`）
+
+用户反馈「Bing 上还是搜不到」。排查发现除收录本身需要时间外，还有一个**自己的短板**：
+
+**全站除首页外，没有任何一个页面标题含公司名** —— 商品页标题就是「圆形垫边」、
+目录页就是「产品目录」（布局的 `title` 是一个纯字符串，Next 不做任何拼接）。
+后果：搜品牌名一定搜不到；1419 个商品页标题彼此极其相似。
+
+| 页面 | 修复前 | 修复后 |
+| --- | --- | --- |
+| `/zh/products` | 产品目录 | 产品目录 — 米众新材料有限公司 |
+| `/zh/products/hd6001…` | 圆形垫边 | **HD6001 圆形垫边 — 米众新材料有限公司** |
+| `/en/products/hd6001…` | Round Styrofoam Edge Rope | **HD6001 Round Styrofoam Edge Rope — Mizhong New Materials Co., Ltd.** |
+
+做法：
+
+- 布局改用 `title.template`，子页面标题统一追加「— 公司名」（各语言用各语言的公司名）；
+- 商品页标题加**型号前缀** —— 客户按型号找货（搜「HD6001」应能命中），同名规格款
+  （三种合金扣）也靠型号把标题区分开；
+- 后台 SEO 分区的灰色提示同步显示「型号 + 名称」，与前台商品标题一致
+  （品牌后缀由布局统一追加，代码注释里写明了这层分工）。
+
+**没有再推一次 IndexNow**：地址集合没变，引擎抓取时拿到的就是新标题；Bing 还没进内页，
+它第一次抓到的就是改好的版本。
