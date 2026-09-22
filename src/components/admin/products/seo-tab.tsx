@@ -120,8 +120,14 @@ function useSeoFallbackPlaceholders({
         const title = document.getElementById(`${formId}-${locale}-seoTitle`);
         const description = document.getElementById(`${formId}-${locale}-seoDescription`);
 
-        // 只改 placeholder，绝不碰 value
-        if (title instanceof HTMLInputElement) title.placeholder = name?.value.trim() ?? '';
+        // 只改 placeholder，绝不碰 value。
+        // 标题的最终形态是「<型号> <名称> — 公司名」：型号来自本页 SKU 输入框，
+        // 公司名由前台布局统一追加（见 (site)/[locale]/layout.tsx 的 title.template），
+        // 这里把该商品自己的部分如实显示出来。
+        const sku = scope.querySelector<HTMLInputElement>('[name="sku"]')?.value.trim() ?? '';
+        if (title instanceof HTMLInputElement) {
+          title.placeholder = [sku, name?.value.trim() ?? ''].filter(Boolean).join(' ');
+        }
         if (description instanceof HTMLTextAreaElement) {
           description.placeholder = summary?.value.trim() ?? '';
         }

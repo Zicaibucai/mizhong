@@ -57,7 +57,12 @@ export async function generateMetadata({
     coverThumbnailUrl: product.coverThumbnailUrl,
     coverAlt: product.coverAlt,
   });
-  const title = meta.title;
+  /**
+   * 标题带上型号：客户按型号找货（搜「HD6001」应该能命中），
+   * 同名规格款（如三种合金扣）也靠型号把标题区分开。品牌由布局的
+   * `title.template` 统一追加，这里不重复。
+   */
+  const title = product.sku ? `${product.sku} ${meta.title}` : meta.title;
   const description = meta.description;
   const image = meta.image;
 

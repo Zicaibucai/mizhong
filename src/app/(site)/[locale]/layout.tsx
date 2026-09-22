@@ -67,9 +67,19 @@ export async function generateMetadata({
     content.company.seoTitle || `${content.company.name} ${site.titleSeparator} ${t.meta.title}`;
   const description = content.company.seoDescription || t.meta.description;
 
+  /**
+   * 子页面标题统一追加品牌。
+   *
+   * 原先 `title` 是一个纯字符串，Next 不做任何拼接 —— 结果商品页的标题就是
+   * 「圆形垫边」、目录页就是「产品目录」，**全站除首页外没有一处含公司名**：
+   * 搜品牌名搜不到，页面标题之间也几乎没有区别（2026-09-22 修）。
+   * `default` 给未自行设置标题的页面（首页等）；`template` 只作用于设了标题的子页面。
+   */
+  const titleTemplate = `%s ${site.titleSeparator} ${content.company.name}`;
+
   return {
     metadataBase: new URL(base),
-    title,
+    title: { default: title, template: titleTemplate },
     description,
     alternates: {
       canonical: `${base}/${l}`,
