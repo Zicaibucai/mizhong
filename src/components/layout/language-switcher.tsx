@@ -7,7 +7,22 @@ import { locales, localeNames, type Locale } from '@/lib/i18n';
 import { ChevronDownIcon, GlobeIcon } from '@/components/ui/icons';
 import { cn } from '@/lib/cn';
 
-export function LanguageSwitcher({ current, label }: { current: Locale; label: string }) {
+export function LanguageSwitcher({
+  current,
+  label,
+  inline = false,
+}: {
+  current: Locale;
+  label: string;
+  /**
+   * `inline`：把语言列表按普通文档流展开（手机菜单里用）。
+   *
+   * 手机菜单的面板是带滚动的容器，而绝对定位的下拉框**不参与滚动高度计算** ——
+   * 列表底部会被面板边缘裁掉、且滚不到（2026-09-22 修复：375×667 上
+   * 后五种语言点不到）。内联展开后列表进入文档流，跟着面板一起滚。
+   */
+  inline?: boolean;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -57,7 +72,10 @@ export function LanguageSwitcher({ current, label }: { current: Locale; label: s
         <nav
           id="language-menu"
           aria-label={label}
-          className="absolute right-0 z-50 mt-2 w-44 overflow-hidden rounded-xl border border-navy-100 bg-white py-1 shadow-lg shadow-navy-900/5"
+          className={cn(
+            'mt-2 overflow-hidden rounded-xl border border-navy-100 bg-white py-1',
+            inline ? 'w-full' : 'absolute right-0 z-50 w-44 shadow-lg shadow-navy-900/5',
+          )}
         >
           <ul>
             {locales.map((locale) => (

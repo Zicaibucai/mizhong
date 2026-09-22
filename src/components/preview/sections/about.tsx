@@ -64,7 +64,7 @@ export function PreviewAbout({
                 data-reveal
                 className={
                   i === 0
-                    ? 'pv-display whitespace-pre-line text-[clamp(1.05rem,1.9vw,1.5rem)] text-navy-900/90'
+                    ? 'pv-lede whitespace-pre-line text-[clamp(1.05rem,1.9vw,1.5rem)] text-navy-900/90'
                     : 'mt-6 whitespace-pre-line text-[0.95rem] leading-relaxed text-navy-800/90'
                 }
                 style={cssVars({ '--pv-delay': `${i * 80}ms` })}

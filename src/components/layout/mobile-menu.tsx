@@ -88,7 +88,10 @@ export function MobileMenu({
         <div
           ref={panelRef}
           id="mobile-nav"
-          className="absolute inset-x-0 top-full border-b border-navy-100 bg-ivory-50 px-5 pb-8 pt-2 shadow-lg shadow-navy-900/10"
+          /* 面板必须自己滚：打开时 body 的滚动被锁住（见上面的 effect），
+             短屏手机（如 375×667）上「导航 + 询盘按钮 + 11 种语言」高于视口，
+             没有这块滚动区时底部语言永远点不到。4.25rem 是页头高度（preview.css）。 */
+          className="absolute inset-x-0 top-full max-h-[calc(100dvh-4.25rem)] overflow-y-auto overscroll-contain border-b border-navy-100 bg-ivory-50 px-5 pb-8 pt-2 shadow-lg shadow-navy-900/10"
         >
           <nav aria-label={navLabel}>
             <ul className="space-y-1">
@@ -113,7 +116,7 @@ export function MobileMenu({
               {ctaLabel}
             </a>
             <div className="mt-5 border-t border-navy-100 pt-5">
-              <LanguageSwitcher current={currentLocale} label={languageLabel} />
+              <LanguageSwitcher current={currentLocale} label={languageLabel} inline />
             </div>
           </nav>
         </div>

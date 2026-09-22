@@ -66,7 +66,7 @@ export async function PreviewQuality({
         {body ? (
           <p
             data-reveal
-            className="pv-display mt-8 max-w-3xl text-[clamp(1rem,1.8vw,1.4rem)] text-navy-900/85"
+            className="pv-lede mt-8 max-w-3xl text-[clamp(1rem,1.8vw,1.4rem)] text-navy-900/85"
           >
             {body}
           </p>

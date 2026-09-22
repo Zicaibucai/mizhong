@@ -55,23 +55,32 @@ export function ProductCard({
         coverAlt={alt}
         hoverVideoPosterUrl={product.hoverVideoPosterUrl}
         hover={hover}
-        placeholder={<MediaPlaceholder slot="product.cover" label={product.name} className="aspect-[4/3]" />}
+        placeholder={<MediaPlaceholder slot="product.cover" label={product.name} className="aspect-[7/5]" />}
       />
 
       <div className="mt-4 flex flex-1 flex-col">
-        {product.categoryName ? (
-          categoryHref ? (
-            <Link
-              href={categoryHref}
-              className="pv-mono relative z-10 inline-flex w-fit text-[0.55rem] text-copper-700 transition-colors hover:text-copper-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
-            >
-              {product.categoryName}
-            </Link>
-          ) : (
-            <span className="pv-mono inline-flex w-fit text-[0.55rem] text-copper-700">
-              {product.categoryName}
-            </span>
-          )
+        {product.categoryName || product.sku ? (
+          <div className="flex items-baseline justify-between gap-3">
+            {product.categoryName ? (
+              categoryHref ? (
+                <Link
+                  href={categoryHref}
+                  className="pv-mono relative z-10 inline-flex w-fit text-[0.55rem] text-copper-700 transition-colors hover:text-copper-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper-500"
+                >
+                  {product.categoryName}
+                </Link>
+              ) : (
+                <span className="pv-mono inline-flex w-fit text-[0.55rem] text-copper-700">
+                  {product.categoryName}
+                </span>
+              )
+            ) : null}
+            {/* 型号：同一件货的不同规格（如三种合金扣）名称本来就一样，靠型号区分 ——
+                海外客户是按型号下单的，列表里看不到型号就只能进详情页挨个点。 */}
+            {product.sku ? (
+              <span className="pv-mono shrink-0 text-[0.55rem] text-navy-500">{product.sku}</span>
+            ) : null}
+          </div>
         ) : null}
 
         <h3 className="mt-2.5 text-[1.05rem] font-medium leading-snug tracking-[-0.015em] text-navy-950">

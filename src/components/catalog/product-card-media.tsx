@@ -142,7 +142,10 @@ export function ProductCardMedia({
           alt={coverAlt}
           loading="lazy"
           className={cn(
-            'aspect-[4/3] w-full border border-navy-200/80 object-cover transition-transform duration-700 motion-safe:group-hover:scale-[1.035]',
+            /* 取景框比例跟随产品图的实际比例（843×596 ≈ 7:5）。
+               用 4:3 时图片比框宽，object-cover 会左右各裁一刀 —— 而产品图上
+               右侧印着型号与中英文名，手机上正好被裁掉（2026-09-22 修复）。 */
+            'aspect-[7/5] w-full border border-navy-200/80 object-cover transition-transform duration-700 motion-safe:group-hover:scale-[1.035]',
             hover.enabled ? 'motion-safe:group-hover:opacity-0' : null,
           )}
         />
