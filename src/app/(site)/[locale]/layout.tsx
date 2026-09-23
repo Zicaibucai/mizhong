@@ -84,6 +84,12 @@ export async function generateMetadata({
     metadataBase: new URL(base),
     title: { default: title, template: titleTemplate },
     description,
+    /**
+     * 百度搜索资源平台的 HTML 标签验证（2026-09-23）。
+     * content 逐字来自百度后台，不要改写成别的值 —— 校验是逐字比对的。
+     * 只挂这一条；以后换站点或重新验证时替换它即可。
+     */
+    verification: { other: { 'baidu-site-verification': 'codeva-cEiQhhMSVF' } },
     alternates: {
       canonical: `${base}/${l}`,
       languages,
