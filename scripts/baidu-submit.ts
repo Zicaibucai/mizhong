@@ -70,6 +70,24 @@ function filterByLocales(urls: string[], locales: string[] | undefined): string[
   });
 }
 
+/**
+ * 按 `--locales` 给的顺序重排：`zh,en` → 所有中文页排在英文页前面。
+ *
+ * 为什么：轮换是「一天推 10 条」，如果中英文交错，头半个月的中文页只推了一半。
+ * 用户要求「先把所有中文页面推完」—— 排序就够，不需要额外的状态或阶段切换：
+ * 131 个中文页 ≈ 14 天推完，之后才轮到英文页。
+ * 同语言内部保持 sitemap 原顺序（Array.sort 是稳定的）。
+ */
+function orderByLocalePriority(urls: string[], locales: string[] | undefined): string[] {
+  if (!locales?.length) return urls;
+  const rank = new Map(locales.map((locale, index) => [locale, index]));
+  return [...urls].sort((a, b) => {
+    const ra = rank.get(localeOf(a) ?? '') ?? locales.length;
+    const rb = rank.get(localeOf(b) ?? '') ?? locales.length;
+    return ra - rb;
+  });
+}
+
 function parseArgs(argv: string[]): Options {
   const options: Options = {
     sitemap: `${site.url}/sitemap.xml`,
@@ -135,8 +153,10 @@ async function collect(options: Options): Promise<string[]> {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const collected = await collect(options);
-  // 显式给了 --urls 就照单全推；从 sitemap 取时才按语言过滤
-  const all = options.urls?.length ? collected : filterByLocales(collected, options.locales);
+  // 显式给了 --urls 就照单全推；从 sitemap 取时才按语言过滤 + 按语言优先级排序
+  const all = options.urls?.length
+    ? collected
+    : orderByLocalePriority(filterByLocales(collected, options.locales), options.locales);
   if (options.locales?.length && !options.urls?.length) {
     console.log(`语言过滤：${options.locales.join(', ')} → ${all.length} 条（过滤前 ${collected.length} 条）`);
   }
