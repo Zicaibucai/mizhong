@@ -157,3 +157,28 @@ npx tsx scripts/import-products.ts publish                      # 发布草稿�
 
 **排名仍要靠时间与外链**：给领英公司页、行业目录、邮件签名、客户页面加上
 `https://htd123.com` 的链接，是当前最有效的一步（网站本身已无短板）。
+
+## 追加：百度站长验证（2026-09-23）
+
+**结果：HTML 标签验证失败，原因是「无法连接到您网站的服务器」。**
+
+日志核实（按 IP 段，不按 UA —— 这个站的访问日志里已多次出现伪造 UA 的扫描器）：
+**百度从未连上过**。日志里那几条 `Baiduspider` 全是伪造 UA 的扫描器（IP 属
+Google Cloud，在扫 `/.env.old`、`/Dockerfile`）。同期有大量中国 IP 段正常访问，
+所以不是站点故障，是**百度到香港服务器的线路**。
+
+已做的两件事：
+
+1. 把两种验证方式的材料都放上去：`<meta name="baidu-site-verification">`（布局
+   metadata，`verification.other`）+ `public/baidu_verify_codeva-cEiQhhMSVF.html`
+   （内容是 32 位十六进制串，与文件名一致）。**两个都要留在仓库里** ——
+   删掉会掉验证。
+2. 消除一个我们这边能消除的失败模式：部分校验器请求的是 `http://`，而明文一律
+   301 跳 HTTPS，不跟随跳转的校验器会把「被跳转」报成「无法连接」。现在
+   `baidu_verify_*.html` 与 `google*.html` 在明文下也直接由应用返回文件。
+   **注意实现细节**：server 级 `if` 在 rewrite 阶段执行、早于 location 匹配，
+   所以跳转必须从 server 级 `if` 移进 `location /`，例外才生效
+   （`/etc/nginx/conf.d/mizhong.conf`，改动前已备份）。
+
+若百度仍报「无法连接」，剩下的路只有：稍后重试 / CNAME 验证（**只能给子域，裸域加
+CNAME 会顶掉 A 记录把网站搞挂**）/ 备案 + 境内服务器（根治，成本大）。
