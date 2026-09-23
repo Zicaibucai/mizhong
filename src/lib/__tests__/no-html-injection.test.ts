@@ -22,8 +22,8 @@ const SRC = join(process.cwd(), 'src');
 
 /** 允许使用 dangerouslySetInnerHTML 的文件及理由 */
 const ALLOWED_SINKS: Record<string, string> = {
-  'app/(site)/[locale]/products/[slug]/page.tsx':
-    'JSON-LD 结构化数据；必须转义 < 以免 </script> 提前闭合标签',
+  'components/seo/json-ld.tsx':
+    'JSON-LD 结构化数据的唯一渲染点；必须转义 < 以免 </script> 提前闭合标签',
 };
 
 function walk(dir: string, out: string[] = []): string[] {

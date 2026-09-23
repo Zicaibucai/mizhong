@@ -15,6 +15,7 @@ import { site } from '@/lib/site-config';
 import { productJsonLd } from '@/lib/product-jsonld';
 import { resolveFallbackSeo, resolveProductMetadata } from '@/lib/product-metadata';
 import { ProductDetail } from '@/components/catalog/product-detail';
+import { JsonLd } from '@/components/seo/json-ld';
 
 export const revalidate = 60;
 
@@ -143,11 +144,7 @@ export default async function ProductDetailPage({
         contacts={content.contacts}
         related={related}
       />
-      <script
-        type="application/ld+json"
-        // JSON.stringify 的输出里 `<` 会被转义，避免 `</script>` 提前闭合标签
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
-      />
+      <JsonLd data={jsonLd} />
     </>
   );
 }

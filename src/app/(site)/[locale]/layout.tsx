@@ -17,6 +17,7 @@ import { companyName } from '@/lib/site-config';
 import { withLocale } from '@/lib/href';
 import { resolveChannels } from '@/lib/preview/util';
 import { BrandLogo } from '@/components/layout/brand-logo';
+import { JsonLd } from '@/components/seo/json-ld';
 import { PreviewHeader } from '@/components/preview/preview-header';
 import { PreviewFooter } from '@/components/preview/preview-footer';
 import { PreviewContactRail } from '@/components/preview/contact-rail';
@@ -186,12 +187,7 @@ export default async function LocaleLayout({
         <ThreadRail />
         <ScrollChoreography />
         {structuredData.map((data, index) => (
-          <script
-            key={index}
-            type="application/ld+json"
-            // 与商品页同一套转义：JSON 里的 `<` 一律写成 <，避免提前闭合 script
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, '\\u003c') }}
-          />
+          <JsonLd key={index} data={data} />
         ))}
       </body>
     </html>
