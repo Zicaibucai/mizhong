@@ -12,6 +12,8 @@ import {
 } from '@/lib/i18n';
 import { site } from '@/lib/site-config';
 import { getSiteContent } from '@/lib/content';
+import { organizationJsonLd, websiteJsonLd } from '@/lib/structured-data';
+import { companyName } from '@/lib/site-config';
 import { withLocale } from '@/lib/href';
 import { resolveChannels } from '@/lib/preview/util';
 import { BrandLogo } from '@/components/layout/brand-logo';
@@ -121,6 +123,24 @@ export default async function LocaleLayout({
     href: item.href.startsWith('#') ? `/${locale}${item.href}` : withLocale(locale, item.href),
   }));
 
+  /**
+   * 结构化数据：声明「这个站点属于哪家公司」。
+   *
+   * 之前全站只有商品页有 Product 结构化数据，没有 Organization —— 搜索引擎
+   * 没有依据把 htd123.com 与「米众新材料」这个实体对上，品牌名检索因此更吃亏。
+   * 只写已知为真的字段：没有地址就不写 address，没有外链就不写 sameAs。
+   */
+  const structuredData = [
+    organizationJsonLd({
+      locale,
+      url: site.url,
+      name: content.company.name,
+      legalName: companyName(locale),
+      contacts: content.contacts,
+    }),
+    websiteJsonLd({ locale, url: site.url, name: content.company.name }),
+  ];
+
   return (
     <html lang={code} dir={localeDirs[locale]} data-preview className={inter.variable}>
       <body>
@@ -165,6 +185,14 @@ export default async function LocaleLayout({
         <PreviewContactRail channels={channels} />
         <ThreadRail />
         <ScrollChoreography />
+        {structuredData.map((data, index) => (
+          <script
+            key={index}
+            type="application/ld+json"
+            // 与商品页同一套转义：JSON 里的 `<` 一律写成 <，避免提前闭合 script
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, '\\u003c') }}
+          />
+        ))}
       </body>
     </html>
   );
