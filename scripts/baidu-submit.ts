@@ -18,7 +18,12 @@
  *   BAIDU_PUSH_TOKEN=xxx npx tsx scripts/baidu-submit.ts            # 默认只推前 10 条
  *   BAIDU_PUSH_TOKEN=xxx npx tsx scripts/baidu-submit.ts --limit 50
  *   BAIDU_PUSH_TOKEN=xxx npx tsx scripts/baidu-submit.ts --urls https://htd123.com/zh,https://htd123.com/en
+ *
+ *   # 每天自动推（cron 用的就是这条）：从上次的位置接着推 10 条，推完一轮从头再来
+ *   BAIDU_PUSH_TOKEN=xxx npx tsx scripts/baidu-submit.ts --rotate
  */
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { site } from '@/lib/site-config';
 import { loadLocalEnv } from './load-env';
 
@@ -26,12 +31,43 @@ loadLocalEnv();
 
 const ENDPOINT = 'http://data.zz.baidu.com/urls';
 
+/**
+ * 轮换游标：记着「上一天推到 sitemap 的第几条」。
+ *
+ * 为什么需要：百度给未备案新站的配额只有 10 条/天，而我们有 1400 多个地址 ——
+ * 一次推完不可能，只能每天推一小段。游标文件放在上传目录旁边（不进 Git），
+ * 推完一轮后从头再来（重要的页面因此会被周期性重推）。
+ */
+const CURSOR_FILE = process.env.BAIDU_PUSH_CURSOR ?? '/opt/mizhong-data/baidu-push-cursor.txt';
+
 interface Options {
   sitemap: string;
   limit: number;
   token?: string;
   urls?: string[];
+  /** 只推这些语言的地址（逗号分隔），缺省推全部。百度服务中文搜索，默认 cron 用 zh,en */
+  locales?: string[];
+  rotate: boolean;
   dryRun: boolean;
+}
+
+/** sitemap 里的地址 → 该地址属于哪个语言（取路径第一段） */
+function localeOf(url: string): string | null {
+  try {
+    const first = new URL(url).pathname.split('/').filter(Boolean)[0] ?? '';
+    return first || null;
+  } catch {
+    return null;
+  }
+}
+
+function filterByLocales(urls: string[], locales: string[] | undefined): string[] {
+  if (!locales?.length) return urls;
+  const wanted = new Set(locales);
+  return urls.filter((url) => {
+    const locale = localeOf(url);
+    return locale !== null && wanted.has(locale);
+  });
 }
 
 function parseArgs(argv: string[]): Options {
@@ -39,6 +75,7 @@ function parseArgs(argv: string[]): Options {
     sitemap: `${site.url}/sitemap.xml`,
     limit: 10,
     token: process.env.BAIDU_PUSH_TOKEN,
+    rotate: false,
     dryRun: false,
   };
 
@@ -58,12 +95,32 @@ function parseArgs(argv: string[]): Options {
     } else if (flag === '--urls' && value) {
       options.urls = value.split(',').map((item) => item.trim()).filter(Boolean);
       i += 1;
+    } else if (flag === '--locales' && value) {
+      options.locales = value.split(',').map((item) => item.trim()).filter(Boolean);
+      i += 1;
+    } else if (flag === '--rotate') {
+      options.rotate = true;
     } else if (flag === '--dry-run') {
       options.dryRun = true;
     }
   }
 
   return options;
+}
+
+async function readCursor(): Promise<number> {
+  try {
+    const raw = (await fs.readFile(CURSOR_FILE, 'utf8')).trim();
+    const value = Number.parseInt(raw, 10);
+    return Number.isFinite(value) && value >= 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function writeCursor(value: number): Promise<void> {
+  await fs.mkdir(path.dirname(CURSOR_FILE), { recursive: true });
+  await fs.writeFile(CURSOR_FILE, `${value}\n`, 'utf8');
 }
 
 async function collect(options: Options): Promise<string[]> {
@@ -77,14 +134,32 @@ async function collect(options: Options): Promise<string[]> {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  const all = await collect(options);
-  const list = all.slice(0, options.limit);
+  const collected = await collect(options);
+  // 显式给了 --urls 就照单全推；从 sitemap 取时才按语言过滤
+  const all = options.urls?.length ? collected : filterByLocales(collected, options.locales);
+  if (options.locales?.length && !options.urls?.length) {
+    console.log(`语言过滤：${options.locales.join(', ')} → ${all.length} 条（过滤前 ${collected.length} 条）`);
+  }
 
-  console.log(`sitemap 共 ${all.length} 条，本次推送前 ${list.length} 条（百度每日配额由站点质量决定，别一次推光）`);
+  let cursor = 0;
+  let list: string[];
+  if (options.rotate) {
+    cursor = await readCursor();
+    if (cursor >= all.length) cursor = 0; // 推完一轮：从头再来
+    const rest = all.slice(cursor);
+    list =
+      rest.length >= options.limit
+        ? rest.slice(0, options.limit)
+        : [...rest, ...all.slice(0, options.limit - rest.length)];
+    console.log(`轮换模式：从第 ${cursor} 条开始推 ${list.length} 条（共 ${all.length} 条）`);
+  } else {
+    list = all.slice(0, options.limit);
+    console.log(`sitemap 共 ${all.length} 条，本次推送前 ${list.length} 条`);
+  }
 
   if (options.dryRun) {
     list.forEach((url) => console.log(`  ${url}`));
-    console.log('（dry-run，未发送）');
+    console.log(`（dry-run，未发送；${options.rotate ? '游标不动' : ''}）`);
     return;
   }
 
@@ -112,7 +187,29 @@ async function main() {
   });
   const text = (await response.text()).slice(0, 500);
   console.log(`HTTP ${response.status} ${text.trim()}`);
-  console.log('返回里的 success 是本次成功条数，remain 是当天剩余配额。');
+
+  let parsed: { success?: number; remain?: number; message?: string } = {};
+  try {
+    parsed = JSON.parse(text) as typeof parsed;
+  } catch {
+    // 不是 JSON 就按原样打印（上面已经打过），继续走游标逻辑的失败分支
+  }
+
+  if (typeof parsed.remain === 'number') console.log(`当天剩余配额：${parsed.remain} 条`);
+
+  if (options.rotate) {
+    // 游标只按「百度实际接收的条数」推进：接收 0 条时原地不动，
+    // 保证不会有地址被静默跳过（失败的下一轮重来）。
+    if (response.ok && typeof parsed.success === 'number' && parsed.success > 0) {
+      const next = (cursor + parsed.success) % all.length;
+      await writeCursor(next);
+      console.log(`游标推进：${cursor} → ${next}（接收 ${parsed.success} 条；推完 ${all.length} 条会从头再来）`);
+    } else if (response.ok && parsed.success === 0) {
+      console.log('百度一条都没接收（配额用尽或地址已存在），游标保持不动');
+    } else {
+      console.log('本次未成功，游标保持不动 —— 明天会重推同一段，不会跳过');
+    }
+  }
 }
 
 main().catch((error) => {
