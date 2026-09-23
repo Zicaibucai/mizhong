@@ -130,3 +130,30 @@ npx tsx scripts/import-products.ts publish                      # 发布草稿�
 
 **没有再推一次 IndexNow**：地址集合没变，引擎抓取时拿到的就是新标题；Bing 还没进内页，
 它第一次抓到的就是改好的版本。
+
+## 追加：Organization / WebSite 结构化数据（2026-09-23，`77fd599`）
+
+用户继续反馈「搜品牌名搜不到」。查证结果分两层：
+
+- **`/en` 其实已被 Google 收录**（GSC 网址检查：网址已收录到 Google、网页已编入索引、
+  HTTPS 正常）—— 所以不是收录问题，是**排名**：新域名零权重，而 "Mi … Materials"
+  这个词被 Mi Technovation 等大公司占着（还有 AI 概览占位）。
+- **但我们确实缺一块**：全站只有商品页有 Product 结构化数据，**没有任何一处声明
+  「htd123.com 属于哪家公司」**。搜索引擎把站点与品牌实体对上，靠的正是 Organization。
+
+已补（布局里统一输出，所有公开页面都有）：
+
+| 类型 | 内容 |
+| --- | --- |
+| `Organization` | 品牌名、法定全称、中英文别名（米众 / Mizhong / Mizhong New Materials…）、站点地址、`contactPoint`（有邮箱/电话才写，列出全部语言）、`sameAs`（只收 http(s) 外链，实际收到 WhatsApp） |
+| `WebSite` | 站点名、地址、`inLanguage`、`SearchAction` 指向真实存在的 `/[locale]/search?q=` |
+
+原则：**只写已知为真的字段** —— 没有地址就不写 `address`，没有外链就不写 `sameAs`，
+没有品牌图就不写 `image`（结构化数据里编内容比不写更糟）。新增 8 个用例锁住形状与这条原则。
+
+顺带修了一处：`no-html-injection` 守卫测试规定「全仓只允许一处
+`dangerouslySetInnerHTML`」，我第一版在布局里又加了一处把它弄红了。正确做法不是往白名单
+加第二个文件，而是把注入点收敛成 `components/seo/json-ld.tsx`，布局与商品页共用。
+
+**排名仍要靠时间与外链**：给领英公司页、行业目录、邮件签名、客户页面加上
+`https://htd123.com` 的链接，是当前最有效的一步（网站本身已无短板）。
