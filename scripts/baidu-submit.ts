@@ -95,7 +95,16 @@ async function main() {
     );
   }
 
-  const endpoint = `${ENDPOINT}?site=${encodeURIComponent(site.url)}&token=${encodeURIComponent(options.token)}`;
+  /**
+   * 注意：`site` 参数**绝不能做 URL 编码**。
+   *
+   * 百度那边拿到编码后的值（`https%3A%2F%2F…`）匹配不到站点，会返回
+   * `{"error":400,"message":"site init fail"}` —— 这个报错极具误导性，
+   * 看起来像「站点没初始化」，实际是参数形式问题（2026-09-23 实测：
+   * 同一 token、同一批地址，编码后 400、不编码 200）。
+   * 百度文档给的示例也是原样写 `?site=https://example.com`。
+   */
+  const endpoint = `${ENDPOINT}?site=${site.url}&token=${options.token}`;
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'content-type': 'text/plain' },
