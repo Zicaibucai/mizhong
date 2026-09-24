@@ -1,7 +1,6 @@
 #!/bin/bash
 # 在服务器上运行：统计各搜索引擎的真实抓取进度（按 IP 段核实，不按 UA）。
 # 用法：scp scripts/server/crawl-progress.sh ecs-user@47.238.7.93:/tmp/ && ssh … "bash /tmp/crawl-progress.sh"
-#!/bin/bash
 # Googlebot（按真实 IP 段核实）抓商品页的进度。
 #
 # 两个坑，都踩过：
